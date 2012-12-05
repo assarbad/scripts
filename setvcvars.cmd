@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2011, 2012, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: 2009-2012, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 :::
 ::: PURPOSE:    This script can be used to run the vcvars32.bat from any of the
 :::             existing Visual C++ versions from .NET (2002) through 2012 or
