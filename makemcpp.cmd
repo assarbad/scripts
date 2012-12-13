@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2009, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN.
+::: 2009-2012, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 :::
 ::: PURPOSE:    This script can be used to build MCPP using Visual C++.
 :::
@@ -12,7 +12,7 @@
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 :SCRIPT
 setlocal ENABLEDELAYEDEXPANSION & pushd .
-set SUPPORTED_VC=9.0 8.0 7.1 7.0
+set SUPPORTED_VC=11.0 10.0 9.0 8.0 7.1 7.0
 reg /? > NUL 2>&1 || echo "REG.EXE is a prerequisite but wasn't found!" && goto :EOF
 :: Set the variables for VC by calling the respective .bat script
 call setvcvars.cmd "%~1"
