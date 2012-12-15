@@ -20,6 +20,8 @@ certain tasks.
   ``setvcvars.cmd`` will use ``reg.exe`` (must be downloaded on Windows
   2000, but comes on board starting with XP) to detect the installation
   path.
+* ``setbccvars.cmd`` is an adaptation of ``setvcvars.cmd`` Christian
+  Wimmer wrote for BCC/BCB from Borland/CodeGear/Embarcadero.
 * the folder ``speedcommander-includes`` contains some VBA snippets that
   I use for my favorite file manager on Windows: SpeedCommander_. SC as
   it is affectionately called by its fans (me included) allows to automate
