@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-LOCALNAME="${1%/}"
+LOCALNAME="$1"
 REMOTEURL="$2"
 function syntax_help
 {
@@ -9,10 +9,12 @@ function syntax_help
 
 [[ -n "$LOCALNAME" ]] || syntax_help
 [[ -n "$REMOTEURL" ]] || syntax_help
-[[ "$LOCALNAME" != "$REMOTEURL" ]] || syntax_help
 
-# Set absolute path
-LOCALNAME="$HOME/ext-repos/SVNSYNC/$LOCALNAME"
+# Set default absolute path if it isn't alreay absolute ...
+[[ "${LOCALNAME:0:1}" == "/" ]] || LOCALNAME="$HOME/ext-repos/SVNSYNC/$LOCALNAME"
+
+# Now they definitely shouldn't be identical anymore
+[[ "$LOCALNAME" != "$REMOTEURL" ]] || syntax_help
 
 [[ ! -d "$LOCALNAME" ]] || { echo -e "A local folder $LOCALNAME already exists."; exit 1; }
 echo "Repo: $LOCALNAME"
