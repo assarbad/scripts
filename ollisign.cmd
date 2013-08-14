@@ -13,19 +13,23 @@ call setvcvars.cmd > NUL 2>&1
 :: /t http://timestamp.verisign.com/scripts/timstamp.dll
 :: /t http://timestamp.globalsign.com/scripts/timestamp.dll
 :: /tr http://www.startssl.com/timestamp
-set TIMESTAMP=/tr http://www.startssl.com/timestamp
+set TIMESTAMP=/tr "http://www.startssl.com/timestamp"
 if not "%~2" == "" @(
   call :SetVar DESCRIPURL "%~2"
 )
 if not "%~3" == "" @(
   call :SetVar DESCRIPTION "%~3"
 )
+set VRFYCMD=signtool.exe verify /pa "%~1"
 set SIGNCMD=signtool.exe sign /a /ph
 if not "%DESCRIPURL%" == "" set SIGNCMD=%SIGNCMD% /du "%DESCRIPURL%"
 if not "%DESCRIPTION%" == "" set SIGNCMD=%SIGNCMD% /d "%DESCRIPTION%"
 set SIGNCMD=%SIGNCMD% %TIMESTAMP% "%~1"
 :: Now sign ...
+echo %SIGNCMD%
 %SIGNCMD%
+:: And verify
+%VRFYCMD%
 goto :EOF
 :NoFileToSign
 echo ERROR: Need to give a file to sign!
