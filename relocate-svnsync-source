@@ -1,0 +1,36 @@
+#!/bin/bash
+# Works on Linux only (GNU readlink dependency)
+# The script can be used to change the URL of an svnsync'd directory to a new one.
+# Note: the script should reside inside the local repository (not the workink copy)!
+pushd `dirname $0` > /dev/null; REPO=$(readlink -nf "`pwd`"); popd > /dev/null;pushd `dirname $0` > /dev/null; CURRABSPATH=$(readlink -nf "`pwd`"); popd > /dev/null;
+SVNREPO="file://$REPO"
+OLDURL=$(svn propget svn:sync-from-url --revprop -r 0 "$SVNREPO")
+echo "Current mirror URL (for $SVNREPO): '$OLDURL'"
+[[ -z "$1" ]] && { echo "Syntax: relocate-svnsync-source <server> [uri]"; exit 1; }
+SRV="$1"
+URI="$REPO"
+[[ -n "$2" ]] && URI="$2"
+if [[ "x$SRV$URI" == "x$OLDURL" ]]; then
+	echo "Nothing to do, old and new URLs are the same"
+else
+	echo "Designated mirror URL: '$SRV$URI'"
+	if svn propset svn:sync-from-url --revprop -r 0 "$SRV$URI" "$SVNREPO"; then
+		NEWURL=$(svn propget svn:sync-from-url --revprop -r 0 "$SVNREPO")
+		echo "New mirror URL is now: '$NEWURL'"
+	else
+		echo "ERROR: failed to set svn:sync-from-url property."
+		exit 1
+	fi
+fi
+REMOTEUUID=$(svn info "$SRV$URI" 2> /dev/null|grep '^Repository UUID:'|cut -d ' ' -f 3)
+if [[ -z "$REMOTEUUID" ]]; then
+	echo "WARNING: could not retrieve remote repo UUID. This could indicate that the URL you set is wrong or inaccessible."
+	exit 1
+fi
+LOCALUUID=$(svn propget svn:sync-from-uuid --revprop -r 0 "$SVNREPO")
+if [[ "x$REMOTEUUID" != "x$LOCALUUID" ]]; then
+	echo -e "\033[1mNOTE:\033[0m if the remote repository has a different UUID, you need to adjust the property sync-from-uuid as well."
+	echo -e "\tLocal svn:sync-from-uuid: $LOCALUUID"
+	echo -e "\tRemote repository UUID  : $REMOTEUUID"
+	echo -e "Command to fix:\n\t svn propset svn:sync-from-uuid --revprop -r 0 $REMOTEUUID \"$SVNREPO\""
+fi
