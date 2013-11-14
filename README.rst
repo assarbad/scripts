@@ -29,6 +29,10 @@ certain tasks.
   tasks by means of VBA macros. In order to not repeat the common code in
   each and every macro, I wrote these "include" files. Make sure to read
   the ``README.txt`` in the folder to see how this works.
+* ``svnsync-init.sh``, ``sync`` and ``relocate-svnsync-source`` are scipts
+  that can be used in conjunction with the ``svnsync`` command. From the
+  first step of initializing to the steps of synchronizing regularly and
+  relocating where to synchronize *from*.
 
 License
 -------
