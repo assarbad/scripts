@@ -5,7 +5,7 @@
 ::: Available from: <https://bitbucket.org/assarbad/scripts/>
 :::
 ::: PURPOSE:    This script can be used to run the vcvars32.bat from any of the
-:::             existing Visual C++ versions from .NET (2002) through 2012 or
+:::             existing Visual C++ versions from .NET (2002) through 2013 or
 :::             custom given versions (or single version) on the command line.
 :::             The script will try to find the newest installed VC version by
 :::             iterating over the space-separated (descending) list of versions
