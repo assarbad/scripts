@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
+__author__ = "Oliver Schneider"
+__copyright__ = "Copyright (C) 2013 Oliver Schneider (assarbad.net), under Public Domain/CC0"
+__version__ = "1.0"
+import os, sys, time
+
+# Checking for compatibility with Python version
+if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
+    sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
+
+import argparse, mechanize, re
+from HTMLParser import HTMLParser
+from datetime import datetime
+
+debug = 0
+sysint_url = "http://live.sysinternals.com"
+pretend_ua = "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)"
+
+def parse_index(html_page, baseurl):
+	# Get everything inside the <pre> element
+	match = re.search("<pre>(.+)</pre>", html_page, re.DOTALL | re.IGNORECASE)
+	if not match:
+		return 1 # error
+	# Replace links by text
+	result = re.sub(r'(?si)<a\s+href="([^"]+)">[^<]+</a><br>', "\\1\n", match.group(1))
+	# Now replace HTML entities by their text form
+	entities = re.findall("&.+?;", result)
+	html = HTMLParser()
+	for entity in entities:
+		result = result.replace(entity, html.unescape(entity))
+	# Now go over them one by one
+	for line in result.split("\n"):
+		match = re.search("(.{38})\s+(\d+|<dir>)\s+([^\s\n]+)", line, re.IGNORECASE)
+		if match:
+			(datestr, sizestr, url) = (match.group(1).strip(), match.group(2).strip(), "%s%s" % (baseurl, match.group(3).strip()))
+			dt = datetime.strptime(datestr, "%A, %B %d, %Y %I:%M %p")
+			print "time = %s, size = %s, url = %s" % (str(dt), sizestr, url)
+	return 0
+
+def get_index(**kwargs):
+	if 'debug' in kwargs:
+		global debug
+		debug = kwargs['debug']
+	br = mechanize.Browser()
+	br.set_handle_robots(False)
+	br.set_handle_equiv(True)
+	br.set_handle_redirect(True)
+	br.set_handle_referer(True)
+	global pretend_ua
+	br.addheaders = [("User-agent", pretend_ua)]
+	if debug > 0:
+		br.set_debug_http(True)
+		br.set_debug_redirects(True)
+		br.set_debug_responses(True)
+	global sysint_url
+	response = br.open(sysint_url)
+	return parse_index(response.read(), sysint_url)
+
+def main(**kwargs):
+	get_index(**kwargs)
+
+def parse_args():
+	from argparse import ArgumentParser
+	parser = ArgumentParser(description='Mirror script for live.sysinternals.com')
+	parser.add_argument('--version', '-V', action='version', version=__version__,
+						help='show the program version and exit')
+	parser.add_argument('--debug', '-d', action='count', default=0,
+						help='turn on debugging (more extensive logging) and increase detail')
+	return parser.parse_args()
+
+if __name__ == "__main__":
+	args = parse_args()
+	sys.exit(main(**vars(args)))

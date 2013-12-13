@@ -33,6 +33,10 @@ certain tasks.
   that can be used in conjunction with the ``svnsync`` command. From the
   first step of initializing to the steps of synchronizing regularly and
   relocating where to synchronize *from*.
+* ``sysinternals-mirror`` a script that can be used to mirror the contents
+  of http://live.sysinternals.com without wasting their bandwidth. That is,
+  it will copy only select items and only if they have a newer timestamp
+  than the local version.
 
 License
 -------
