@@ -23,20 +23,33 @@ def parse_index(html_page, baseurl):
 	match = re.search("<pre>(.+)</pre>", html_page, re.DOTALL | re.IGNORECASE)
 	if not match:
 		return 1 # error
-	# Replace links by text
+	# Replace links by text, split at converted line breaks
 	result = re.sub(r'(?si)<a\s+href="([^"]+)">[^<]+</a><br>', "\\1\n", match.group(1))
 	# Now replace HTML entities by their text form
 	entities = re.findall("&.+?;", result)
 	html = HTMLParser()
 	for entity in entities:
 		result = result.replace(entity, html.unescape(entity))
+	urls = {}
 	# Now go over them one by one
 	for line in result.split("\n"):
+		# Tokenize the lines
 		match = re.search("(.{38})\s+(\d+|<dir>)\s+([^\s\n]+)", line, re.IGNORECASE)
 		if match:
-			(datestr, sizestr, url) = (match.group(1).strip(), match.group(2).strip(), "%s%s" % (baseurl, match.group(3).strip()))
-			dt = datetime.strptime(datestr, "%A, %B %d, %Y %I:%M %p")
-			print "time = %s, size = %s, url = %s" % (str(dt), sizestr, url)
+			# Get a nice representation
+			(datestr, sizestr, filename) = (match.group(1).strip(), match.group(2).strip(), match.group(3).strip())
+			# Be picky about the items we want
+			if re.search(r"\.(exe|scr|dll|sys|chm|hlp)$", filename, re.IGNORECASE) and not re.search(r"pdh\.dll$", filename, re.IGNORECASE):
+				# Convert date/time string to a format we can handle more easily
+				dt = datetime.strptime(datestr, "%A, %B %d, %Y %I:%M %p")
+				# Store the result, hashed by URL
+				urls[("%s%s" % (baseurl, filename))] = {
+						'size' : int(sizestr),
+						'fname': filename.lower(),
+						'dt'   : dt,
+						'line' : line,
+					}
+				print line
 	return 0
 
 def get_index(**kwargs):
