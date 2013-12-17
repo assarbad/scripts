@@ -38,6 +38,7 @@ def verify_signature(fname):
 		results = fp.HashIt()
 		if is_pecoff:
 			global debug
+			print fname
 			for r in results:
 				if r['name'] == 'pecoff':
 					res = r
@@ -45,25 +46,33 @@ def verify_signature(fname):
 				if debug:
 					print "INFO: No signature found. File is thus unsigned. Failing verification."
 				return False
-			for hashes in ('md5', 'sha1', 'sha256', 'sha512'):
-				# Matching hash found! Hurrah ...
-				for signed_data in res['SignedData']:
-					blob = pecoff_blob.PecoffBlob(signed_data)
-					auth = auth_data.AuthData(blob.getCertificateBlob())
-					content_hasher_name = auth.digest_algorithm().name
-					computed_content_hash = res[content_hasher_name]
-					try:
-						auth.ValidateAsn1()
-						auth.ValidateHashes(computed_content_hash)
-						auth.ValidateSignatures()
-						auth.ValidateCertChains(time.gmtime())
-					except auth_data.Asn1Error:
-						if auth.openssl_error:
-							print('OpenSSL Errors:\n%s' % auth.openssl_error)
-						raise
-						return False
+			# Matching hash found! Hurrah ...
+			print "%d signed_data elements" % len(res['SignedData'])
+			for signed_data in res['SignedData']:
+				blob = pecoff_blob.PecoffBlob(signed_data)
+				auth = auth_data.AuthData(blob.getCertificateBlob())
+				content_hasher_name = auth.digest_algorithm().name
+				computed_content_hash = res[content_hasher_name]
+				print repr(auth.signing_cert_id)
+				print repr(auth.counter_sig_cert_id)
+				print repr(auth.has_countersignature)
+				print content_hasher_name
+				print computed_content_hash.encode('hex')
+				try:
+					auth.ValidateAsn1()
+					#auth.ValidateHashes(computed_content_hash)
+					#auth.ValidateSignatures()
+					#auth.ValidateCertChains(time.gmtime())
+					pass
+				except auth_data.Asn1Error:
+					if auth.openssl_error:
+						print('OpenSSL Errors:\n%s' % auth.openssl_error)
+					raise
+					return False
 			return True
 	return False
+
+verify_signature("/home/oliver/source/scripts/sysint/premake4.exe")
 
 def parse_index(html_page, baseurl, download_file):
 	# Get everything inside the <pre> element
