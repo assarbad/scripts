@@ -37,9 +37,32 @@ def verify_signature(fname):
 		fp.EvalGeneric()
 		results = fp.HashIt()
 		if is_pecoff:
-			fingerprint.FindPehash(results)
-		else:
-			return True # not a PE file
+			global debug
+			for r in results:
+				if r['name'] == 'pecoff':
+					res = r
+			if 'SignedData' not in res:
+				if debug:
+					print "INFO: No signature found. File is thus unsigned. Failing verification."
+				return False
+			for hashes in ('md5', 'sha1', 'sha256', 'sha512'):
+				# Matching hash found! Hurrah ...
+				for signed_data in res['SignedData']:
+					blob = pecoff_blob.PecoffBlob(signed_data)
+					auth = auth_data.AuthData(blob.getCertificateBlob())
+					content_hasher_name = auth.digest_algorithm().name
+					computed_content_hash = res[content_hasher_name]
+					try:
+						auth.ValidateAsn1()
+						auth.ValidateHashes(computed_content_hash)
+						auth.ValidateSignatures()
+						auth.ValidateCertChains(time.gmtime())
+					except auth_data.Asn1Error:
+						if auth.openssl_error:
+							print('OpenSSL Errors:\n%s' % auth.openssl_error)
+						raise
+						return False
+			return True
 	return False
 
 def parse_index(html_page, baseurl, download_file):
