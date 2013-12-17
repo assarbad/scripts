@@ -10,7 +10,11 @@ import hashlib, os, sys, time
 if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
     sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
 
-import argparse, mechanize, re
+# We have two modules stored relative to this script path
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'verify-sigs'))
+# Additional modules
+import argparse, mechanize, re, pyasn1, auth_data, fingerprint, pecoff_blob
 from HTMLParser import HTMLParser
 from datetime import datetime
 from os import path
@@ -25,6 +29,18 @@ override_headers = [
 	("Connection", "Keep-Alive"),
 	]
 mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'live.sysint')
+
+def verify_signature(fname):
+	with open(fname, 'rb') as f:
+		fp = fingerprint.Fingerprinter(f)
+		is_pecoff = fp.EvalPecoff()
+		fp.EvalGeneric()
+		results = fp.HashIt()
+		if is_pecoff:
+			fingerprint.FindPehash(results)
+		else:
+			return True # not a PE file
+	return False
 
 def parse_index(html_page, baseurl, download_file):
 	# Get everything inside the <pre> element
@@ -57,10 +73,27 @@ def parse_index(html_page, baseurl, download_file):
 						'dt'   : dt,
 						'line' : line,
 					}
+	failures = 0
 	# Go through the list keyed by URL
 	for url,info in urls.iteritems():
-		download_file(url, info['fname'], info['dt'], info['size'])
-	return 0
+		global mirror_basepath
+		fname = path.join(mirror_basepath, path.basename(info['fname']))
+		ret = download_file(url, fname, info['dt'], info['size'])
+		if 0 == ret:
+			rsize = path.getsize(fname)
+			if not rsize == info['size']:
+				print "ERROR: file size %d does not match expected value %d (%s)!" % (rsize, info['size'], fname)
+				os.unlink(fname)
+				failures += 1
+				continue
+			if not verify_signature(fname):
+				print "ERROR: verification of AuthentiCode signature failed (%s)!" % (fname)
+				os.unlink(fname)
+				failures += 1
+				continue
+		else:
+			failures += ret
+	return failures
 
 def get_index(**kwargs):
 	if 'debug' in kwargs:
@@ -85,24 +118,22 @@ def get_index(**kwargs):
 	# Callback for downloading an individual file
 	def download_file(url, fname, remotedt, fsize):
 		global debug
-		global mirror_basepath
-		local_fname = path.join(mirror_basepath, path.basename(fname))
 		# Check whether we need to download the file
-		if path.exists(local_fname):
-			locdt = datetime.fromtimestamp(path.getmtime(local_fname))
+		if path.exists(fname):
+			locdt = datetime.fromtimestamp(path.getmtime(fname))
 			if locdt >= remotedt:
 				if debug:
-					print "%s not newer than remote" % local_fname
+					print "%s not newer than remote" % fname
 				return 0
 		# Download the file
 		try:
-			if br.retrieve(url, local_fname):
-				print "Downloaded: %s" % local_fname
+			if br.retrieve(url, fname):
+				print "Downloaded: %s" % fname
 		except (mechanize.HTTPError,mechanize.URLError) as e:
 			if isinstance(e,mechanize.HTTPError):
 				print "HTTP error code %d [%s]" % (e.code, url)
-				if path.exists(local_fname):
-					os.unlink(local_fname)
+				if path.exists(fname):
+					os.unlink(fname)
 			else:
 				print "ERROR: %s " % str(e.reason.args)
 			return 1
