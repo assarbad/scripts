@@ -4,7 +4,7 @@
 __author__ = "Oliver Schneider"
 __copyright__ = "Copyright (C) 2013 Oliver Schneider (assarbad.net), under Public Domain/CC0"
 __version__ = "1.0"
-import os, sys, time
+import hashlib, os, sys, time
 
 # Checking for compatibility with Python version
 if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
@@ -13,12 +13,20 @@ if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
 import argparse, mechanize, re
 from HTMLParser import HTMLParser
 from datetime import datetime
+from os import path
 
 debug = 0
 sysint_url = "http://live.sysinternals.com"
-pretend_ua = "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)"
+override_headers = [
+	("User-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko"),
+	("Accept", "text/html, application/xhtml+xml, */*"),
+	("Accept-Charset", ""),
+	("Accept-Language", "en-US"),
+	("Connection", "Keep-Alive"),
+	]
+mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'live.sysint')
 
-def parse_index(html_page, baseurl):
+def parse_index(html_page, baseurl, download_file):
 	# Get everything inside the <pre> element
 	match = re.search("<pre>(.+)</pre>", html_page, re.DOTALL | re.IGNORECASE)
 	if not match:
@@ -49,7 +57,9 @@ def parse_index(html_page, baseurl):
 						'dt'   : dt,
 						'line' : line,
 					}
-				print line
+	# Go through the list keyed by URL
+	for url,info in urls.iteritems():
+		download_file(url, info['fname'], info['dt'], info['size'])
 	return 0
 
 def get_index(**kwargs):
@@ -61,15 +71,44 @@ def get_index(**kwargs):
 	br.set_handle_equiv(True)
 	br.set_handle_redirect(True)
 	br.set_handle_referer(True)
-	global pretend_ua
-	br.addheaders = [("User-agent", pretend_ua)]
+	global override_headers
+	br.addheaders = override_headers
 	if debug > 0:
 		br.set_debug_http(True)
 		br.set_debug_redirects(True)
 		br.set_debug_responses(True)
 	global sysint_url
 	response = br.open(sysint_url)
-	return parse_index(response.read(), sysint_url)
+	# Create download directory if it doesn't exist
+	if not path.exists(mirror_basepath) and not path.isdir(mirror_basepath):
+		os.mkdir(mirror_basepath)
+	# Callback for downloading an individual file
+	def download_file(url, fname, remotedt, fsize):
+		global debug
+		global mirror_basepath
+		local_fname = path.join(mirror_basepath, path.basename(fname))
+		# Check whether we need to download the file
+		if path.exists(local_fname):
+			locdt = datetime.fromtimestamp(path.getmtime(local_fname))
+			if locdt >= remotedt:
+				if debug:
+					print "%s not newer than remote" % local_fname
+				return 0
+		# Download the file
+		try:
+			if br.retrieve(url, local_fname):
+				print "Downloaded: %s" % local_fname
+		except (mechanize.HTTPError,mechanize.URLError) as e:
+			if isinstance(e,mechanize.HTTPError):
+				print "HTTP error code %d [%s]" % (e.code, url)
+				if path.exists(local_fname):
+					os.unlink(local_fname)
+			else:
+				print "ERROR: %s " % str(e.reason.args)
+			return 1
+		return 0
+	# Now parse the index HTML file
+	return parse_index(response.read(), sysint_url, download_file)
 
 def main(**kwargs):
 	get_index(**kwargs)
