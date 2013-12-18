@@ -14,7 +14,7 @@ if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'verify-sigs'))
 # Additional modules
-import argparse, mechanize, re, pyasn1, auth_data, fingerprint, pecoff_blob
+import argparse, mechanize, re, pyasn1, fingerprint
 from HTMLParser import HTMLParser
 from datetime import datetime
 from os import path
@@ -31,48 +31,33 @@ override_headers = [
 mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'live.sysint')
 
 def verify_signature(fname):
+	""" Currently only checks whether the hash in the signature matches """
 	with open(fname, 'rb') as f:
 		fp = fingerprint.Fingerprinter(f)
 		is_pecoff = fp.EvalPecoff()
 		fp.EvalGeneric()
 		results = fp.HashIt()
 		if is_pecoff:
-			global debug
-			print fname
 			for r in results:
 				if r['name'] == 'pecoff':
 					res = r
-			if 'SignedData' not in res:
-				if debug:
-					print "INFO: No signature found. File is thus unsigned. Failing verification."
-				return False
-			# Matching hash found! Hurrah ...
-			print "%d signed_data elements" % len(res['SignedData'])
-			for signed_data in res['SignedData']:
-				blob = pecoff_blob.PecoffBlob(signed_data)
-				auth = auth_data.AuthData(blob.getCertificateBlob())
-				content_hasher_name = auth.digest_algorithm().name
-				computed_content_hash = res[content_hasher_name]
-				print repr(auth.signing_cert_id)
-				print repr(auth.counter_sig_cert_id)
-				print repr(auth.has_countersignature)
-				print content_hasher_name
-				print computed_content_hash.encode('hex')
-				try:
-					auth.ValidateAsn1()
-					#auth.ValidateHashes(computed_content_hash)
-					#auth.ValidateSignatures()
-					#auth.ValidateCertChains(time.gmtime())
-					pass
-				except auth_data.Asn1Error:
-					if auth.openssl_error:
-						print('OpenSSL Errors:\n%s' % auth.openssl_error)
-					raise
-					return False
-			return True
+					if 'SignedData' not in res:
+						return False # no signature
+					else:
+						for hashes in ('md5', 'sha1', 'sha256', 'sha512'):
+							if res['SignedData'][0][2].find(res[hashes]) != -1:
+								return True
+		else:
+			return True # Not a PE file, means we pretend this was verified successfully
 	return False
 
-verify_signature("/home/oliver/source/scripts/sysint/premake4.exe")
+def touch(fname, times=None):
+	with file(fname, 'a'):
+		os.utime(fname, times)
+
+def touchdt(fname, dt):
+	numsecs = (dt - datetime(1970, 1, 1)).total_seconds()
+	return touch(fname, (numsecs, numsecs))
 
 def parse_index(html_page, baseurl, download_file):
 	# Get everything inside the <pre> element
@@ -95,7 +80,7 @@ def parse_index(html_page, baseurl, download_file):
 			# Get a nice representation
 			(datestr, sizestr, filename) = (match.group(1).strip(), match.group(2).strip(), match.group(3).strip())
 			# Be picky about the items we want
-			if re.search(r"\.(exe|scr|dll|sys|chm|hlp)$", filename, re.IGNORECASE) and not re.search(r"pdh\.dll$", filename, re.IGNORECASE):
+			if re.search(r"\.(exe|dll|chm|hlp)$", filename, re.IGNORECASE) and not re.search(r"pdh\.dll$", filename, re.IGNORECASE):
 				# Convert date/time string to a format we can handle more easily
 				dt = datetime.strptime(datestr, "%A, %B %d, %Y %I:%M %p")
 				# Store the result, hashed by URL
@@ -110,21 +95,13 @@ def parse_index(html_page, baseurl, download_file):
 	for url,info in urls.iteritems():
 		global mirror_basepath
 		fname = path.join(mirror_basepath, path.basename(info['fname']))
-		ret = download_file(url, fname, info['dt'], info['size'])
-		if 0 == ret:
-			rsize = path.getsize(fname)
-			if not rsize == info['size']:
-				print "ERROR: file size %d does not match expected value %d (%s)!" % (rsize, info['size'], fname)
-				os.unlink(fname)
-				failures += 1
-				continue
-			if not verify_signature(fname):
-				print "ERROR: verification of AuthentiCode signature failed (%s)!" % (fname)
-				os.unlink(fname)
-				failures += 1
-				continue
-		else:
-			failures += ret
+		try:
+			failures += download_file(url, fname, info['dt'], info['size'])
+		except KeyboardInterrupt:
+			os.unlink(fname)
+			failures += 1
+			print "Caught signal. Removed partial file %s." % (fname)
+			break
 	return failures
 
 def get_index(**kwargs):
@@ -161,6 +138,16 @@ def get_index(**kwargs):
 		try:
 			if br.retrieve(url, fname):
 				print "Downloaded: %s" % fname
+				rsize = path.getsize(fname)
+				if not rsize == fsize:
+					print "ERROR: file size %d does not match expected value %d (%s)!" % (rsize, fsize, fname)
+					os.unlink(fname)
+					return 1
+				if not verify_signature(fname):
+					print "ERROR: verification of AuthentiCode signature failed (%s)!" % (fname)
+					os.unlink(fname)
+					return 1
+				touchdt(fname, remotedt)
 		except (mechanize.HTTPError,mechanize.URLError) as e:
 			if isinstance(e,mechanize.HTTPError):
 				print "HTTP error code %d [%s]" % (e.code, url)
@@ -168,8 +155,7 @@ def get_index(**kwargs):
 					os.unlink(fname)
 			else:
 				print "ERROR: %s " % str(e.reason.args)
-			return 1
-		return 0
+		return 1
 	# Now parse the index HTML file
 	return parse_index(response.read(), sysint_url, download_file)
 
