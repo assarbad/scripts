@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
-__copyright__ = "Copyright (C) 2013 Oliver Schneider (assarbad.net), under Public Domain/CC0"
+__copyright__ = "2013 Oliver Schneider (assarbad.net), under Public Domain/CC0"
 __version__ = "1.0"
 import hashlib, os, sys, time
 
