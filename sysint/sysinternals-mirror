@@ -28,7 +28,7 @@ override_headers = [
 	("Accept-Language", "en-US"),
 	("Connection", "Keep-Alive"),
 	]
-mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'live.sysint')
+mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'archive')
 
 def verify_signature(fname):
 	""" Currently only checks whether the hash in the signature matches """

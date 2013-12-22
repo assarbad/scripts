@@ -2,3 +2,4 @@ syntax: glob
 speedcommander-includes/CVS/*
 speedcommander-includes/consts.vbs
 *.pyc
+sysint/archive/**
