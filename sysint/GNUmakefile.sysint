@@ -1,0 +1,5 @@
+# vim: set autoindent smartindent ts=4 sw=4 sts=4 noet filetype=make:
+TARGET?=archive.zip
+$(TARGET): $(wildcard *.exe *.chm *.hlp *.scr)
+	nice zip -oq9 "$@" $^
+	zip -T "$@"

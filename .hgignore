@@ -3,3 +3,4 @@ speedcommander-includes/CVS/*
 speedcommander-includes/consts.vbs
 *.pyc
 sysint/archive/**
+sysint/archive.zip
