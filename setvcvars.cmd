@@ -83,6 +83,7 @@ setlocal ENABLEEXTENSIONS & set VCVER=%~1
 :: We're not interested in overwriting an already existing value
 if defined VCVARS_PATH @( endlocal & goto :EOF )
 :: Now let's distinguish the "nice" version numbers (2002, ... 2013) from the internal ones
+set VCVER=%VCVER:vs=%
 if "%VCVER%" geq "%MIN_NICE%" call :NICE_%VCVER% > NUL 2>&1
 :: Jump over those "subs"
 goto :NICE_SET
