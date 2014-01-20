@@ -2,6 +2,8 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possiblke alternative: https://github.com/rsmmr/install-clang
 LLVM_RELEASE="release_34"
+LIBCXXRT_RELEASE="stable"
+INSTALL_TO=$HOME/bin/LLVM
 TARGETS="x86,x86_64,powerpc,mips,sparc"
 BASEDIR="$HOME/LLVM"
 
@@ -46,18 +48,21 @@ for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clo
 	prepare_src "$i" "$LLVM_RELEASE"
 done
 for i in "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt"; do
-	prepare_src "$i" "stable"
+	prepare_src "$i" "$LIBCXXRT_RELEASE"
 done
 let TIME_GIT=$(date +%s)
 if [[ -d "$BASEDIR/build-llvm" ]]; then
 	pushd "$BASEDIR/build-llvm" && \
-		"$BASEDIR/llvm/configure" --prefix=$HOME/bin/LLVM --disable-docs --enable-optimized --enable-targets=$TARGETS && \
+		"$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS && \
 		let TIME_CONFIGURE=$(date +%s) && \
 		make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 && \
 		let TIME_MAKE=$(date +%s) && \
 		make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install && \
 		let TIME_INSTALL=$(date +%s) && \
 	popd
+	for i in scan-view scan-build; do
+		cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
+	done
 else
 	echo "ERROR: no directory $BASEDIR/build-llvm."
 	exit 1
