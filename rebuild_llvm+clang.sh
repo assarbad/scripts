@@ -21,6 +21,8 @@ function show_help
 	echo -e "\t  Do not check out from the upstream repository."
 	echo -e "\t-t <targets> (default=$TARGETS)"
 	echo -e "\t  Specify the target architectures for LLVM/Clang (such as x86, x86_64 ...)."
+	echo -e "\t-v"
+	echo -e "\t  Be verbose about the actions (lines get trailing '[DBG]' string)."
 	echo ""
 	echo -e "NOTE: the main difference between -c and -B is that -B will remove an existing"
 	echo -e "      build directory and -c doesn't touch that at all."
@@ -32,21 +34,28 @@ function prepare_src
 	local GITCLONE=${1#*:}
 	local GITREF=$2
 	if ((NOCHECKOUT==0)); then
+		((VERBOSE)) && echo "[DBG] Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
 		# Clone the repository if we don't have it
+		((VERBOSE)) && echo "[DBG] Cloning repository if no clone exists."
 		[[ -d "$BASEDIR/$PRJNAME" ]] || $GITCLONE "$BASEDIR/$PRJNAME"
 		# Sanity check the clone
+		((VERBOSE)) && echo "[DBG] Verifying the clone exists now."
 		[[ -d "$BASEDIR/$PRJNAME/.git" ]] || { echo "ERROR: apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
 		# Set the Git stuff according to the docs
+		((VERBOSE)) && echo "[DBG] Setting branch.master.rebase to true."
 		( cd "$BASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo "ERROR: could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
 		( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): branch.master.rebase = " && git config --get branch.master.rebase )
 		# Scrub the working copy
+		((VERBOSE)) && echo "[DBG] Cleaning extraneous files from Git clone."
 		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
+		((VERBOSE)) && echo "[DBG] Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo "WARNING: failed to 'git fetch' $PRJNAME."; }
+		# Check out the release
+		((VERBOSE)) && echo "[DBG] Checking out the files on current branch."
+		( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): " && git checkout $GITREF ) || { echo "ERROR: failed to check out $GITREF for $PRJNAME."; exit 1; }
 	fi
 	((ONLYCHECKOUT)) && return
-	# Check out the release
-	( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): " && git checkout $GITREF ) || { echo "ERROR: failed to check out $GITREF for $PRJNAME."; exit 1; }
 	[[ -d "$BASEDIR/build-$PRJNAME" ]] && rm -rf "$BASEDIR/build-$PRJNAME"
 	mkdir -p "$BASEDIR/build-$PRJNAME" || { echo "ERROR: could not create build-$PRJNAME directory."; exit 1; }
 }
@@ -63,7 +72,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" $DIFF_MIN $DIFF_SEC)
 }
 
-while getopts "h?BcCt:" opt; do
+while getopts "h?BcCt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -83,20 +92,26 @@ while getopts "h?BcCt:" opt; do
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
 		;;
+	v)  VERBOSE=1
+		((VERBOSE)) && echo "[DBG] Enabling verbose run."
+		;;
 	esac
 done
 let PM=$(grep -c processor /proc/cpuinfo)
+((VERBOSE)) && echo "[DBG] Number of parallel jobs, based on processor count: $PM."
 let TIME_START=$(date +%s)
-if ((NOBUILD==0)); then
-	# Preparational steps
-	for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clone http://llvm.org/git/clang.git" "llvm/projects/compiler-rt:git clone http://llvm.org/git/compiler-rt.git" "llvm/projects/libcxx:git clone http://llvm.org/git/libcxx.git" "llvm/tools/clang/tools/extra:git clone http://llvm.org/git/clang-tools-extra.git"; do
-		prepare_src "$i" "$LLVM_RELEASE"
-	done
-	for i in "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt"; do
-		prepare_src "$i" "$LIBCXXRT_RELEASE"
-	done
-	((ONLYCHECKOUT)) && exit
-	let TIME_GIT=$(date +%s)
+((VERBOSE)) && echo "[DBG] Preparing core projects."
+# Preparational steps
+for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clone http://llvm.org/git/clang.git" "llvm/projects/compiler-rt:git clone http://llvm.org/git/compiler-rt.git" "llvm/projects/libcxx:git clone http://llvm.org/git/libcxx.git" "llvm/tools/clang/tools/extra:git clone http://llvm.org/git/clang-tools-extra.git"; do
+	prepare_src "$i" "$LLVM_RELEASE"
+done
+((VERBOSE)) && echo "[DBG] Preparing third-party projects."
+for i in "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt"; do
+	prepare_src "$i" "$LIBCXXRT_RELEASE"
+done
+let TIME_GIT=$(date +%s)
+if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
+	((VERBOSE)) && echo "[DBG] Doing build for $TARGETS into $INSTALL_TO."
 	if [[ -d "$BASEDIR/build-llvm" ]]; then
 		pushd "$BASEDIR/build-llvm" && \
 			"$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS && \
@@ -115,8 +130,12 @@ if ((NOBUILD==0)); then
 	fi
 fi
 let TIME_END=$(date +%s)
-show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
-show_time_diff $TIME_GIT $TIME_CONFIGURE  "./configure took:    %s"
-show_time_diff $TIME_CONFIGURE $TIME_MAKE "GNU make took:       %s"
-show_time_diff $TIME_MAKE $TIME_INSTALL   "Installation took:   %s"
+if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
+	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
+fi
+if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
+	show_time_diff $TIME_GIT $TIME_CONFIGURE  "./configure took:    %s"
+	show_time_diff $TIME_CONFIGURE $TIME_MAKE "GNU make took:       %s"
+	show_time_diff $TIME_MAKE $TIME_INSTALL   "Installation took:   %s"
+fi
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
