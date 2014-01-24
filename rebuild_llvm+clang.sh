@@ -4,6 +4,8 @@
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_34"
 LIBCXXRT_RELEASE="stable"
+MUSLLIBC_RELEASE="v0.9.15"
+BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=$HOME/bin/LLVM
 TARGETS="x86,x86_64,powerpc,mips,sparc"
 BASEDIR="$HOME/LLVM"
@@ -106,9 +108,9 @@ for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clo
 	prepare_src "$i" "$LLVM_RELEASE"
 done
 ((VERBOSE)) && echo "[DBG] Preparing third-party projects."
-for i in "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt"; do
-	prepare_src "$i" "$LIBCXXRT_RELEASE"
-done
+prepare_src "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt" "$LIBCXXRT_RELEASE"
+prepare_src "3rdparty/musl:git clone git://git.musl-libc.org/musl" "$MUSLLIBC_RELEASE"
+prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo "[DBG] Doing build for $TARGETS into $INSTALL_TO."
@@ -119,11 +121,17 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 && \
 			let TIME_MAKE=$(date +%s) && \
 			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install && \
-			let TIME_INSTALL=$(date +%s) && \
 		popd
 		for i in scan-view scan-build; do
 			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
 		done
+		let TIME_INSTALL=$(date +%s)
+		pushd "$BASEDIR/3rdparty/binutils" && \
+			CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO && \
+			make -j$PM && \
+			make install && \
+		popd
+		let TIME_BINUTILS=$(date +%s)
 	else
 		echo "ERROR: no directory $BASEDIR/build-llvm."
 		exit 1
@@ -134,8 +142,9 @@ if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
 fi
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
-	show_time_diff $TIME_GIT $TIME_CONFIGURE  "./configure took:    %s"
-	show_time_diff $TIME_CONFIGURE $TIME_MAKE "GNU make took:       %s"
-	show_time_diff $TIME_MAKE $TIME_INSTALL   "Installation took:   %s"
+	show_time_diff $TIME_GIT $TIME_CONFIGURE    "./configure took:    %s"
+	show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
+	show_time_diff $TIME_MAKE $TIME_INSTALL     "Installation took:   %s"
+	show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
 fi
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
