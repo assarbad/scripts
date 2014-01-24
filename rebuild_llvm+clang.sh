@@ -123,7 +123,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install && \
 		popd
 		for i in scan-view scan-build; do
-			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
+			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO/bin/"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
 		done
 		let TIME_INSTALL=$(date +%s)
 		pushd "$BASEDIR/3rdparty/binutils" && \
