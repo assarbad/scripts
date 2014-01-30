@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2009, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN.
+::: 2009, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN/CC0.
 ::: 2010, Christian Wimmer - Adapted from setvcvars.cmd to BCC.
 :::
 ::: PURPOSE:    This script can be used to run the rvars.bat from any of the

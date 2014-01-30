@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2011, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN.
+::: 2011, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN/CC0.
 :::
 ::: DISCLAIMER: Disclaimer: This software is provided 'as-is', without any
 :::             express or implied warranty. In no event will the author be
