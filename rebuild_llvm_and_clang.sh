@@ -21,6 +21,8 @@ function show_help
 	echo -e "\t  Only check out updates from upstream, then exit."
 	echo -e "\t-C"
 	echo -e "\t  Do not check out from the upstream repository."
+	echo -e "\t-p"
+	echo -e "\t  Same as -p but also packages the Git repos in a .tgz file."
 	echo -e "\t-t <targets> (default=$TARGETS)"
 	echo -e "\t  Specify the target architectures for LLVM/Clang (such as x86, x86_64 ...)."
 	echo -e "\t-v"
@@ -74,7 +76,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" $DIFF_MIN $DIFF_SEC)
 }
 
-while getopts "h?BcCt:v" opt; do
+while getopts "h?BcCpt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -90,6 +92,11 @@ while getopts "h?BcCt:v" opt; do
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
+		;;
+	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p are mutually exclusive."; exit 1; }
+		ONLYCHECKOUT=1
+		PACKAGEGITGZ=1
+		echo "Doing only a checkout and then packaging bare clones into .tgz"
 		;;
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
@@ -137,10 +144,29 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		exit 1
 	fi
 fi
-let TIME_END=$(date +%s)
 if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
 fi
+if ((PACKAGEGITGZ==1)); then
+	TGZNAME="llvm-etc-$(date +%Y-%m-%dT%H-%M-%S).tgz"
+	FOLDERS=$(cd "$BASEDIR" && find -type d -name '.git'|while read repo; do echo $(dirname $repo); done)
+	CLEANDIR="$BASEDIR/clean-$(date +"%s")"
+	[[ -d "$CLEANDIR" ]] && { echo "ERROR: $CLEANDIR exists when it shouldn't."; exit 1; } || { mkdir "$CLEANDIR"; }
+	cp "$BASEDIR/rebuild_llvm_and_clang.sh" "$CLEANDIR/" && \
+	for i in $FOLDERS; do
+		D=${i#./}
+		for j in 3rdparty llvm; do
+			if echo "$D"|grep -q ^$j 2> /dev/null; then
+				(
+					git clone --bare "$BASEDIR/$D" "$CLEANDIR/$D"
+				)
+			fi
+		done
+	done && ( tar -C "$CLEANDIR" -czf "$BASEDIR/$TGZNAME" . ) && rm -rf "$CLEANDIR" && echo "Find the package under the name $TGZNAME"
+	let TIME_TGZ=$(date +%s)
+	show_time_diff $TIME_GIT $TIME_TGZ          "Packaging took:      %s"
+fi
+let TIME_END=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	show_time_diff $TIME_GIT $TIME_CONFIGURE    "./configure took:    %s"
 	show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
