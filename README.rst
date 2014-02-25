@@ -40,7 +40,7 @@ certain tasks.
 
 License
 -------
-The scripts are placed into the PUBLIC DOMAIN (CC0).
+The scripts are placed into the PUBLIC DOMAIN/CC0.
 
 .. _MCPP: http://mcpp.sourceforge.net/
 .. _SpeedCommander: http://www.speedproject.de/enu/
