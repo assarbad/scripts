@@ -50,8 +50,10 @@ function prepare_src
 		( cd "$BASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo "ERROR: could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
 		( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): branch.master.rebase = " && git config --get branch.master.rebase )
 		# Scrub the working copy
-		((VERBOSE)) && echo "[DBG] Cleaning extraneous files from Git clone."
-		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
+		if ((ONLYCHECKOUT==0)); then
+			((VERBOSE)) && echo "[DBG] Cleaning extraneous files from Git clone."
+			( cd "$BASEDIR/$PRJNAME" && git clean -d -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
+		fi
 		# Get latest changes to the Git repo
 		((VERBOSE)) && echo "[DBG] Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo "WARNING: failed to 'git fetch' $PRJNAME."; }
@@ -82,18 +84,18 @@ while getopts "h?BcCpt:v" opt; do
 		show_help
 		exit 0
 		;;
-	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c are mutually exclusive."; exit 1; }
+	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		echo "Doing only a checkout"
 		;;
-	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c are mutually exclusive."; exit 1; }
+	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		NOCHECKOUT=1
 		echo "Skipping checkout"
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
 		;;
-	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p are mutually exclusive."; exit 1; }
+	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p/-c are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		PACKAGEGITGZ=1
 		echo "Doing only a checkout and then packaging bare clones into .tgz"
@@ -149,16 +151,16 @@ if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 fi
 if ((PACKAGEGITGZ==1)); then
 	TGZNAME="llvm-etc-$(date +%Y-%m-%dT%H-%M-%S).tgz"
-	FOLDERS=$(cd "$BASEDIR" && find -type d -name '.git'|while read repo; do echo $(dirname $repo); done)
 	CLEANDIR="$BASEDIR/clean-$(date +"%s")"
 	[[ -d "$CLEANDIR" ]] && { echo "ERROR: $CLEANDIR exists when it shouldn't."; exit 1; } || { mkdir "$CLEANDIR"; }
 	cp "$BASEDIR/rebuild_llvm_and_clang.sh" "$CLEANDIR/" && \
-	for i in $FOLDERS; do
+	for i in $(find -type d -name '.git'); do
 		D=${i#./}
 		for j in 3rdparty llvm; do
 			if echo "$D"|grep -q ^$j 2> /dev/null; then
 				(
-					git clone --bare "$BASEDIR/$D" "$CLEANDIR/$D"
+					git clone --bare "$BASEDIR/$D" "$CLEANDIR/$D" && \
+					cp "$BASEDIR/$D/config" "$CLEANDIR/$D/config"
 				)
 			fi
 		done
