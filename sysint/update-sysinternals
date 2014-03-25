@@ -9,7 +9,7 @@ make -f "$CURRABSPATH/GNUmakefile.sysint" -C "$AR" TARGET="$AR$EXT" && \
 DATENM=$(date -r "$AR$EXT" +"$TGTDIR/%Y-%m-%dT%H-%M-%S_live.sysinternals.com$EXT") && \
 	if [[ ! -e "$DATENM" ]]; then
 		cp -a "$AR$EXT" "$DATENM" && \
-		ln -sf "$DATENM" "$TGTDIR/latest.zip"
+			( cd "$TGTDIR" && ln -sf "${DATENM##*/}" "latest.zip" )
 	fi
 MIRROR="$TGTDIR/mirror/"
 [[ -d "$MIRROR" ]] || mkdir "$MIRROR"
