@@ -4,11 +4,12 @@
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_34"
 LIBCXXRT_RELEASE="stable"
-MUSLLIBC_RELEASE="v0.9.15"
+MUSLLIBC_RELEASE="v1.0.0"
 BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=$HOME/bin/LLVM
 TARGETS="x86,x86_64,powerpc,mips,sparc"
 BASEDIR="$HOME/LLVM"
+for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo "ERROR: couldn't find '$tool' which is required by this script."; exit 1; }; done
 
 function show_help
 {
@@ -22,11 +23,11 @@ function show_help
 	echo -e "\t-C"
 	echo -e "\t  Do not check out from the upstream repository."
 	echo -e "\t-p"
-	echo -e "\t  Same as -p but also packages the Git repos in a .tgz file."
+	echo -e "\t  Same as -c but also packages the Git repos in a .tgz file."
 	echo -e "\t-t <targets> (default=$TARGETS)"
 	echo -e "\t  Specify the target architectures for LLVM/Clang (such as x86, x86_64 ...)."
 	echo -e "\t-v"
-	echo -e "\t  Be verbose about the actions (lines get trailing '[DBG]' string)."
+	echo -e "\t  Be verbose about the actions (lines get leading '[DBG]' string)."
 	echo ""
 	echo -e "NOTE: the main difference between -c and -B is that -B will remove an existing"
 	echo -e "      build directory and -c doesn't touch that at all."
@@ -37,27 +38,33 @@ function prepare_src
 	local PRJNAME=${1%%:*}
 	local GITCLONE=${1#*:}
 	local GITREF=$2
+	local PRJ=$(echo "${PRJNAME##*/}"|tr 'a-z' 'A-Z')
 	if ((NOCHECKOUT==0)); then
-		((VERBOSE)) && echo "[DBG] Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
+		((VERBOSE)) && echo "[DBG:$PRJ] Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
 		# Clone the repository if we don't have it
-		((VERBOSE)) && echo "[DBG] Cloning repository if no clone exists."
+		((VERBOSE)) && echo "[DBG:$PRJ] Cloning repository if no clone exists."
 		[[ -d "$BASEDIR/$PRJNAME" ]] || $GITCLONE "$BASEDIR/$PRJNAME"
 		# Sanity check the clone
-		((VERBOSE)) && echo "[DBG] Verifying the clone exists now."
+		((VERBOSE)) && echo "[DBG:$PRJ] Verifying the clone exists now."
 		[[ -d "$BASEDIR/$PRJNAME/.git" ]] || { echo "ERROR: apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
 		# Set the Git stuff according to the docs
-		((VERBOSE)) && echo "[DBG] Setting branch.master.rebase to true."
+		((VERBOSE)) && echo "[DBG:$PRJ] Setting branch.master.rebase to true."
 		( cd "$BASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo "ERROR: could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
-		( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): branch.master.rebase = " && git config --get branch.master.rebase )
+		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: branch.master.rebase = " && git config --get branch.master.rebase )
+		( cd "$BASEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo "ERROR: could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
 		# Scrub the working copy
-		((VERBOSE)) && echo "[DBG] Cleaning extraneous files from Git clone."
+		((VERBOSE)) && echo "[DBG:$PRJ] Cleaning extraneous files from Git clone."
 		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
-		((VERBOSE)) && echo "[DBG] Fetching updates from upstream."
+		((VERBOSE)) && echo "[DBG:$PRJ] Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo "WARNING: failed to 'git fetch' $PRJNAME."; }
 		# Check out the release
-		((VERBOSE)) && echo "[DBG] Checking out the files on current branch."
-		( cd "$BASEDIR/$PRJNAME" && echo -n "$(echo $PRJNAME|tr 'a-z' 'A-Z'): " && git checkout $GITREF ) || { echo "ERROR: failed to check out $GITREF for $PRJNAME."; exit 1; }
+		((VERBOSE)) && echo "[DBG:$PRJ] Checking out the files on current branch."
+		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git checkout $GITREF ) || { echo "ERROR: failed to check out $GITREF for $PRJNAME."; exit 1; }
+		if ( cd "$BASEDIR/$PRJNAME" && git branch -l|grep -q "$GITREF" ); then
+			((VERBOSE)) && echo "[DBG:$PRJ] Fast-forwarding, if possible."
+			( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git merge --ff-only origin/$GITREF ) || { echo "ERROR: failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
+		fi
 	fi
 	((ONLYCHECKOUT)) && return
 	[[ -d "$BASEDIR/build-$PRJNAME" ]] && rm -rf "$BASEDIR/build-$PRJNAME"
@@ -82,21 +89,21 @@ while getopts "h?BcCpt:v" opt; do
 		show_help
 		exit 0
 		;;
-	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c are mutually exclusive."; exit 1; }
+	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		echo "Doing only a checkout"
 		;;
-	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c are mutually exclusive."; exit 1; }
+	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		NOCHECKOUT=1
 		echo "Skipping checkout"
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
 		;;
-	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p are mutually exclusive."; exit 1; }
+	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p/-c are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		PACKAGEGITGZ=1
-		echo "Doing only a checkout and then packaging bare clones into .tgz"
+		echo "Doing only a checkout and then packaging bare clones into .tbz (requires bzip2+tar)."
 		;;
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
@@ -148,21 +155,13 @@ if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
 fi
 if ((PACKAGEGITGZ==1)); then
-	TGZNAME="llvm-etc-$(date +%Y-%m-%dT%H-%M-%S).tgz"
-	FOLDERS=$(cd "$BASEDIR" && find -type d -name '.git'|while read repo; do echo $(dirname $repo); done)
-	CLEANDIR="$BASEDIR/clean-$(date +"%s")"
-	[[ -d "$CLEANDIR" ]] && { echo "ERROR: $CLEANDIR exists when it shouldn't."; exit 1; } || { mkdir "$CLEANDIR"; }
-	cp "$BASEDIR/rebuild_llvm_and_clang.sh" "$CLEANDIR/" && \
-	for i in $FOLDERS; do
-		D=${i#./}
-		for j in 3rdparty llvm; do
-			if echo "$D"|grep -q ^$j 2> /dev/null; then
-				(
-					git clone --bare "$BASEDIR/$D" "$CLEANDIR/$D"
-				)
-			fi
-		done
-	done && ( tar -C "$CLEANDIR" -czf "$BASEDIR/$TGZNAME" . ) && rm -rf "$CLEANDIR" && echo "Find the package under the name $TGZNAME"
+	TARNAME="llvm-etc-$(date +%Y-%m-%dT%H-%M-%S).tbz"
+	echo "Packaging the source into $TARNAME"
+	(
+		cd "$BASEDIR"
+		tar -cjf "$TARNAME" $MEANDMYSELF $(find llvm 3rdparty -type d -name '.git') && \
+			echo "Find the package under the name $TARNAME"
+	)
 	let TIME_TGZ=$(date +%s)
 	show_time_diff $TIME_GIT $TIME_TGZ          "Packaging took:      %s"
 fi
