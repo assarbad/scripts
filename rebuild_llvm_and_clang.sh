@@ -9,11 +9,12 @@ BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=$HOME/bin/LLVM
 TARGETS="x86,x86_64,powerpc,mips,sparc"
 BASEDIR="$HOME/LLVM"
+let NOOPTIONAL=0
 for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo "ERROR: couldn't find '$tool' which is required by this script."; exit 1; }; done
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p] [-O] [-t <targets>] [-v]"
 	echo -e "\t-h | -?"
 	echo -e "\t  Show this help"
 	echo -e "\t-B"
@@ -22,6 +23,8 @@ function show_help
 	echo -e "\t  Only check out updates from upstream, then exit."
 	echo -e "\t-C"
 	echo -e "\t  Do not check out from the upstream repository."
+	echo -e "\t-O"
+	echo -e "\t  Do not build 'optional' components (i.e. musl + binutils)."
 	echo -e "\t-p"
 	echo -e "\t  Same as -c but also packages the Git repos in a .tgz file."
 	echo -e "\t-t <targets> (default=$TARGETS)"
@@ -61,14 +64,14 @@ function prepare_src
 		# Check out the release
 		((VERBOSE)) && echo "[DBG:$PRJ] Checking out the files on current branch."
 		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git checkout $GITREF ) || { echo "ERROR: failed to check out $GITREF for $PRJNAME."; exit 1; }
-		if ( cd "$BASEDIR/$PRJNAME" && git branch -l|grep -q "$GITREF" ); then
+		if git --git-dir="$BASEDIR/$PRJNAME/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
 			((VERBOSE)) && echo "[DBG:$PRJ] Fast-forwarding, if possible."
 			( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git merge --ff-only origin/$GITREF ) || { echo "ERROR: failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
 		fi
 	fi
 	((ONLYCHECKOUT)) && return
-	[[ -d "$BASEDIR/build-$PRJNAME" ]] && rm -rf "$BASEDIR/build-$PRJNAME"
-	mkdir -p "$BASEDIR/build-$PRJNAME" || { echo "ERROR: could not create build-$PRJNAME directory."; exit 1; }
+	[[ -d "$BASEDIR/build/$PRJNAME" ]] && rm -rf "$BASEDIR/build/$PRJNAME"
+	mkdir -p "$BASEDIR/build/$PRJNAME" || { echo "ERROR: could not create build/$PRJNAME directory."; exit 1; }
 }
 
 function show_time_diff
@@ -80,10 +83,10 @@ function show_time_diff
 	local DIFF=$((END-START))
 	local DIFF_MIN=$((DIFF/60))
 	local DIFF_SEC=$((DIFF%60))
-	printf "$MSG\n" $(printf "%d:%02d" $DIFF_MIN $DIFF_SEC)
+	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-while getopts "h?BcCpt:v" opt; do
+while getopts "h?BcCOpt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -99,6 +102,9 @@ while getopts "h?BcCpt:v" opt; do
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
+		;;
+	O)  NOOPTIONAL=1
+		echo "Skipping build of optional components"
 		;;
 	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p/-c are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
@@ -123,13 +129,15 @@ for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clo
 done
 ((VERBOSE)) && echo "[DBG] Preparing third-party projects."
 prepare_src "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt" "$LIBCXXRT_RELEASE"
-prepare_src "3rdparty/musl:git clone git://git.musl-libc.org/musl" "$MUSLLIBC_RELEASE"
-prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
+if ((NOOPTIONAL == 0)); then
+	prepare_src "3rdparty/musl:git clone git://git.musl-libc.org/musl" "$MUSLLIBC_RELEASE"
+	prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
+fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo "[DBG] Doing build for $TARGETS into $INSTALL_TO."
-	if [[ -d "$BASEDIR/build-llvm" ]]; then
-		pushd "$BASEDIR/build-llvm" && \
+	if [[ -d "$BASEDIR/build/llvm" ]]; then
+		pushd "$BASEDIR/build/llvm" && \
 			"$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS && \
 			let TIME_CONFIGURE=$(date +%s) && \
 			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 && \
@@ -140,14 +148,16 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO/bin/"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
 		done
 		let TIME_INSTALL=$(date +%s)
-		pushd "$BASEDIR/3rdparty/binutils" && \
-			CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO && \
-			make -j$PM && \
-			make install && \
-		popd
+		if ((NOOPTIONAL == 0)); then
+			pushd "$BASEDIR/3rdparty/binutils" && \
+				CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO && \
+				make -j$PM && \
+				make install && \
+			popd
+		fi
 		let TIME_BINUTILS=$(date +%s)
 	else
-		echo "ERROR: no directory $BASEDIR/build-llvm."
+		echo "ERROR: no directory $BASEDIR/build/llvm."
 		exit 1
 	fi
 fi
