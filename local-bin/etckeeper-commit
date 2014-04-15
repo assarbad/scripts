@@ -1,0 +1,7 @@
+#!/bin/bash
+# CRONTAB: */3  * *   *   *     /usr/bin/sudo /usr/local/bin/etckeeper-commit "Automatic Commit"
+## crontabs
+#/var/spool/cron/crontabs    /etc/crontabs    bind    defaults,bind
+ETCKEEPER="/usr/bin/etckeeper"
+export BZR_LOG=/dev/null
+$ETCKEEPER unclean && $ETCKEEPER commit "$1" 2>&1 > /dev/null || /bin/true

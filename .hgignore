@@ -4,3 +4,6 @@ speedcommander-includes/consts.vbs
 *.pyc
 sysint/archive/**
 sysint/archive.zip
+*.tar.bz2
+*.tar.gz
+*.tgz

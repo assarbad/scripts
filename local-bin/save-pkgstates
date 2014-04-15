@@ -1,0 +1,15 @@
+#!/bin/bash
+# CRONTAB: 29   * *   *   *     /usr/bin/sudo /usr/local/bin/save-pkgstates
+BASEDIR="/etc/states.apt+dpkg"
+DPKG="/usr/bin/dpkg"
+APTMARK="/usr/bin/apt-mark"
+EXTSTATES="/var/lib/apt/extended_states"
+CP="/bin/cp"
+[[ -d "$BASEDIR" ]] || mkdir "$BASEDIR" || { echo "ERROR ($0): failed to create $BASEDIR"; exit 1; }
+DPKG_SELECTIONS="$BASEDIR/dpkg-selections.txt"
+APT_AUTOMARKED="$BASEDIR/apt-marked-auto.txt"
+APT_MANUALMARKED="$BASEDIR/apt-marked-manual.txt"
+"$DPKG" --get-selections '*' > "$DPKG_SELECTIONS" || { echo "ERROR ($0): failed to save dpkg package selections"; exit 1; }
+"$APTMARK" showauto > "$APT_AUTOMARKED" || { echo "ERROR ($0): failed to save automatic APT markers"; exit 1; }
+"$APTMARK" showmanual > "$APT_MANUALMARKED" || { echo "ERROR ($0): failed to save manual APT markers"; exit 1; }
+"$CP" "$EXTSTATES" "$BASEDIR/" || { echo "ERROR ($0): failed to save extended package states"; exit 1; }
