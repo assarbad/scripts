@@ -2,7 +2,8 @@
 HOST=yggdrasil
 DEVICES=$(echo $(mdadm --detail /dev/md0|grep -v /dev/md|grep -oE '/dev/.*$'|cut -c 1-8))
 [[ "$HOST" == "$(hostname -s)" ]] || { echo "ERROR: this script is tailored to $HOST"; exit 1; }
-read -p "Reinstall grub in ${DEVICES// /, }? (y/n) " ans
+[[ "x$1" == "x-y" ]] && ans=y
+[[ "x$1" == "x-y" ]] || read -p "Reinstall grub in ${DEVICES// /, }? (y/n) " ans
 [[ "${ans:0:1}" == "y" ]] || { echo "Aborted. Byeeeeeeee ..."; exit 0; }
 for i in $DEVICES; do
 	echo "Embedding into $i"
