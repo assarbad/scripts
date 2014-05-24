@@ -131,8 +131,8 @@ def get_index(**kwargs):
 		if path.exists(fname):
 			locdt = datetime.fromtimestamp(path.getmtime(fname))
 			if locdt >= remotedt:
-				if debug:
-					print "%s not newer than remote" % fname
+				if debug > 1:
+					print "%s remote not newer than local (R:%s <= L:%s)" % (path.basename(fname), remotedt, locdt)
 				return 0
 		# Download the file
 		try:

@@ -1,6 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
+###############################################################################
+###
+### This little script allows to fetch the zone files from ipdeny.com into
+### a local directory in order to use it in iptables rules and similar
+### scenarios.
+###
+### The script heeds robots.txt, identifies itself and will be conservative
+### with the remote resources by checking the timestamp given on the index page
+### at ipdeny.com. If the timestamp is newer or no local version exists, the
+### file will be downloaded. Downloaded files are timestamped to match the
+### timestamps on the remote server. This allows for Makefiles and similar
+### gadgets to work properly.
+### The script limits its scope to files named XX.zone where XX are any two
+### lowercase Latin letters.
+###
+### Please use the script mindfully, if you come across it and accept the terms
+### of use at ipdeny.com. See:
+###       <http://www.ipdeny.com/ipblocks/data/countries/Copyrights.txt>
+###
+###############################################################################
 __author__ = "Oliver Schneider"
 __copyright__ = "2014 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
 __version__ = "1.0"
@@ -49,8 +69,8 @@ def parse_index(html_page, baseurl, download_file):
 		if m:
 			filename, datestr = m.group(1), m.group(2).strip()
 			dt = datetime.strptime(datestr, "%d-%b-%Y %H:%M")
-			if debug:
-				print "%s: %s" % (filename, dt)
+			if debug > 2:
+				print "Parsed as: %s: %s" % (filename, dt)
 			# Store the result, hashed by URL
 			urls[("%s%s" % (baseurl, filename))] = {
 					'fname': filename.lower(),
@@ -71,33 +91,40 @@ def parse_index(html_page, baseurl, download_file):
 	return failures
 
 def get_index(**kwargs):
+	global debug
+	global base_url
+	global mirror_basepath
+	global override_headers
 	if 'debug' in kwargs:
-		global debug
 		debug = kwargs['debug']
+		if debug:
+			print "Debug level %d" % (debug)
+	if 'directory' in kwargs:
+		if mirror_basepath != kwargs['directory']:
+			if debug:
+				print "Output directory is: %s" % (mirror_basepath)
+			mirror_basepath = kwargs['directory']
 	br = mechanize.Browser()
 	br.set_handle_equiv(True)
 	br.set_handle_redirect(True)
 	br.set_handle_referer(True)
-	global override_headers
 	br.addheaders = override_headers
-	if debug > 0:
+	if debug > 1:
 		br.set_debug_http(True)
 		br.set_debug_redirects(True)
 		br.set_debug_responses(True)
-	global base_url
 	response = br.open(base_url)
 	# Create download directory if it doesn't exist
 	if not path.exists(mirror_basepath) and not path.isdir(mirror_basepath):
 		os.mkdir(mirror_basepath)
 	# Callback for downloading an individual file
 	def download_file(url, fname, remotedt):
-		global debug
 		# Check whether we need to download the file
 		if path.exists(fname):
 			locdt = datetime.fromtimestamp(path.getmtime(fname))
 			if locdt >= remotedt:
-				if debug:
-					print "%s not newer than remote" % fname
+				if debug > 1:
+					print "%s remote not newer than local (R:%s <= L:%s)" % (path.basename(fname), remotedt, locdt)
 				return 0
 		# Download the file
 		try:
@@ -120,12 +147,15 @@ def main(**kwargs):
 	get_index(**kwargs)
 
 def parse_args():
+	global mirror_basepath
 	from argparse import ArgumentParser
 	parser = ArgumentParser(description='Mirror script for %s' % (base_url))
 	parser.add_argument('--version', '-V', action='version', version=__version__,
 						help='show the program version and exit')
 	parser.add_argument('--debug', '-d', action='count', default=0,
 						help='turn on debugging (more extensive logging) and increase detail')
+	parser.add_argument('--directory', '-D', action='store', default=mirror_basepath,
+						help='give a directory to download the zone files to')
 	return parser.parse_args()
 
 if __name__ == "__main__":
