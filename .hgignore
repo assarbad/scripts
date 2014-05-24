@@ -4,6 +4,7 @@ speedcommander-includes/consts.vbs
 *.pyc
 sysint/archive/**
 sysint/archive.zip
+ipdeny.com/zones/**
 *.tar.bz2
 *.tar.gz
 *.tgz

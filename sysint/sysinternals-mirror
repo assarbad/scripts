@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
-__copyright__ = "2013 Oliver Schneider (assarbad.net), under Public Domain/CC0"
+__copyright__ = "2013 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
 __version__ = "1.0"
 import hashlib, os, sys, time
 
@@ -148,6 +148,7 @@ def get_index(**kwargs):
 					os.unlink(fname)
 					return 1
 				touchdt(fname, remotedt)
+				return 0
 		except (mechanize.HTTPError,mechanize.URLError) as e:
 			if isinstance(e,mechanize.HTTPError):
 				print "HTTP error code %d [%s]" % (e.code, url)
