@@ -2,6 +2,21 @@
 # CRONTAB: */3  * *   *   *     /usr/bin/sudo /usr/local/bin/etckeeper-commit "Automatic Commit"
 ## crontabs
 #/var/spool/cron/crontabs    /etc/crontabs    bind    defaults,bind
+let LIMIT=3600
+BZR="/usr/bin/bzr"
+DATE="/bin/date"
 ETCKEEPER="/usr/bin/etckeeper"
+RM="/bin/rm"
+TOUCH="/usr/bin/touch"
+SUPPRESS="/etc/.etckeeper-temp-suppress"
+[[ "x--lock" == "x$1" ]] && { $TOUCH "$SUPPRESS"; exit 0; }
+if [[ -f "$SUPPRESS" ]]; then
+	let REFF=$($DATE -r "$SUPPRESS" +'%s')
+	let CURR=$($DATE +'%s')
+	if ((CURR >= REFF+LIMIT)); then
+		$RM "$SUPPRESS" || true
+	fi
+	exit 0
+fi
 export BZR_LOG=/dev/null
-$ETCKEEPER unclean && $ETCKEEPER commit "$1" 2>&1 > /dev/null || /bin/true
+$ETCKEEPER unclean && $ETCKEEPER commit "$1\n$($BZR status -SV /etc)" 2>&1 > /dev/null || true
