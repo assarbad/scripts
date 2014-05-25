@@ -1,4 +1,4 @@
-ALLFILES ?= etckeeper-commit save-pkgstates vsmount vsumount
+ALLFILES ?= etckeeper-commit save-pkgstates vsmount vsumount reinstall-grub showsubids
 BASICFILES ?= etckeeper-commit save-pkgstates reinstall-grub showsubids
 TARGET ?= /usr/local/bin
 
