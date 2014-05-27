@@ -2,6 +2,7 @@
 AWK="/usr/bin/awk"
 ID="/usr/bin/id"
 IPT="/sbin/iptables"
+IPS="/sbin/ipset"
 SED="/bin/sed"
 SUDO="/usr/bin/sudo"
 ###############################################################################
@@ -9,7 +10,7 @@ SUDO="/usr/bin/sudo"
 ### Script to output trimmed iptables (IPv4) statistics
 ###
 ###############################################################################
-read -d '' awkScript << 'EOF'
+read -d '' awkIptScript << 'EOF'
 BEGIN { s = ""; c = 0; }
 $2 ~ /^[\t ]*$/             { if(c > 0 && length(s) > 0) print s; c = 0; s = ""; next }
 $2 ~ /^0$/ && $3 ~ /^0$/ { next }
@@ -65,5 +66,8 @@ echo "${UGROUPS//*$GSUDO*/}"
 [[ "${UGROUPS//*$GSUDO*/}" != "$UGROUPS" ]] || { echo "ERROR: user $(whoami) is not a member of the $GSUDO group."; exit 1; }
 [[ $UID -eq 0 ]] && SUDO=""
 for tbl in filter nat mangle; do
-	$SUDO $IPT -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkScript"
+	$SUDO $IPT -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
 done
+if type "$IPS" > /dev/null 2>&1; then
+	$SUDO $IPS save|$AWK "\$1 ~ /^add/ && \$2 ~ /^(dns|ssh_)/ && \$2 !~ /geoblock/ { if (\$4 ~ /timeout/) { printf(\"%-14s: %s (%s)\\n\", \$2, \$3, \$5)} else { printf(\"%-14s: %s\\n\", \$2, \$3) } }"
+fi
