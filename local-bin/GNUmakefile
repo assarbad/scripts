@@ -1,5 +1,5 @@
 ALLFILES ?= etckeeper-commit save-pkgstates vsmount vsumount reinstall-grub showsubids
-BASICFILES ?= etckeeper-commit save-pkgstates reinstall-grub showsubids
+BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids
 TARGET ?= /usr/local/bin
 
 .PHONY: all basic
