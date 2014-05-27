@@ -63,6 +63,7 @@ GSUDO=sudo
 UGROUPS="$($ID -nG) $($ID -ng)"
 echo "${UGROUPS//*$GSUDO*/}"
 [[ "${UGROUPS//*$GSUDO*/}" != "$UGROUPS" ]] || { echo "ERROR: user $(whoami) is not a member of the $GSUDO group."; exit 1; }
+[[ $UID -eq 0 ]] && SUDO=""
 for tbl in filter nat mangle; do
 	$SUDO $IPT -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkScript"
 done
