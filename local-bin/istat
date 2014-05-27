@@ -1,0 +1,68 @@
+#!/bin/bash
+AWK="/usr/bin/awk"
+ID="/usr/bin/id"
+IPT="/sbin/iptables"
+SED="/bin/sed"
+SUDO="/usr/bin/sudo"
+###############################################################################
+###
+### Script to output trimmed iptables (IPv4) statistics
+###
+###############################################################################
+read -d '' awkScript << 'EOF'
+BEGIN { s = ""; c = 0; }
+$2 ~ /^[\t ]*$/             { if(c > 0 && length(s) > 0) print s; c = 0; s = ""; next }
+$2 ~ /^0$/ && $3 ~ /^0$/ { next }
+$2 ~ /^pkts$/ && $3 ~ /^bytes$/ && $4 ~ /^target$/ {
+	s = s sprintf("%-5s %-5s %-10s %-8s %-9s %-9s %-18s %-18s", $2, $3, $4, $5, $7, $8, $9, $10) "\\n"
+	next
+}
+$2 ~ /Chain/ {
+	c = 0
+	s = sprintf("%-18s ", $1 "/" $3)
+	$2 = ""; $1 = ""; $3 = ""; s = s $0 "\\n"
+	next
+}
+$2 ~ /^[0-9]+[MKT]?$/ {
+	if($4 ~ /^(tcp|udp|udplite|icmp|icmpv6|esp|ah|sctp|mh|all)$/)
+	{
+		s = s sprintf("%-5s %-5s %-10s %-8s %-9s %-9s %-18s %-18s", $2, $3, "", $4, $6, $7, $8, $9)
+		$1 = $2 = $3 = $4 = $5 = $6 = $7 = $8 = $9 = ""
+	}
+	else if($4 ~ /^(ACCEPT|DROP|REJECT|CHECKSUM)$/)
+	{
+		s = s sprintf("%-5s %-5s %-10s %-8s %-9s %-9s %-18s %-18s", $2, $3, $4, $5, $7, $8, $9, $10)
+		$1 = $2 = $3 = $4 = $5 = $6 = $7 = $8 = $9 = $10 = ""
+	}
+	else
+	{
+		s = s sprintf("%-5s %-5s %-10s %-8s %-9s %-9s %-18s %-18s", $2, $3, $4, $5, $7, $8, $9, $10)
+		$1 = $2 = $3 = $4 = $5 = $6 = $7 = $8 = $9 = $10 = ""
+	}
+	split($0, A, " ")
+	if(A[1] ~ /^icmptype/)
+		s = s sprintf("%s: %s", A[1], A[2]) "\\n"
+	else if(A[1] ~ /^match-set/)
+		s = s sprintf("%s: %s", A[2], A[3]) "\\n"
+	else if(A[1] ~ /^state/ && A[3] ~ /^recent:/ && A[4] ~ /^SET$/ && A[5] ~ /^name:/)
+		s = s sprintf("%s: %s:%s", A[2], A[6], A[4]) "\\n"
+	else if(A[1] ~ /^state/ && A[3] ~ /^recent:/ && A[4] ~ /^UPDATE$/ && A[5] ~ /^seconds:/)
+		s = s sprintf("%s: %s:%s (%s/%ss)", A[2], A[10], A[4], A[8], A[6]) "\\n"
+	else if(A[1] ~ /^(tcp|udp)/ && A[3] ~ /^match-set/)
+		s = s sprintf("%s: %s:%s", A[2], A[5], A[4]) "\\n"
+	else if(A[1] ~ /^state/ && A[2] !~ /^NEW/)
+		s = s sprintf("%s", A[2]) "\\n"
+	else
+		s = s "\\n"
+	c++
+}
+END { if(c > 0 && length(s) > 0) print s }
+EOF
+###############################################################################
+GSUDO=sudo
+UGROUPS="$($ID -nG) $($ID -ng)"
+echo "${UGROUPS//*$GSUDO*/}"
+[[ "${UGROUPS//*$GSUDO*/}" != "$UGROUPS" ]] || { echo "ERROR: user $(whoami) is not a member of the $GSUDO group."; exit 1; }
+for tbl in filter nat mangle; do
+	$SUDO $IPT -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkScript"
+done
