@@ -1,8 +1,9 @@
 #!/bin/bash
 AWK="/usr/bin/awk"
 ID="/usr/bin/id"
-IPT="/sbin/iptables"
 IPS="/sbin/ipset"
+IPV4T="/sbin/iptables"
+IPV6T="/sbin/ip6tables"
 SED="/bin/sed"
 SUDO="/usr/bin/sudo"
 ###############################################################################
@@ -63,10 +64,14 @@ EOF
 GSUDO=sudo
 UGROUPS="$($ID -nG) $($ID -ng)"
 echo "${UGROUPS//*$GSUDO*/}"
-[[ "${UGROUPS//*$GSUDO*/}" != "$UGROUPS" ]] || { echo "ERROR: user $(whoami) is not a member of the $GSUDO group."; exit 1; }
-[[ $UID -eq 0 ]] && SUDO=""
+if [[ $UID -eq 0 ]]; then
+	SUDO=""
+else
+	[[ "${UGROUPS//*$GSUDO*/}" != "$UGROUPS" ]] || { echo "ERROR: user $(whoami) is not a member of the $GSUDO group."; exit 1; }
+fi
 for tbl in filter nat mangle; do
-	$SUDO $IPT -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
+	$SUDO $IPV4T -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
+	$SUDO $IPV6T -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
 done
 if type "$IPS" > /dev/null 2>&1; then
 	$SUDO $IPS save|$AWK "\$1 ~ /^add/ && \$2 ~ /^(dns|ssh_)/ && \$2 !~ /geoblock/ { if (\$4 ~ /timeout/) { printf(\"%-14s: %s (%s)\\n\", \$2, \$3, \$5)} else { printf(\"%-14s: %s\\n\", \$2, \$3) } }"
