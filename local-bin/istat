@@ -71,7 +71,7 @@ else
 fi
 for tbl in filter nat mangle; do
 	$SUDO $IPV4T -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
-	$SUDO $IPV6T -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
+	#$SUDO $IPV6T -nvL -t $tbl|$SED "s/^/$tbl /"|$AWK "$awkIptScript"
 done
 if type "$IPS" > /dev/null 2>&1; then
 	$SUDO $IPS save|$AWK "\$1 ~ /^add/ && \$2 ~ /^(dns|ssh_)/ && \$2 !~ /geoblock/ { if (\$4 ~ /timeout/) { printf(\"%-14s: %s (%s)\\n\", \$2, \$3, \$5)} else { printf(\"%-14s: %s\\n\", \$2, \$3) } }"
