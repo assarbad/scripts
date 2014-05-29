@@ -1,5 +1,5 @@
-ALLFILES ?= etckeeper-commit save-pkgstates vsmount vsumount reinstall-grub showsubids
 BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids
+ALLFILES ?= $(BASICFILES) vsmount vsumount
 TARGET ?= /usr/local/bin
 
 .PHONY: all basic
@@ -10,6 +10,6 @@ basic: $(addprefix $(TARGET)/,$(BASICFILES))
 $(TARGET)/%: %
 	test -d $(dir $@) || mkdir -p $(dir $@)
 	cp -a $< $@
-	chown root:root $@
-	chmod u=rwx,go=rx $@
+	-test $(shell id -u) -eq 0 && chown root:root $@
+	-test $(shell id -u) -eq 0 && chmod u=rwx,go=rx $@
 
