@@ -4,17 +4,17 @@
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_34"
 LIBCXXRT_RELEASE="stable"
-MUSLLIBC_RELEASE="v1.0.0"
+MUSLLIBC_RELEASE="v1.1.3"
 BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=$HOME/bin/LLVM
-TARGETS="x86,x86_64,powerpc,mips,sparc"
-BASEDIR="$HOME/LLVM"
+TARGETS="x86,x86_64"
+BASEDIR="${BASEDIR:-$(pwd)}"
 let NOOPTIONAL=0
 for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo "ERROR: couldn't find '$tool' which is required by this script."; exit 1; }; done
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p] [-O] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-O] [-t <targets>] [-v]"
 	echo -e "\t-h | -?"
 	echo -e "\t  Show this help"
 	echo -e "\t-B"
@@ -27,6 +27,9 @@ function show_help
 	echo -e "\t  Do not build 'optional' components (i.e. musl + binutils)."
 	echo -e "\t-p"
 	echo -e "\t  Same as -c but also packages the Git repos in a .tgz file."
+	echo -e "\t-r"
+	echo -e "\t  Revives the repositories previously packaged with -p. Implies -c."
+	echo -e "\t  NB: to be called from the directory which contains ${MEANDMYSELF}."
 	echo -e "\t-t <targets> (default=$TARGETS)"
 	echo -e "\t  Specify the target architectures for LLVM/Clang (such as x86, x86_64 ...)."
 	echo -e "\t-v"
@@ -55,9 +58,10 @@ function prepare_src
 		( cd "$BASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo "ERROR: could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
 		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: branch.master.rebase = " && git config --get branch.master.rebase )
 		( cd "$BASEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo "ERROR: could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
+		((REVIVEPKG)) && ( cd "$BASEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
 		# Scrub the working copy
 		((VERBOSE)) && echo "[DBG:$PRJ] Cleaning extraneous files from Git clone."
-		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
+		( cd "$BASEDIR/$PRJNAME" && git clean -d -f ) || { echo "ERROR: failed to 'git clean' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
 		((VERBOSE)) && echo "[DBG:$PRJ] Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo "WARNING: failed to 'git fetch' $PRJNAME."; }
@@ -86,17 +90,17 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-while getopts "h?BcCOpt:v" opt; do
+while getopts "h?BcCOprt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
 		exit 0
 		;;
-	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
+	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p/-r are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		echo "Doing only a checkout"
 		;;
-	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
+	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p/-r are mutually exclusive."; exit 1; }
 		NOCHECKOUT=1
 		echo "Skipping checkout"
 		;;
@@ -109,7 +113,12 @@ while getopts "h?BcCOpt:v" opt; do
 	p)  ((NOCHECKOUT)) && { echo "ERROR: -C and -p/-c are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		PACKAGEGITGZ=1
-		echo "Doing only a checkout and then packaging bare clones into .tbz (requires bzip2+tar)."
+		echo "Doing only a checkout and then packaging bare clones into .tbz (requires tar+bzip2)."
+		;;
+	r)  ((NOCHECKOUT)) && { echo "ERROR: -C and -r/-c are mutually exclusive."; exit 1; }
+		ONLYCHECKOUT=1
+		REVIVEPKG=1
+		echo "Reviving, followed by a checkout."
 		;;
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
@@ -119,6 +128,7 @@ while getopts "h?BcCOpt:v" opt; do
 		;;
 	esac
 done
+echo -e "\tWorking directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
 ((VERBOSE)) && echo "[DBG] Number of parallel jobs, based on processor count: $PM."
 let TIME_START=$(date +%s)
@@ -165,12 +175,20 @@ if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
 fi
 if ((PACKAGEGITGZ==1)); then
-	TARNAME="llvm-etc-$(date +%Y-%m-%dT%H-%M-%S).tbz"
+	TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
+	TARNAME="packaged-${TIMESTAMP}-LLVM+musl+binutils.tbz"
+	UNPACKER="unpack-$TIMESTAMP-LLVM"
 	echo "Packaging the source into $TARNAME"
 	(
+		REVIVE=./revive
 		cd "$BASEDIR"
-		tar -cjf "$TARNAME" $MEANDMYSELF $(find llvm 3rdparty -type d -name '.git') && \
+		echo -e "#!/usr/bin/env bash\n./$MEANDMYSELF -r"|tee $REVIVE > /dev/null && chmod +x $REVIVE
+		echo "Now packing the contents with tar+bzip2"
+		tar -cjf "$TARNAME" $MEANDMYSELF $REVIVE $(find llvm 3rdparty -type d -name '.git') && \
 			echo "Find the package under the name $TARNAME"
+		rm $REVIVE
+		echo -e "#!/usr/bin/env bash\necho \"Unpacking $TARNAME into ./$TIMESTAMP \$( [[ \"x\$1\" == \"x-c\" ]] && echo \"and removing archive plus unpacker upon success\" )\"\nmkdir \"./$TIMESTAMP\" && tar -C \"./$TIMESTAMP\" -xjf \"./$TARNAME\" && ( cd \"./$TIMESTAMP\" && [[ -x $REVIVE ]] && $REVIVE && rm -f $REVIVE )\n[[ \"x\$1\" == \"x-c\" ]] && { echo \"Also removing $UNPACKER and $TARNAME\"; rm -f \"./$UNPACKER\" \"./$TARNAME\"; }" \
+			| tee "./$UNPACKER" > /dev/null && chmod +x "./$UNPACKER"
 	)
 	let TIME_TGZ=$(date +%s)
 	show_time_diff $TIME_GIT $TIME_TGZ          "Packaging took:      %s"
