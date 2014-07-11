@@ -26,6 +26,10 @@ $2 ~ /Chain/ {
 	next
 }
 $2 ~ /^[0-9]+[MKT]?$/ {
+	if($4 ~ /^(RETURN|SET$|LOG)/)
+	{
+		next
+	}
 	if($4 ~ /^(tcp|udp|udplite|icmp|icmpv6|esp|ah|sctp|mh|all)$/)
 	{
 		s = s sprintf("%-5s %-5s %-10s %-8s %-9s %-9s %-18s %-18s", $2, $3, "", $4, $6, $7, $8, $9)

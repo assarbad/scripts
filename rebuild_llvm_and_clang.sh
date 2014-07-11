@@ -6,7 +6,7 @@ LLVM_RELEASE="release_34"
 LIBCXXRT_RELEASE="stable"
 MUSLLIBC_RELEASE="v1.1.3"
 BINUTILS_RELEASE="binutils-2_24"
-INSTALL_TO=$HOME/bin/LLVM
+INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 TARGETS="x86,x86_64"
 BASEDIR="${BASEDIR:-$(pwd)}"
 let NOOPTIONAL=0
@@ -14,7 +14,7 @@ for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-O] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-i <install-dir>] [-O] [-t <targets>] [-v]"
 	echo -e "\t-h | -?"
 	echo -e "\t  Show this help"
 	echo -e "\t-B"
@@ -23,6 +23,8 @@ function show_help
 	echo -e "\t  Only check out updates from upstream, then exit."
 	echo -e "\t-C"
 	echo -e "\t  Do not check out from the upstream repository."
+	echo -e "\t-i"
+	echo -e "\t  Set the installation directory. Can also be done by setting INSTALL_TO."
 	echo -e "\t-O"
 	echo -e "\t  Do not build 'optional' components (i.e. musl + binutils)."
 	echo -e "\t-p"
@@ -90,7 +92,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-while getopts "h?BcCOprt:v" opt; do
+while getopts "h?BcCi:Oprt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -106,6 +108,9 @@ while getopts "h?BcCOprt:v" opt; do
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
+		;;
+	i)  [[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
+		INSTALL_TO="$OPTARG"
 		;;
 	O)  NOOPTIONAL=1
 		echo "Skipping build of optional components"
