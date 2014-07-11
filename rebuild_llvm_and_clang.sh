@@ -96,11 +96,11 @@ while getopts "h?BcCOprt:v" opt; do
 		show_help
 		exit 0
 		;;
-	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p/-r are mutually exclusive."; exit 1; }
+	c)  ((NOCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		echo "Doing only a checkout"
 		;;
-	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p/-r are mutually exclusive."; exit 1; }
+	C)  ((ONLYCHECKOUT)) && { echo "ERROR: -C and -c/-p are mutually exclusive."; exit 1; }
 		NOCHECKOUT=1
 		echo "Skipping checkout"
 		;;
@@ -115,10 +115,9 @@ while getopts "h?BcCOprt:v" opt; do
 		PACKAGEGITGZ=1
 		echo "Doing only a checkout and then packaging bare clones into .tbz (requires tar+bzip2)."
 		;;
-	r)  ((NOCHECKOUT)) && { echo "ERROR: -C and -r/-c are mutually exclusive."; exit 1; }
-		ONLYCHECKOUT=1
+	r)  ((NOCHECKOUT)) || ONLYCHECKOUT=1
 		REVIVEPKG=1
-		echo "Reviving, followed by a checkout."
+		echo "Reviving bare repos, followed a checkout."
 		;;
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
