@@ -4,7 +4,7 @@
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_34"
 LIBCXXRT_RELEASE="stable"
-MUSLLIBC_RELEASE="v1.1.3"
+MUSLLIBC_RELEASE="v1.1.4"
 BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 TARGETS="x86,x86_64"
@@ -14,7 +14,7 @@ for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-i <install-dir>] [-O] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O] [-t <targets>] [-v]"
 	echo -e "\t-h | -?"
 	echo -e "\t  Show this help"
 	echo -e "\t-B"
@@ -23,6 +23,10 @@ function show_help
 	echo -e "\t  Only check out updates from upstream, then exit."
 	echo -e "\t-C"
 	echo -e "\t  Do not check out from the upstream repository."
+	echo -e "\t-g"
+	echo -e "\t  Garbage collect after checkout."
+	echo -e "\t-G"
+	echo -e "\t  Garbage collect aggressively (git gc --aggressive) after checkout."
 	echo -e "\t-i"
 	echo -e "\t  Set the installation directory. Can also be done by setting INSTALL_TO."
 	echo -e "\t-O"
@@ -74,6 +78,7 @@ function prepare_src
 			((VERBOSE)) && echo "[DBG:$PRJ] Fast-forwarding, if possible."
 			( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git merge --ff-only origin/$GITREF ) || { echo "ERROR: failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
 		fi
+		((GARBAGECOLLECT)) && ( echo "Now garbage-collecting the repository${GCAGGRESSIVE:+ ($GCAGGRESSIVE)}"; cd "$BASEDIR/$PRJNAME" && git gc $GCAGGRESSIVE --prune=all)
 	fi
 	((ONLYCHECKOUT)) && return
 	[[ -d "$BASEDIR/build/$PRJNAME" ]] && rm -rf "$BASEDIR/build/$PRJNAME"
@@ -92,7 +97,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-while getopts "h?BcCi:Oprt:v" opt; do
+while getopts "h?BcCgGi:Oprt:v" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -108,6 +113,11 @@ while getopts "h?BcCi:Oprt:v" opt; do
 		;;
 	B)  NOBUILD=1
 		echo "Skipping build"
+		;;
+	g)  GARBAGECOLLECT=1
+		;;
+	G)  GARBAGECOLLECT=1
+		GCAGGRESSIVE="--aggressive"
 		;;
 	i)  [[ -n "$OPTARG" ]] || { echo "ERROR: -$opt requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
@@ -191,7 +201,7 @@ if ((PACKAGEGITGZ==1)); then
 		tar -cjf "$TARNAME" $MEANDMYSELF $REVIVE $(find llvm 3rdparty -type d -name '.git') && \
 			echo "Find the package under the name $TARNAME"
 		rm $REVIVE
-		echo -e "#!/usr/bin/env bash\necho \"Unpacking $TARNAME into ./$TIMESTAMP \$( [[ \"x\$1\" == \"x-c\" ]] && echo \"and removing archive plus unpacker upon success\" )\"\nmkdir \"./$TIMESTAMP\" && tar -C \"./$TIMESTAMP\" -xjf \"./$TARNAME\" && ( cd \"./$TIMESTAMP\" && [[ -x $REVIVE ]] && $REVIVE && rm -f $REVIVE )\n[[ \"x\$1\" == \"x-c\" ]] && { echo \"Also removing $UNPACKER and $TARNAME\"; rm -f \"./$UNPACKER\" \"./$TARNAME\"; }" \
+		echo -e "#!/usr/bin/env bash\nT=\"$TARNAME\"\nD=\"$TIMESTAMP-LLVM\"\nR=\"$REVIVE\"\nU=\"$UNPACKER\"\necho \"Unpacking \$T into ./\$D \$( [[ \"x\$1\" == \"x-c\" ]] && echo \"and removing archive plus unpacker upon success\" )\"\nmkdir \"./\$D\" && tar -C \"./\$D\" -xjf \"./\$T\" && ( cd \"./\$D\" && [[ -x \$R ]] && \$R && rm -f \$R )\n[[ \"x\$1\" == \"x-c\" ]] && { echo \"Also removing \$U and \$T\"; rm -f \"./\$U\" \"./\$T\"; }" \
 			| tee "./$UNPACKER" > /dev/null && chmod +x "./$UNPACKER"
 	)
 	let TIME_TGZ=$(date +%s)
