@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# vim: set autoindent smartindent tabstop=4 shiftwidth=4 noexpandtab filetype=sh:
+pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+BACKING=dir
+LXCBASE="$(lxc-config lxc.lxcpath)"
+LXCNAME="${1}"
+[[ -n "$LXCNAME" ]] || { echo -e "ERROR: you must give a name for the guest container.\n\nSYNTAX:\n\t${0##*/} <name>"; exit 1; }
+export MIRROR=$(awk "\$1 ~ /^deb\$/ && \$4 ~ /main/ && \$3 ~ /^$(lsb_release -sc)\$/ {print \$2; exit}" /etc/apt/sources.list)
+export SECURITY_MIRROR=$(awk "\$1 ~ /^deb\$/ && \$4 ~ /main/ && \$3 ~ /^$(lsb_release -sc)-security\$/ {print \$2; exit}" /etc/apt/sources.list)
+export HTTP_PROXY="http://localhost:3142"
+export packages_template="ssh,vim-nox,mc,unzip,bash-completion,sudo,tmux,localepurge,mercurial,make,manpages,wget"
+TMPLXCTPL=$(mktemp)
+echo "$MIRROR - $SECURITY_MIRROR"
+awk -f - -- /usr/share/lxc/templates/lxc-ubuntu <<EOF > "$TMPLXCTPL"
+BEGIN { X=0; }
+# Disable finalize_user function
+X==0 && /^finalize_user\(\)/ { print; X=1; next }
+# Remove the last few lines which show a message about the container
+X==0 && /^echo ""/ { X=3; next }
+# Simply print, whenever we're not in an  interesting range
+X==0 { print; next }
+X==1 && /^\{\$/ { print; print "    return 0"; X++; next }
+X==2 && /^\}\$/ { print; X=0; next }
+X==3 && /^echo ""/ { X=0; next }
+X==2 || X==3 { next }
+EOF
+cat <<'EOF' >> "$TMPLXCTPL"
+echo "en_US.UTF-8 UTF-8"|tee $rootfs/var/lib/locales/supported.d/local
+rm -f $rootfs/var/lib/locales/supported.d/en
+echo 'LANG="en_US.UTF-8"'| tee "$rootfs/etc/default/locale"
+chroot "$rootfs" dpkg-reconfigure -f noninteractive locales
+chroot "$rootfs" localepurge
+mv "$rootfs/etc/apt/apt.conf.d/70proxy" "$rootfs/etc/apt/apt.conf.d/00proxy"
+echo 'Acquire::ForceIPv4 { true; };' | tee "$rootfs/etc/apt/apt.conf.d/00inet-v4"
+echo "Acquire::http::Proxy \"http://yggdrasil.lxc:3142\" ;"|tee "$rootfs/etc/apt/apt.conf.d/00proxy"
+NEWHOMEDIR=$(getent passwd 1000|cut -d : -f 6)
+NEWUSERNAME=$(getent passwd 1000|cut -d : -f 1)
+chroot "$rootfs" usermod -m -d "$NEWHOMEDIR" -l "$NEWUSERNAME" ubuntu
+chroot "$rootfs" groupmod -n "$NEWUSERNAME" ubuntu
+chroot "$rootfs" adduser "$NEWUSERNAME" sudo
+sed -i '/ssh_host_ecdsa_key/d;/PasswordAuthentication/ {s/#//;s/ yes/ no/}' "$rootfs/etc/ssh/sshd_config"
+sed -i '/^%sudo/s/ALL$/NOPASSWD:ALL/' "$rootfs/etc/sudoers"
+echo "$NEWUSERNAME:password"|chroot "$rootfs" chpasswd
+rm -f "$rootfs/$NEWHOMEDIR/.bashrc" "$rootfs/root/.bashrc"
+hg --cwd "$rootfs/$NEWHOMEDIR" clone https://bitbucket.org/assarbad/dotfiles .dotfiles
+hg --cwd "$rootfs/root" clone https://bitbucket.org/assarbad/dotfiles .dotfiles
+make -C "$rootfs/$NEWHOMEDIR/.dotfiles" "TGTDIR=$rootfs/$NEWHOMEDIR" install
+make -C "$rootfs/root/.dotfiles" "TGTDIR=$rootfs/root" install
+chroot "$rootfs" chown -R "$NEWUSERNAME:" "$NEWHOMEDIR"
+EOF
+chmod +x "$TMPLXCTPL"
+lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
