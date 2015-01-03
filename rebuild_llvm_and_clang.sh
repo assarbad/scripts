@@ -2,7 +2,7 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possible alternative: https://github.com/rsmmr/install-clang
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="release_34"
+LLVM_RELEASE="release_35"
 LIBCXXRT_RELEASE="stable"
 MUSLLIBC_RELEASE="v1.1.4"
 BINUTILS_RELEASE="binutils-2_24"
