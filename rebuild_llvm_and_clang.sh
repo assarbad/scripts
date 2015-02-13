@@ -2,9 +2,9 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possible alternative: https://github.com/rsmmr/install-clang
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="release_35"
+LLVM_RELEASE="release_36"
 LIBCXXRT_RELEASE="stable"
-MUSLLIBC_RELEASE="v1.1.4"
+MUSLLIBC_RELEASE="v1.1.6"
 BINUTILS_RELEASE="binutils-2_24"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 TARGETS="x86,x86_64"
@@ -162,11 +162,11 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo "[DBG] Doing build for $TARGETS into $INSTALL_TO."
 	if [[ -d "$BASEDIR/build/llvm" ]]; then
 		pushd "$BASEDIR/build/llvm" && \
-			"$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS && \
+			( set -x; "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS ) && \
 			let TIME_CONFIGURE=$(date +%s) && \
-			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 && \
+			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ) && \
 			let TIME_MAKE=$(date +%s) && \
-			make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install && \
+			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install ) && \
 		popd
 		for i in scan-view scan-build; do
 			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO/bin/"/ || { echo "WARNING: could not copy $i binaries/scripts."; }
@@ -174,9 +174,8 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		let TIME_INSTALL=$(date +%s)
 		if ((NOOPTIONAL == 0)); then
 			pushd "$BASEDIR/3rdparty/binutils" && \
-				CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO && \
-				make -j$PM && \
-				make install && \
+				( set -x; CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) && \
+				( set -x; make -j$PM && make install ) && \
 			popd
 		fi
 		let TIME_BINUTILS=$(date +%s)
