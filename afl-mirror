@@ -1,0 +1,139 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
+__author__ = "Oliver Schneider"
+__copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__version__ = "1.0"
+import hashlib, os, sys, time
+
+# Checking for compatibility with Python version
+if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
+    sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
+
+# We have two modules stored relative to this script path
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'verify-sigs'))
+# Additional modules
+import argparse, mechanize, re
+from HTMLParser import HTMLParser
+from datetime import datetime
+from os import path
+
+debug = 0
+afl_url = "http://lcamtuf.coredump.cx/afl/releases/"
+override_headers = [
+	("User-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko"),
+	("Accept", "text/html, application/xhtml+xml, */*"),
+	("Accept-Charset", ""),
+	("Accept-Language", "en-US"),
+	("Connection", "Keep-Alive"),
+	]
+mirror_basepath = None
+
+def touch(fname, times=None):
+	with file(fname, 'a'):
+		os.utime(fname, times)
+
+def touchdt(fname, dt):
+	numsecs = (dt - datetime(1970, 1, 1)).total_seconds()
+	return touch(fname, (numsecs, numsecs))
+
+def parse_index(html_page, baseurl, download_file):
+	# Get everything inside the <pre> element
+	match = re.search("<pre>(.+)</pre>", html_page, re.DOTALL | re.IGNORECASE)
+	if not match:
+		return 1 # error
+	urls = {}
+	for line in  match.group(1).split('\n'):
+		if line.startswith('<a href'):
+			stripped = re.sub(r'(?si)<a\s+href="([^"]+)">[^<]+</a>', "\\1", line)
+			match = re.search(r'^(afl-\d+\.[^\.]+\.tgz)\s+(\d{2}-[A-Z][a-z]{2}-\d{4}\s+\d{2}:\d{2})', stripped, re.IGNORECASE)
+			if match:
+				(filename, datestr) = (match.group(1), match.group(2))
+				# Convert date/time string to a format we can handle more easily
+				dt = datetime.strptime(datestr, "%d-%b-%Y %H:%M")
+				url = "%s%s" % (baseurl, filename)
+				urls[url] = {
+						'fname': filename,
+						'dt'   : dt,
+					}
+	failures = 0
+	# Go through the list keyed by URL
+	for url,info in urls.iteritems():
+		global mirror_basepath
+		fname = path.join(mirror_basepath, path.basename(info['fname']))
+		try:
+			failures += download_file(url, fname, info['dt'])
+		except KeyboardInterrupt:
+			os.unlink(fname)
+			failures += 1
+			print "Caught signal. Removed partial file %s." % (fname)
+			break
+	return failures
+
+def get_index(**kwargs):
+	if 'debug' in kwargs:
+		global debug
+		debug = kwargs['debug']
+	br = mechanize.Browser()
+	br.set_handle_robots(False)
+	br.set_handle_equiv(True)
+	br.set_handle_redirect(True)
+	br.set_handle_referer(True)
+	global override_headers
+	br.addheaders = override_headers
+	if debug > 0:
+		br.set_debug_http(True)
+		br.set_debug_redirects(True)
+		br.set_debug_responses(True)
+	global afl_url
+	response = br.open(afl_url)
+	# Create download directory if it doesn't exist
+	if not path.exists(mirror_basepath) and not path.isdir(mirror_basepath):
+		os.mkdir(mirror_basepath)
+	# Callback for downloading an individual file
+	def download_file(url, fname, remotedt):
+		global debug
+		# Check whether we need to download the file
+		if path.exists(fname):
+			locdt = datetime.fromtimestamp(path.getmtime(fname))
+			if locdt >= remotedt:
+				if debug > 1:
+					print "%s remote not newer than local (R:%s <= L:%s)" % (path.basename(fname), remotedt, locdt)
+				return 0
+		# Download the file
+		try:
+			if br.retrieve(url, fname):
+				print "Downloaded: %s" % fname
+				touchdt(fname, remotedt)
+			return 0
+		except (mechanize.HTTPError,mechanize.URLError) as e:
+			if isinstance(e,mechanize.HTTPError):
+				print "HTTP error code %d [%s]" % (e.code, url)
+				if path.exists(fname):
+					os.unlink(fname)
+			else:
+				print "ERROR: %s " % str(e.reason.args)
+		return 1
+	# Now parse the index HTML file
+	return parse_index(response.read(), afl_url, download_file)
+
+def main(**kwargs):
+	global mirror_basepath 
+	mirror_basepath = kwargs.get('directory')
+	get_index(**kwargs)
+
+def parse_args():
+	from argparse import ArgumentParser
+	parser = ArgumentParser(description='Mirror script for american fuzzy lop (afl)')
+	parser.add_argument('--version', '-V', action='version', version=__version__,
+						help='show the program version and exit')
+	parser.add_argument('--debug', '-d', action='count', default=0,
+						help='turn on debugging (more extensive logging) and increase detail')
+	parser.add_argument('--directory', '-D', '--dir', action='store', default=path.join(path.dirname(path.realpath(__file__)), 'releases'),
+						help='directory into which to mirror the files', metavar='DIR')
+	return parser.parse_args()
+
+if __name__ == "__main__":
+	args = parse_args()
+	sys.exit(main(**vars(args)))
