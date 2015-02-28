@@ -1,14 +1,15 @@
 #!/bin/bash
-pushd `dirname $0` > /dev/null; CURRABSPATH=$(readlink -nf "`pwd`"); popd > /dev/null;
+[[ -n "$DEBUG" ]] && { XDBG=-d; set -x; }
+pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "`pwd`"); popd > /dev/null;
 TGTDIR="$1"
 [[ -d "$TGTDIR" ]] || exit 0
-AR="$CURRABSPATH/archive"
+AR="$TGTDIR/.archive"
 EXT=".zip"
-python2.7 "$CURRABSPATH/sysinternals-mirror"
+python2.7 "$CURRABSPATH/sysinternals-mirror" $XDBG -D "$AR"
 make -f "$CURRABSPATH/GNUmakefile.sysint" -C "$AR" TARGET="$AR$EXT" && \
 DATENM=$(date -r "$AR$EXT" +"$TGTDIR/%Y-%m-%dT%H-%M-%S_live.sysinternals.com$EXT") && \
-	if [[ ! -e "$DATENM" ]]; then
-		cp -a "$AR$EXT" "$DATENM" && \
+	if [[ ! -e "$DATENM" ]] || [[ ! "$AR$EXT" -ef "$DATENM" ]]; then
+		cp -alf "$AR$EXT" "$DATENM" && \
 			( cd "$TGTDIR" && ln -f "${DATENM##*/}" "latest_live.sysinternals.com.zip" )
 	fi
 MIRROR="$TGTDIR/mirror/"
@@ -17,8 +18,14 @@ if [[ -d "$MIRROR" ]]; then
 	find "$AR" -type f|while read fname; do
 		if [[ -f "$MIRROR/${fname##*/}" ]] && [[ ! -f "$fname" ]]; then
 			rm -f "$fname"
-		elif [[ "$fname" -nt "$MIRROR/${fname##*/}" ]]; then
-			cp -a "$fname" "$MIRROR/${fname##*/}"
+		fi
+		if [[ -f "$fname" ]] && [[ ! "$fname" -ef "$MIRROR/${fname##*/}" ]]; then
+			cp -alf "$fname" "$MIRROR/${fname##*/}"
+		fi
+	done
+	find "$MIRROR" -type f|while read fname; do
+		if [[ ! -f "$AR/${fname##*/}" ]] && [[ -f "$fname" ]]; then
+			rm -f "$AR/${fname##*/}"
 		fi
 	done
 	touch "$MIRROR"

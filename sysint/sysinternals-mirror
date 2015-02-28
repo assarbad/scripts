@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
-__copyright__ = "2013 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "1.0"
+__copyright__ = "2013, 2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__version__ = "1.0.1"
 import hashlib, os, sys, time
 
 # Checking for compatibility with Python version
@@ -28,7 +28,7 @@ override_headers = [
 	("Accept-Language", "en-US"),
 	("Connection", "Keep-Alive"),
 	]
-mirror_basepath = path.join(path.dirname(path.realpath(__file__)), 'archive')
+mirror_basepath = None
 
 def verify_signature(fname):
 	""" Currently only checks whether the hash in the signature matches """
@@ -161,6 +161,8 @@ def get_index(**kwargs):
 	return parse_index(response.read(), sysint_url, download_file)
 
 def main(**kwargs):
+	global mirror_basepath
+	mirror_basepath = kwargs.get('directory')
 	get_index(**kwargs)
 
 def parse_args():
@@ -170,6 +172,8 @@ def parse_args():
 						help='show the program version and exit')
 	parser.add_argument('--debug', '-d', action='count', default=0,
 						help='turn on debugging (more extensive logging) and increase detail')
+	parser.add_argument('--directory', '-D', '--dir', action='store', default=path.join(path.dirname(path.realpath(__file__)), 'mirror'),
+						help='directory into which to mirror the files', metavar='DIR')
 	return parser.parse_args()
 
 if __name__ == "__main__":
