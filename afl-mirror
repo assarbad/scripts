@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "1.0"
+__version__ = "1.0a"
 import hashlib, os, sys, time
 
 # Checking for compatibility with Python version
@@ -12,7 +12,6 @@ if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
 
 # We have two modules stored relative to this script path
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'verify-sigs'))
 # Additional modules
 import argparse, mechanize, re
 from HTMLParser import HTMLParser
