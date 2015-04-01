@@ -15,16 +15,21 @@ if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 		printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 	}
 
-	svnsync synchronize "file://$CURRABSPATH" && touch "$CURRABSPATH"
+	echo "URL: '$(svn propget svn:sync-from-url --revprop -r 0 "file://$CURRABSPATH")'"
+	svn propdel --revprop -r0 svn:sync-lock "file://$CURRABSPATH"
+	# svnsync --non-interactive --trust-server-cert ...
+	svnsync --non-interactive sync "file://$CURRABSPATH" && touch "$CURRABSPATH"
 	if [[ -n "$1" ]]; then
 		REVNO=$(svn info "file://$CURRABSPATH"|awk '/^Revision:/ {print $2}')
 		FNAME="${1//REVNO/$REVNO}"
 		echo "$FNAME"
 		if [[ ! -e "$FNAME" ]]; then
 			let TIME_START=$(date +%s)
-			( set -x && svnadmin dump -q --incremental "$CURRABSPATH"|lzma -9 - > "$FNAME" )
+			trap 'rm -f "$LOCKFILE" "$FNAME"; exit $?' INT TERM EXIT
+			svnadmin dump -q --incremental "$CURRABSPATH"|lzma -9 - > "$FNAME"
 			let TIME_TGZ=$(date +%s)
 			show_time_diff $TIME_PACK $TIME_PACK "Packaging $FNAME took: %s"
+			trap 'rm -f "$LOCKFILE"; exit $?' INT TERM EXIT
 		fi
 
 	fi
