@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+CURRABSPATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) # Get the directory in which the script resides
+LOCKFILE="$CURRABSPATH/.lock"
+if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
+	trap 'rm -f "$LOCKFILE"; exit $?' INT TERM EXIT
+	function show_time_diff
+	{
+		local START=$1
+		local END=$2
+		local MSG=$3
+		[[ -n "$MSG" ]] || MSG="Runtime: %s"
+		local DIFF=$((END-START))
+		local DIFF_MIN=$((DIFF/60))
+		local DIFF_SEC=$((DIFF%60))
+		printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
+	}
+
+	svnsync synchronize "file://$CURRABSPATH" && touch "$CURRABSPATH"
+	if [[ -n "$1" ]]; then
+		REVNO=$(svn info "file://$CURRABSPATH"|awk '/^Revision:/ {print $2}')
+		FNAME="${1//REVNO/$REVNO}"
+		echo "$FNAME"
+		if [[ ! -e "$FNAME" ]]; then
+			let TIME_START=$(date +%s)
+			( set -x && svnadmin dump -q --incremental "$CURRABSPATH"|lzma -9 - > "$FNAME" )
+			let TIME_TGZ=$(date +%s)
+			show_time_diff $TIME_PACK $TIME_PACK "Packaging $FNAME took: %s"
+		fi
+
+	fi
+else
+	echo "ERROR: Lock failed, PID $(cat "$LOCKFILE")" >&2
+	exit 1
+fi
