@@ -25,10 +25,9 @@ if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 		echo "$FNAME"
 		if [[ ! -e "$FNAME" ]]; then
 			let TIME_START=$(date +%s)
-			trap 'rm -f "$LOCKFILE" "$FNAME"; exit $?' INT TERM EXIT
-			svnadmin dump -q --incremental "$CURRABSPATH"|lzma -9 - > "$FNAME"
-			let TIME_TGZ=$(date +%s)
-			show_time_diff $TIME_PACK $TIME_PACK "Packaging $FNAME took: %s"
+			trap 'echo "Cleaning up ${FNAME##*/} due to error or interrupt."; rm -f "$LOCKFILE" "$FNAME"; exit $?' INT TERM EXIT
+			svnadmin dump --incremental "$CURRABSPATH"|gzip -c9 > "$FNAME"
+			show_time_diff $TIME_START $(date +%s) "Packaging $FNAME took: %s"
 			trap 'rm -f "$LOCKFILE"; exit $?' INT TERM EXIT
 		fi
 
