@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+RELDIR="/data/oliver/afl-releases/releases"
+if [[ -d "$RELDIR" ]]; then
+	for tgz in "$RELDIR"/*.tgz; do
+		if [[ ! -d "${tgz%.tgz}" ]]; then
+			# Check that the TAR file contains a top-level folder named like the .tgz
+			TOPLEVEL=$(tar -tzf "$tgz"|cut -d '/' -f 1|sort -u)
+			FNAME="${tgz##*/}"
+			if [[ "$TOPLEVEL" == "${FNAME%.tgz}" ]]; then
+				tar -C "$RELDIR" -xzf "$tgz" && \
+					touch -r "$tgz" "${tgz%.tgz}"
+				echo "${tgz##*/}"
+			fi
+		fi
+	done
+fi

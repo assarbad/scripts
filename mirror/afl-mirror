@@ -8,10 +8,12 @@ if type timeout 2>&1 > /dev/null; then
 else
 	TIMEOUTCMD=""
 fi
-$TIMEOUTCMD $0.py "$@" \
-	&& { \
-		echo "$(date +"%Y-%m-%d %H:%M:%S") bash[$$]: NOTE: Finished." >> "/dev/stderr"; \
-	} \
-	|| { \
-		echo "$(date +"%Y-%m-%d %H:%M:%S") bash[$$]: WARNING: Finished with error status." >> "/dev/stderr"; \
-	}
+if $TIMEOUTCMD $(which python2.7) $0.py "$@"; then
+	echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Finished." >> "/dev/stderr"
+	[[ -r "${0}.hook.success" ]] && source "${0}.hook.success"
+	exit 0
+else
+	echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Finished with error status." >> "/dev/stderr"
+	[[ -r "${0}.hook.failure" ]] && source "${0}.hook.failure"
+	exit 1
+fi

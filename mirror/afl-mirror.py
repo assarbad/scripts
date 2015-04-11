@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "2.0a"
+__version__ = "2.0b"
 import os, sys, time
 
 # Checking for compatibility with Python version
@@ -30,7 +30,7 @@ def main(**kwargs):
 		'Function to match the desired downloads'
 		if fnmatch(urlparse(url).path, '*.tgz'):
 			basename = os.path.basename(urlparse(url).path)
-			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[0123]*.tgz', 'afl-latest.tgz']:
+			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[0123]*.tgz']:
 				if fnmatch(basename, p):
 					if dbglvl > 1:
 						print >> sys.stderr, "Skipping %s" % basename
