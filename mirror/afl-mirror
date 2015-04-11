@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# If available use the timeout command from coreutils to limit execution time to half an hour
+pushd $(dirname $0) 2>&1 > /dev/null && BASEDIR=$(pwd) && popd 2>&1 > /dev/null
+let TIMEOUT=600
+TIMEOUTCMD=timeout
+if type timeout 2>&1 > /dev/null; then
+	TIMEOUTCMD="$TIMEOUTCMD $TIMEOUT"
+else
+	TIMEOUTCMD=""
+fi
+$TIMEOUTCMD $0.py "$@" \
+	&& { \
+		echo "$(date +"%Y-%m-%d %H:%M:%S") bash[$$]: NOTE: Finished." >> "/dev/stderr"; \
+	} \
+	|| { \
+		echo "$(date +"%Y-%m-%d %H:%M:%S") bash[$$]: WARNING: Finished with error status." >> "/dev/stderr"; \
+	}
