@@ -8,8 +8,8 @@ if [[ -d "$RELDIR" ]]; then
 			FNAME="${tgz##*/}"
 			if [[ "$TOPLEVEL" == "${FNAME%.tgz}" ]]; then
 				tar -C "$RELDIR" -xzf "$tgz" && \
-					touch -r "$tgz" "${tgz%.tgz}"
-				echo "${tgz##*/}"
+					touch -r "$tgz" "${tgz%.tgz}" && \
+					echo "Unpacked ${tgz##*/}"
 			fi
 		fi
 	done
