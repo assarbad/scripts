@@ -18,6 +18,7 @@ from datetime import datetime
 from HTMLParser import HTMLParser
 from urlparse import urljoin, urlparse
 from fnmatch import fnmatch
+from stat import S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH
 
 dbglvl = 0
 
@@ -145,7 +146,8 @@ class Mirror(object):
 				fname, info = self.__br.retrieve(url, localpath)
 				if fname:
 					print "Downloaded: %s" % (localpath)
-				touchdt(fname, remotedt)
+				touchdt(localpath, remotedt)
+				os.chmod(localpath, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
 			else:
 				print "Not downloading: %s" % (localpath)
 			return 0
@@ -169,7 +171,7 @@ def main(**kwargs):
 		dbglvl = globals().get('dbglvl', 0)
 		if fnmatch(urlparse(url).path, '*.tgz'):
 			basename = os.path.basename(urlparse(url).path)
-			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[012]*.tgz', 'afl-latest.tgz']:
+			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[0123]*.tgz', 'afl-latest.tgz']:
 				if fnmatch(basename, p):
 					if dbglvl > 0:
 						print >> sys.stderr, "Skipping %s" % basename
