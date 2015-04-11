@@ -3,185 +3,46 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "2.0"
+__version__ = "2.0a"
 import os, sys, time
 
 # Checking for compatibility with Python version
 if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
     sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
 
+# Don't create .pyc or .pyo files
+sys.dont_write_bytecode = True
 # We have two modules stored relative to this script path
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 # Additional modules
-import argparse, mechanize
-from datetime import datetime
-from HTMLParser import HTMLParser
-from urlparse import urljoin, urlparse
-from fnmatch import fnmatch
-from stat import S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH
-
-dbglvl = 0
-
-def touch(fname, times=None):
-	with file(fname, 'a'):
-		os.utime(fname, times)
-
-def touchdt(fname, dt):
-	numsecs = (dt - datetime(1970, 1, 1)).total_seconds()
-	return touch(fname, (numsecs, numsecs))
-
-class Mirror(object):
-	"A class which takes care of mirroring linked files from a website (HTML)"
-	def __init__(self, basepath, urldict = None, baseurl = ''):
-		dbglvl = globals().get('dbglvl', 0)
-		typechecks = { 'basepath' : basestring, 'baseurl' : basestring }
-		for l, t in typechecks.iteritems():
-			if not isinstance(locals()[l], t):
-				raise TypeError('%s must be a %r value' % t)
-		# Create download directory if it doesn't exist
-		if not os.path.exists(basepath):
-			os.makedirs(basepath)
-		if not os.path.isdir(basepath):
-			raise RuntimeError('basepath must be a directory, but evidently is not')
-		self.__basepath, self.__baseurl = basepath, baseurl
-		# Prepare the browser instance from mechanize
-		br = mechanize.Browser()
-		br.set_handle_robots(False)
-		br.set_handle_equiv(True)
-		br.set_handle_redirect(True)
-		br.set_handle_referer(True)
-		br.addheaders = [
-			("User-agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko"),
-			("Accept", "text/html, application/xhtml+xml, */*"),
-			("Accept-Charset", ""),
-			("Accept-Language", "en-US"),
-			("Connection", "Keep-Alive"),
-			]
-		if dbglvl > 1:
-			br.set_debug_http(True)
-			br.set_debug_redirects(True)
-			br.set_debug_responses(True)
-		self.__br = br
-		if urldict is not None:
-			self.process(urldict)
-	def process(self, urldict, redownload = False):
-		"Processes a mirroring request based on the passed urldict"
-		dbglvl = globals().get('dbglvl', 0)
-		# Sanity checks
-		if not isinstance(urldict, dict):
-			raise TypeError('urldict parameter must be a dict')
-		if len(urldict):
-			# Further sanity checks
-			for url, criteria in urldict.iteritems():
-				if not isinstance(url, basestring):
-					raise TypeError('the keys in urldict must be strings (the URL)')
-				if not callable(criteria) and not isinstance(criteria, (list, tuple)):
-					raise TypeError('the urldict values must be callable or lists or tuples; but for %s it is a %r' % (url, type(criteria)))
-				if not callable(criteria):
-					for i in criteria:
-						if not isinstance(i, basestring):
-							raise TypeError('urldict list values must contain string values only')
-			downloadables = {} # dict to keep unique URLs
-			# Parse the given URLs to find downloads matching our criteria
-			for url, criteria in urldict.iteritems():
-				for dl in self.downloads_from_page(url, criteria):
-					downloadables[dl] = 0
-			for dl in sorted(downloadables.keys()):
-				self.download(dl, redownload = redownload)
-	def open(self, *args, **kwargs):
-		"Pass-through function for mechanize.Browser.open()"
-		return self.__br.open(*args, **kwargs)
-	def downloads_from_page(self, url, criteria = None):
-		"Function to download relevant links from a website"
-		dbglvl = globals().get('dbglvl', 0)
-		self.open(url) # browse to the page with the downloadable items
-		if criteria is None:
-			criteria = lambda x: True # match all
-		if not callable(criteria):
-			def make_match_function():
-				pattern_list = criteria
-				def match(url):
-					matches = [url for pattern in pattern_list if fnmatch(urlparse(url).path, pattern)]
-					if dbglvl > 2:
-						print >> sys.stderr, "Pattern list: %r" % [x for x in pattern_list]
-						print >> sys.stderr, "URL matching patterns: %r" % ([urlparse(url).path for url in matches])
-					return len(matches) > 0
-				return match
-			if dbglvl > 2:
-				print >> sys.stderr, "Using match function"
-			criteria = make_match_function()
-		hostname = urlparse(url).hostname
-		retval = {}
-		for lnk in self.__br.links():
-			fullurl = urljoin(lnk.base_url, lnk.url)
-			if urlparse(fullurl).hostname == hostname:
-				if criteria(fullurl):
-					retval[fullurl] = 0
-		return retval.keys()
-	def download(self, url, localpath = None, redownload = False):
-		dbglvl = globals().get('dbglvl', 0)
-		if localpath is None:
-			# compute a local path for the file to download
-			localpath = os.path.join(self.__basepath, url.replace(self.__baseurl, ''))
-			if ('http://' in localpath) or ('https://' in localpath):
-				raise RuntimeError('logic flawed, did not expect to see a path with scheme identifier in it')
-		# Download the file
-		try:
-			response = self.__br.open(url)
-			# Get Last-Modified header value already parsed
-			lm = response.info().getdate("Last-Modified")[0:6]
-			# Convert to datetime object
-			remotedt = datetime(*lm)
-			if dbglvl > 0:
-				print >> sys.stderr, "%s [%s]\n\t%s" % (url, remotedt, localpath)
-			# Decide whether to download or not
-			if os.path.exists(localpath):
-				localdt = datetime.fromtimestamp(os.path.getmtime(localpath))
-				redownload = (remotedt > localdt)
-			else:
-				redownload = True
-			if redownload:
-				if not os.path.isdir(os.path.dirname(localpath)):
-					os.makedirs(os.path.dirname(localpath))
-				fname, info = self.__br.retrieve(url, localpath)
-				if fname:
-					print "Downloaded: %s" % (localpath)
-				touchdt(localpath, remotedt)
-				os.chmod(localpath, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)
-			else:
-				print "Not downloading: %s" % (localpath)
-			return 0
-		except (mechanize.HTTPError,mechanize.URLError) as e:
-			if isinstance(e,mechanize.HTTPError):
-				print >> sys.stderr, "HTTP error code %d [%s]" % (e.code, url)
-				if os.path.exists(fname):
-					os.unlink(fname)
-			else:
-				print >> sys.stderr, "ERROR: %s " % str(e.reason.args)
-		return 1
+from mirrhelp import Mirror, touch, touchdt
 
 def main(**kwargs):
 	"Main function of this script"
 	if 'debug' in kwargs:
-		global dbglvl
-		dbglvl = kwargs.get('debug')
+		from mirrhelp import set_dbglvl
+		set_dbglvl(kwargs.get('debug'))
+	from fnmatch import fnmatch
+	from urlparse import urlparse
+	from mirrhelp import dbglvl
 	mirror = Mirror(kwargs.get('directory'), baseurl = 'http://lcamtuf.coredump.cx/afl/')
 	def match_tgz(url):
 		'Function to match the desired downloads'
-		dbglvl = globals().get('dbglvl', 0)
 		if fnmatch(urlparse(url).path, '*.tgz'):
 			basename = os.path.basename(urlparse(url).path)
 			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[0123]*.tgz', 'afl-latest.tgz']:
 				if fnmatch(basename, p):
-					if dbglvl > 0:
+					if dbglvl > 1:
 						print >> sys.stderr, "Skipping %s" % basename
 					return False
 			return True
 		return False
+	if kwargs.get('noignore', False):
+		match_tgz = ('*.tgz',)
 	mirror.process({
 		'http://lcamtuf.coredump.cx/afl/' : ('*.txt',),
 		'http://lcamtuf.coredump.cx/afl/releases/' : match_tgz,
-		})
+		}, redownload=kwargs.get('redownload', False))
 	return 0
 
 def parse_args():
@@ -194,6 +55,10 @@ def parse_args():
 						help='turn on debugging (more extensive logging) and increase detail')
 	parser.add_argument('--directory', '-D', '--dir', action='store', default=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'releases'),
 						help='directory into which to mirror the files', metavar='DIR')
+	parser.add_argument('--noignore', '-I', '--no-ignore',  action='store_true',
+						help='do not ignore some pre-existing downloads, also check them against remote timestamp')
+	parser.add_argument('--redownload', '-r',  action='store_true',
+						help='force a re-download, even if the local file exists and is up-to-date')
 	return parser.parse_args()
 
 if __name__ == "__main__":
