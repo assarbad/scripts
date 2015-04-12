@@ -26,7 +26,7 @@ def main(**kwargs):
 	from urlparse import urlparse
 	from mirrhelp import dbglvl, lock_script
 	lock_script('AFL-mirror')
-	mirror = Mirror(kwargs.get('directory'), baseurl = 'http://lcamtuf.coredump.cx/afl/')
+	mirror = Mirror(kwargs.get('directory'), baseurl='http://lcamtuf.coredump.cx/afl/')
 	def afl_pages(downloads_from_page):
 		for dlpage in downloads_from_page('http://lcamtuf.coredump.cx/afl/', criteria=('*/', '*.htm', '*.html',)):
 			for download in downloads_from_page(dlpage, criteria=('*.tgz', '*.txt',)):
@@ -41,8 +41,8 @@ def main(**kwargs):
 				if not skipit:
 					yield download, False
 	mirror.process(
-			afl_pages,
-			redownload=kwargs.get('redownload', False))
+		afl_pages,
+		redownload=kwargs.get('redownload', False))
 	return 0
 
 def parse_args():
