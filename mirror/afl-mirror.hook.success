@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-RELDIR="/data/oliver/afl-releases/releases"
-HRDLNK="$RELDIR/.hardlinked"
-RELALL="${RELDIR}-all.tgz"
+AFLDIR="/data/oliver/afl-releases"
+RELDIR="$AFLDIR/releases"
+UNPDIR="$AFLDIR/unpacked"
+HRDLNK="$AFLDIR/.hardlinked"
+RELALL="$AFLDIR/all-afl-releases.tgz"
 if [[ -d "$RELDIR" ]]; then
+	[[ -d "$UNPDIR" ]] || mkdir -p "$UNPDIR"
 	for tgz in "$RELDIR"/*.tgz; do
 		if [[ ! -d "${tgz%.tgz}" ]]; then
 			# Check that the TAR file contains a top-level folder named like the .tgz
 			TOPLEVEL=$(tar -tzf "$tgz"|cut -d '/' -f 1|sort -u)
 			FNAME="${tgz##*/}"
 			if [[ "$TOPLEVEL" == "${FNAME%.tgz}" ]]; then
-				trap "rm -rf \"${tgz%.tgz}\"; exit \$?" INT TERM EXIT
-				tar -C "$RELDIR" -xzf "$tgz" && \
-					touch -r "$tgz" "${tgz%.tgz}" && \
+				trap "rm -rf \"$UNPDIR/${FNAME%.tgz}\"; exit \$?" INT TERM EXIT
+				tar -C "$UNPDIR" -xzf "$tgz" && \
+					touch -r "$tgz" "$UNPDIR/${FNAME%.tgz}" && \
 					{ rm -f "$HRDLINK" || true; } && \
 					trap - INT TERM EXIT
 					echo "Unpacked ${tgz##*/}"
@@ -21,15 +24,18 @@ if [[ -d "$RELDIR" ]]; then
 	if [[ ! -f "$HRDLNK" ]]; then
 		if type hardlink 2>&1 > /dev/null; then
 			trap "rm -f \"$HRDLNK\"; exit \$?" INT TERM EXIT
-			hardlink -m "$RELDIR" && \
+			hardlink -m "$UNPDIR" && \
 				touch "$HRDLNK"
 			trap - INT TERM EXIT
 		fi
 	fi
+	if type hardlink 2>&1 > /dev/null; then
+		hardlink -m "$RELDIR"
+	fi
 	if ([[ -f "$HRDLNK" ]] && [[ "$HRDLNK" -nt "$RELALL" ]]) || [[ ! -f "$RELALL" ]]; then
 		TMPFILE=$(mktemp --tmpdir="${RELDIR%/*}")
 		trap "rm -f \"$TMPFILE\" \"$RELALL\"; exit \$?" INT TERM EXIT
-		tar -C "$RELDIR" -czf "$TMPFILE" --exclude='*.tgz' . && \
+		tar -C "$UNPDIR" -czf "$TMPFILE" . && \
 			touch -r "$RELDIR/afl-latest.tgz" "$TMPFILE" && \
 			mv "$TMPFILE" "$RELALL"
 		trap - INT TERM EXIT
