@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "1.0"
+__version__ = "1.1"
 import os, sys
 
 # Checking for compatibility with Python version
@@ -39,9 +39,9 @@ def get_dbglvl(val):
 
 class Mirror(object):
 	"A class which takes care of mirroring linked files from a website (HTML)"
-	def __init__(self, basepath, baseurl=''):
+	def __init__(self, basepath, baseurl='', nodownload=False):
 		dbglvl = globals().get('dbglvl', -1)
-		typechecks = { 'basepath' : basestring, 'baseurl' : basestring }
+		typechecks = { 'basepath' : basestring, 'baseurl' : basestring, 'nodownload' : bool }
 		for l, t in typechecks.iteritems():
 			if not isinstance(locals()[l], t):
 				raise TypeError('%s must be a %r value' % t)
@@ -50,7 +50,7 @@ class Mirror(object):
 			os.makedirs(basepath)
 		if not os.path.isdir(basepath):
 			raise RuntimeError('basepath must be a directory, but evidently is not')
-		self.__basepath, self.__baseurl = basepath, baseurl
+		self.__basepath, self.__baseurl, self.__nodownload = basepath, baseurl, nodownload
 		# Prepare the browser instance from mechanize
 		br = mechanize.Browser()
 		br.set_handle_robots(False)
@@ -145,6 +145,8 @@ class Mirror(object):
 				redownload = redownload or (remotedt > localdt)
 			else:
 				redownload = True
+			if self.__nodownload:
+				redownload = False
 			if redownload:
 				if not os.path.isdir(os.path.dirname(localpath)):
 					os.makedirs(os.path.dirname(localpath))
