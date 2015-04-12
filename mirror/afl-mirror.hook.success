@@ -15,9 +15,9 @@ if [[ -d "$RELDIR" ]]; then
 				trap "rm -rf \"$UNPDIR/${FNAME%.tgz}\"; exit \$?" INT TERM EXIT
 				tar -C "$UNPDIR" -xzf "$tgz" && \
 					touch -r "$tgz" "$UNPDIR/${FNAME%.tgz}" && \
-					{ rm -f "$HRDLINK" || true; } && \
-					trap - INT TERM EXIT
-					echo "Unpacked ${tgz##*/}"
+					rm -f "$HRDLINK"
+				trap - INT TERM EXIT
+				echo "Unpacked ${tgz##*/}"
 			fi
 		fi
 	done
@@ -28,9 +28,6 @@ if [[ -d "$RELDIR" ]]; then
 				touch "$HRDLNK"
 			trap - INT TERM EXIT
 		fi
-	fi
-	if type hardlink 2>&1 > /dev/null; then
-		hardlink -m "$RELDIR"
 	fi
 	if ([[ -f "$HRDLNK" ]] && [[ "$HRDLNK" -nt "$RELALL" ]]) || [[ ! -f "$RELALL" ]]; then
 		TMPFILE=$(mktemp --tmpdir="${RELDIR%/*}")

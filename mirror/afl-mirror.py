@@ -32,7 +32,7 @@ def main(**kwargs):
 			for download in downloads_from_page(dlpage, criteria=('*.tgz', '*.txt',)):
 				basename = os.path.basename(urlparse(download).path)
 				skipit = False
-				for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[01234]*.tgz']:
+				for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz']: # 'afl-1.6[0123]*.tgz']:
 					skipit = skipit or fnmatch(basename, p)
 					if skipit:
 						break

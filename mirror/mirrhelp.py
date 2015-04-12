@@ -27,12 +27,12 @@ def lock_script(token):
 	if platform.system() in ["Linux"]:
 		if token and isinstance(token, basestring):
 			token = os.path.realpath(__file__) + "@@" + token
-		token = token.replace(os.path.pathsep, "_")
+		token = token.replace(os.path.sep, "_")
 		global lock_socket
 		from socket import socket, AF_UNIX, SOCK_DGRAM
 		lock_socket = socket(AF_UNIX, SOCK_DGRAM) # pylint: disable=no-member
 		try:
-			if dbglvl > 1:
+			if dbglvl > 0:
 				print >> sys.stderr, "Creating lock: %s" % token
 			lock_socket.bind('\0' + token)
 		except socket.error:
