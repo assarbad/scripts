@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "2.0b"
+__version__ = "2.0c"
 import os, sys, time
 
 # Checking for compatibility with Python version
@@ -26,23 +26,22 @@ def main(**kwargs):
 	from urlparse import urlparse
 	from mirrhelp import dbglvl
 	mirror = Mirror(kwargs.get('directory'), baseurl = 'http://lcamtuf.coredump.cx/afl/')
-	def match_tgz(url):
-		'Function to match the desired downloads'
-		if fnmatch(urlparse(url).path, '*.tgz'):
-			basename = os.path.basename(urlparse(url).path)
-			for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[0123]*.tgz']:
-				if fnmatch(basename, p):
-					if dbglvl > 1:
-						print >> sys.stderr, "Skipping %s" % basename
-					return False
-			return True
-		return False
-	if kwargs.get('noignore', False):
-		match_tgz = ('*.tgz',)
-	mirror.process({
-		'http://lcamtuf.coredump.cx/afl/' : ('*.txt',),
-		'http://lcamtuf.coredump.cx/afl/releases/' : match_tgz,
-		}, redownload=kwargs.get('redownload', False))
+	def afl_pages(downloads_from_page):
+		for dlpage in downloads_from_page('http://lcamtuf.coredump.cx/afl/', criteria=('*/', '*.htm', '*.html',)):
+			for download in downloads_from_page(dlpage, criteria=('*.tgz', '*.txt',)):
+				basename = os.path.basename(urlparse(download).path)
+				skipit = False
+				for p in ['afl-0.*.tgz', 'afl-1.[012345]*.tgz', 'afl-1.6[01234]*.tgz']:
+					skipit = skipit or fnmatch(basename, p)
+					if skipit:
+						break
+				if (dbglvl > 1) and skipit:
+					print >> sys.stderr, "Skipping %s" % basename
+				if not skipit:
+					yield download, False
+	mirror.process(
+			afl_pages,
+			redownload=kwargs.get('redownload', False))
 	return 0
 
 def parse_args():

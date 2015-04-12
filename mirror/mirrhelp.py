@@ -3,18 +3,17 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "1.1"
+__version__ = "1.2"
 import os, sys
 
 # Checking for compatibility with Python version
 if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
     sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
 
-import time
-import mechanize
+import functools, mechanize, time
 from datetime import datetime
 from HTMLParser import HTMLParser
-from urlparse import urljoin, urlparse
+from urlparse import urljoin, urlparse, urlunparse
 from fnmatch import fnmatch
 from stat import S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH
 
@@ -69,30 +68,36 @@ class Mirror(object):
 			br.set_debug_redirects(True)
 			br.set_debug_responses(True)
 		self.__br = br
-	def process(self, urldict, redownload=False):
-		"Processes a mirroring request based on the passed urldict"
+	def process(self, urlitems, redownload=False):
+		"""\
+		Processes a mirroring request based on the passed urlitems
+		"""
 		dbglvl = globals().get('dbglvl', 0)
 		# Sanity checks
-		if not isinstance(urldict, dict):
-			raise TypeError('urldict parameter must be a dict')
-		if len(urldict):
+		if not isinstance(urlitems, dict) and not callable(urlitems):
+			raise TypeError('urlitems parameter must be a dict')
+		downloadables = {} # dict to keep unique URLs
+		if callable(urlitems):
+			for dl, downloaded in urlitems(functools.partial(Mirror.downloads_from_page, self)):
+				if not downloaded:
+					downloadables[dl] = 0
+		elif len(urlitems):
 			# Further sanity checks
-			for url, criteria in urldict.iteritems():
+			for url, criteria in urlitems.iteritems():
 				if not isinstance(url, basestring):
-					raise TypeError('the keys in urldict must be strings (the URL)')
+					raise TypeError('the keys in urlitems must be strings (the URL)')
 				if not callable(criteria) and not isinstance(criteria, (list, tuple)):
-					raise TypeError('the urldict values must be callable or lists or tuples; but for %s it is a %r' % (url, type(criteria)))
+					raise TypeError('the urlitems values must be callable or lists or tuples; but for %s it is a %r' % (url, type(criteria)))
 				if not callable(criteria):
 					for i in criteria:
 						if not isinstance(i, basestring):
-							raise TypeError('urldict list values must contain string values only')
-			downloadables = {} # dict to keep unique URLs
+							raise TypeError('urlitems list values must contain string values only')
 			# Parse the given URLs to find downloads matching our criteria
-			for url, criteria in urldict.iteritems():
+			for url, criteria in urlitems.iteritems():
 				for dl in self.downloads_from_page(url, criteria):
 					downloadables[dl] = 0
-			for dl in sorted(downloadables.keys()):
-				self.download(dl, redownload=redownload)
+		for dl in sorted(downloadables.keys()):
+			self.download(dl, redownload=redownload)
 	def open(self, *args, **kwargs):
 		"Pass-through function for mechanize.Browser.open()"
 		return self.__br.open(*args, **kwargs)
@@ -120,6 +125,9 @@ class Mirror(object):
 		for lnk in self.__br.links():
 			fullurl = urljoin(lnk.base_url, lnk.url)
 			if urlparse(fullurl).hostname == hostname:
+				# "Normalize" the URL by stripping local anchor references or query parts
+				upo = urlparse(fullurl)
+				fullurl = urlunparse((upo.scheme,upo.netloc,upo.path,'','','',))
 				if criteria(fullurl):
 					retval[fullurl] = 0
 		return retval.keys()
@@ -134,9 +142,9 @@ class Mirror(object):
 		try:
 			response = self.__br.open(url)
 			# Get Last-Modified header value already parsed
-			lm = response.info().getdate("Last-Modified")[0:6]
+			lm = response.info().getdate("Last-Modified")
 			# Convert to datetime object
-			remotedt = datetime(*lm)
+			remotedt = datetime(*lm[0:6]) if lm is not None else datetime.utcnow()
 			if dbglvl > 0:
 				print >> sys.stderr, "%s [%s]\n\t%s" % (url, remotedt, localpath)
 			# Decide whether to download or not
