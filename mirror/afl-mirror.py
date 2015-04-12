@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "2.0c"
+__version__ = "2.1"
 import os, sys, time
 
 # Checking for compatibility with Python version
@@ -24,7 +24,8 @@ def main(**kwargs):
 		set_dbglvl(kwargs.get('debug'))
 	from fnmatch import fnmatch
 	from urlparse import urlparse
-	from mirrhelp import dbglvl
+	from mirrhelp import dbglvl, lock_script
+	lock_script('AFL-mirror')
 	mirror = Mirror(kwargs.get('directory'), baseurl = 'http://lcamtuf.coredump.cx/afl/')
 	def afl_pages(downloads_from_page):
 		for dlpage in downloads_from_page('http://lcamtuf.coredump.cx/afl/', criteria=('*/', '*.htm', '*.html',)):

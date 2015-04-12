@@ -3,14 +3,14 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "1.2"
+__version__ = "1.3"
 import os, sys
 
 # Checking for compatibility with Python version
 if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
     sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
 
-import functools, mechanize, time
+import functools, mechanize, platform, time
 from datetime import datetime
 from HTMLParser import HTMLParser
 from urlparse import urljoin, urlparse, urlunparse
@@ -18,6 +18,25 @@ from fnmatch import fnmatch
 from stat import S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH
 
 dbglvl = 0
+
+def lock_script(token):
+	"""
+	Based on <http://stackoverflow.com/a/7758075>.
+	Only works on Linux for now.
+	"""
+	if platform.system() in ["Linux"]:
+		if token and isinstance(token, basestring):
+			token = os.path.realpath(__file__) + "@@" + token
+		token = token.replace(os.path.pathsep, "_")
+		global lock_socket
+		from socket import socket, AF_UNIX, SOCK_DGRAM
+		lock_socket = socket(AF_UNIX, SOCK_DGRAM) # pylint: disable=no-member
+		try:
+			if dbglvl > 1:
+				print >> sys.stderr, "Creating lock: %s" % token
+			lock_socket.bind('\0' + token)
+		except socket.error:
+			sys.exit("Another script instance is already running.")
 
 def touch(fname, times=None):
 	"Touch a file to set its mtime, using Unix epoch for the time"
@@ -75,7 +94,7 @@ class Mirror(object):
 		dbglvl = globals().get('dbglvl', 0)
 		# Sanity checks
 		if not isinstance(urlitems, dict) and not callable(urlitems):
-			raise TypeError('urlitems parameter must be a dict')
+			raise TypeError('urlitems parameter must be a dict or callable')
 		downloadables = {} # dict to keep unique URLs
 		if callable(urlitems):
 			for dl, downloaded in urlitems(functools.partial(Mirror.downloads_from_page, self)):
