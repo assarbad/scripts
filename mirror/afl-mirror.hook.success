@@ -7,10 +7,10 @@ RELALL="$AFLDIR/all-afl-releases.tgz"
 if [[ -d "$RELDIR" ]]; then
 	[[ -d "$UNPDIR" ]] || mkdir -p "$UNPDIR"
 	for tgz in "$RELDIR"/*.tgz; do
-		if [[ ! -d "${tgz%.tgz}" ]]; then
+		FNAME="${tgz##*/}"
+		if [[ ! -d "$UNPDIR/${FNAME%.tgz}" ]]; then
 			# Check that the TAR file contains a top-level folder named like the .tgz
 			TOPLEVEL=$(tar -tzf "$tgz"|cut -d '/' -f 1|sort -u)
-			FNAME="${tgz##*/}"
 			if [[ "$TOPLEVEL" == "${FNAME%.tgz}" ]]; then
 				trap "rm -rf \"$UNPDIR/${FNAME%.tgz}\"; exit \$?" INT TERM EXIT
 				tar -C "$UNPDIR" -xzf "$tgz" && \
