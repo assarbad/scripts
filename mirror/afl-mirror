@@ -10,10 +10,10 @@ else
 fi
 if $TIMEOUTCMD $(which python2.7) $0.py "$@"; then
 	echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Finished." >> "/dev/stderr"
-	[[ -r "${0}.hook.success" ]] && source "${0}.hook.success"
+	[[ -r "${0}.hook.success" ]] && { echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Running hook script." >> "/dev/stderr"; source "${0}.hook.success"; }
 	exit 0
 else
 	echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Finished with error status." >> "/dev/stderr"
-	[[ -r "${0}.hook.failure" ]] && source "${0}.hook.failure"
+	[[ -r "${0}.hook.failure" ]] && { echo "$(date +"%Y-%m-%d %H:%M:%S") ${0##*/}[$$]: Running hook script." >> "/dev/stderr" source "${0}.hook.failure"; }
 	exit 1
 fi
