@@ -6,6 +6,7 @@ TGTDIR="$1"
 AR="$TGTDIR/.archive"
 EXT=".zip"
 python2.7 "$CURRABSPATH/sysinternals-mirror" $XDBG -D "$AR"
+rm -f "$AR$EXT"
 make -f "$CURRABSPATH/GNUmakefile.sysint" -C "$AR" TARGET="$AR$EXT" && \
 DATENM=$(date -r "$AR$EXT" +"$TGTDIR/%Y-%m-%dT%H-%M-%S_live.sysinternals.com$EXT") && \
 	if [[ ! -e "$DATENM" ]] || [[ ! "$AR$EXT" -ef "$DATENM" ]]; then
