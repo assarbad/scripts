@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+[[ -n "$DEBUG" ]] && set -x
 TEMPDIR="$CURRABSPATH/tmp"
 SRCPDIR="$CURRABSPATH/srcpkgs"
 
-MUSLURL="http://www.musl-libc.org/releases/musl-0.9.10.tar.gz"
-ZLIBURL="http://zlib.net/zlib-1.2.7.tar.gz"
-DRPBURL="https://matt.ucc.asn.au/dropbear/releases/dropbear-2013.58.tar.bz2"
+MUSLURL="http://www.musl-libc.org/releases/musl-1.1.8.tar.gz"
+ZLIBURL="http://zlib.net/zlib-1.2.8.tar.gz"
+DRPBURL="https://matt.ucc.asn.au/dropbear/dropbear-2015.67.tar.bz2"
 
-MUSLPKG="$SRCPDIR/musl-0.9.10.tar.gz"
-ZLIBPKG="$SRCPDIR/zlib-1.2.7.tar.gz"
-DRPBPKG="$SRCPDIR/dropbear-2013.57.tar.bz2"
+MUSLPKG="$SRCPDIR/${MUSLURL##*/}"
+ZLIBPKG="$SRCPDIR/${ZLIBURL##*/}"
+DRPBPKG="$SRCPDIR/${DRPBURL##*/}"
 
 [[ -d "$TEMPDIR" ]] || mkdir "$TEMPDIR" || { echo "FATAL: Could not create $TEMPDIR."; exit 1; }
 [[ -d "$SRCPDIR" ]] || mkdir "$SRCPDIR" || { echo "FATAL: Could not create $SRCPDIR."; exit 1; }
@@ -49,6 +50,7 @@ echo "Configuring and building zlib"
 echo "Configuring and building dropbear"
 (
 	export PATH="$TEMPDIR/musl/tempinstall/bin:$PATH"
+	export CC="$CC -nostdinc -isystem $TEMPDIR/musl/tempinstall/include -isystem /usr/include/$(gcc -dumpmachine) -isystem /usr/include"
 	cd "$TEMPDIR/dropbear" && \
 		./configure "--with-zlib=$TEMPDIR/zlib/tempinstall" --disable-syslog --disable-lastlog --without-pam --enable-bundled-libtom && \
 		make -j8 PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" MULTI=1 STATIC=1 SCPPROGRESS=1 strip && \
