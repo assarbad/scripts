@@ -18,7 +18,7 @@ if [[ -z "$(type git 2> /dev/null)" ]]; then
 	fi
 fi
 # Same for build-essential
-if ! dpkg -l|grep ^ii|grep -q build-essential; then
+if ! dpkg -l|awk '$1 ~ /^ii/ && $2 ~ /build-essential/ {print}'|grep -q build-essential; then
 	if [[ $UID -eq 0 ]]; then
 		apt-get install build-essential || { echo "ERROR: Need 'build-essential' package to proceed. But something failed when attempting to install it with apt-get. Consult the output above."; exit 1; }
 	else
