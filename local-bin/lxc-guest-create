@@ -14,30 +14,30 @@ echo "$MIRROR - $SECURITY_MIRROR"
 cat /usr/share/lxc/templates/lxc-ubuntu \
 	| sed '/^finalize_user/,/^\}/d;/finalize_user /,/finalize_user /d;/^echo ""/,$d' \
 	| sed '/^user=/s/ubuntu/oliver/;/^password=/s/ubuntu/password/' \
-	| sed '/debootstrap/ { s/ --verbose/ --variant=minbase --exclude=crda,dhcp3-common,dhcp3-client,laptop-detect,tasksel,tasksel-data/ }' \
+	| sed '/debootstrap/ { s/ --verbose/ --variant=minbase --exclude=crda,laptop-detect,tasksel,tasksel-data/ }' \
 	> "$TMPLXCTPL"
 cat <<'EOF' >> "$TMPLXCTPL"
 cat <<'EODATA' >> $rootfs/root/in-guest-job
 #!/usr/bin/env bash
-FAKE_SCVS="/root/fake-service"
+FAKE_SERVICES="/root/fake-service"
 ORIG_PATH="$PATH"
-FAKE_PATH="$FAKE_SCVS:$ORIG_PATH"
-mkdir -p "$FAKE_PATH"
-for i in initctl invoke-rc.d restart start stop start-stop-daemon service; do (echo '#!/bin/sh';echo echo $i '"$@"';echo "/bin/true") > "$FAKE_SCVS/$i"; chmod a+x "$FAKE_SCVS/$i"; done
+FAKE_PATH="$FAKE_SERVICES:$ORIG_PATH"
+mkdir -p "$FAKE_SERVICES"
+for i in initctl invoke-rc.d restart start stop start-stop-daemon service; do (echo '#!/bin/sh';echo echo $i '"$@"';echo "/bin/true") > "$FAKE_SERVICES/$i"; chmod a+x "$FAKE_SERVICES/$i"; done
 echo "en_US.UTF-8 UTF-8"|tee /var/lib/locales/supported.d/local
 rm -f /var/lib/locales/supported.d/en
 echo 'LANG="en_US.UTF-8"'|tee "/etc/default/locale"
-apt-get -y update
+export DEBIAN_FRONTEND=noninteractive
+apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install libui-dialog-perl dialog
 apt-get -y update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --purge autoremove language-pack-en-base language-pack-en console-setup debconf-i18n dmsetup eject kbd keyboard-configuration lockfile-progs ubuntu-minimal
-PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl apt-file apt-rdepends bash-static bzr colordiff cron-apt debootstrap debsums dnsutils dpkg-dev git git-svn haveged heirloom-mailx htop kpartx lsof molly-guard mlocate md5deep nmap p7zip-full p7zip-rar pax psmisc pv python3-apt python-apt-common python-mako python-mechanize reprepro sharutils tcpdump tcplay tree tshark unattended-upgrades unbound-host vim-nox whois xz-utils zip zsh-doc zsh-static ssh vim-nox mc unzip bash-completion sudo tmux mercurial make manpages man-db monit mtr-tiny netsniff-ng sipcalc wget
-# vnstat
+PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion bzr colordiff cron-apt debsums dnsutils file git git-svn heirloom-mailx htop iputils-ping isc-dhcp-client lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize sharutils ssh sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
 dpkg-reconfigure -f noninteractive locales
 adduser oliver sudo
-sed -i '/ssh_host_ecdsa_key/d;/PasswordAuthentication/ {s/#//;s/ yes/ no/}' "/etc/ssh/sshd_config"
+sed -i '/ssh_host_ecdsa_key/d;/^#PasswordAuthentication/ {s/#//;s/ yes/ no/}' "/etc/ssh/sshd_config"
 rm -f /etc/ssh/ssh_host_*
 ssh-keygen -t rsa -b 4096 -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_rsa_key
 ssh-keygen -t dsa         -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_dsa_key
@@ -63,13 +63,13 @@ apt-file update
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install etckeeper
 mv "/etc/apt/apt.conf.d/70proxy" "/etc/apt/apt.conf.d/00proxy"
 echo 'Acquire::ForceIPv4 { true; };' | tee "/etc/apt/apt.conf.d/00inet-v4"
-echo "Acquire::http::Proxy \"http://yggdrasil.lxc:3142\" ;"|tee "/etc/apt/apt.conf.d/00proxy"
+echo "Acquire::http::Proxy \"http://yggdrasil.lan:3142\" ;"|tee "/etc/apt/apt.conf.d/00proxy"
+unset DEBIAN_FRONTEND
 EODATA
 chmod +x "$rootfs/root/in-guest-job"
 chroot $rootfs "/root/in-guest-job"
 echo -n "" > $rootfs/etc/legal
 EOF
-#EOF
-#vim "$TMPLXCTPL"
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
+echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
