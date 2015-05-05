@@ -10,6 +10,5 @@ basic: $(addprefix $(TARGET)/,$(BASICFILES))
 $(TARGET)/%: %
 	test -d $(dir $@) || mkdir -p $(dir $@)
 	cp -a $< $@
-	-test $(shell id -u) -eq 0 && chown root:root $@
-	-test $(shell id -u) -eq 0 && chmod u=rwx,go=rx $@
+	-test $(shell id -u) -eq 0 && chown root:root $@ && chmod u=rwx,go=rx $@
 
