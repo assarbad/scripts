@@ -1,4 +1,4 @@
-BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids
+BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids lxc-guest-create
 ALLFILES ?= $(BASICFILES) vsmount vsumount
 TARGET ?= /usr/local/bin
 
