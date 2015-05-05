@@ -1,5 +1,5 @@
 BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids lxc-guest-create
-ALLFILES ?= $(BASICFILES) vsmount vsumount
+ALLFILES ?= $(BASICFILES)
 TARGET ?= /usr/local/bin
 
 .PHONY: all basic
