@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Default prefix is for Xensource
+PREFIX=${1:-"00:16:3e"}
+echo -n $PREFIX; dd bs=1 count=3 if=/dev/random 2>/dev/null |hexdump -v -e '/1 ":%02x"'

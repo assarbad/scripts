@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # vim: set autoindent smartindent tabstop=4 shiftwidth=4 noexpandtab filetype=sh:
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+[[ -n "$DEBUG" ]] && set -x
 BACKING=dir
 LXCBASE="$(lxc-config lxc.lxcpath)"
 LXCNAME="${1}"
@@ -94,4 +95,6 @@ echo -n "" > $rootfs/etc/legal
 EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
+{ set +x; } 2>&1 > /dev/null
 echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
+echo ""
