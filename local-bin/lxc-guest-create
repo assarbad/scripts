@@ -61,9 +61,6 @@ apt-file update
 rm -f /etc/rsyslog.d/*.conf
 cat <<'EODATA2' > /etc/rsyslog.conf
 $ModLoad imuxsock # provides support for local system logging
-$ModLoad imklog   # provides kernel logging support
-# Enable non-kernel facility klog messages
-$KLogPermitNonKernelFacility on
 $ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
 # Filter duplicated messages
 $RepeatedMsgReduction on
