@@ -57,7 +57,6 @@ PATH="$FAKE_PATH" apt-get -y --purge autoremove
 chown -R "oliver:" "/home/oliver"
 apt-get -y autoclean
 apt-get -y clean
-chmod g-w /var/log
 apt-file update
 rm -f /etc/rsyslog.d/*.conf
 cat <<'EODATA2' > /etc/rsyslog.conf
