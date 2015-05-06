@@ -57,9 +57,7 @@ PATH="$FAKE_PATH" apt-get -y --purge autoremove
 chown -R "oliver:" "/home/oliver"
 apt-get -y autoclean
 apt-get -y clean
-rm -f /var/log/bootstrap.log
 chmod g-w /var/log
-updatedb
 apt-file update
 rm -f /etc/rsyslog.d/*.conf
 cat <<'EODATA2' > /etc/rsyslog.conf
@@ -88,10 +86,13 @@ mv "/etc/apt/apt.conf.d/70proxy" "/etc/apt/apt.conf.d/00proxy"
 echo 'Acquire::ForceIPv4 { true; };' | tee "/etc/apt/apt.conf.d/00inet-v4"
 echo "Acquire::http::Proxy \"http://yggdrasil.lan:3142\" ;"|tee "/etc/apt/apt.conf.d/00proxy"
 unset DEBIAN_FRONTEND
+echo -n "" > /etc/legal
+rm -rf "$FAKE_SERVICES"
+rm -f "/root/in-guest-job" /var/log/bootstrap.log
+updatedb
 EODATA1
 chmod +x "$rootfs/root/in-guest-job"
 chroot $rootfs "/root/in-guest-job"
-echo -n "" > $rootfs/etc/legal
 EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
