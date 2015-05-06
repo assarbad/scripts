@@ -17,7 +17,7 @@ cat /usr/share/lxc/templates/lxc-ubuntu \
 	| sed '/debootstrap/ { s/ --verbose/ --variant=minbase --exclude=crda,laptop-detect,tasksel,tasksel-data/ }' \
 	> "$TMPLXCTPL"
 cat <<'EOF' >> "$TMPLXCTPL"
-cat <<'EODATA' >> $rootfs/root/in-guest-job
+cat <<'EODATA1' >> $rootfs/root/in-guest-job
 #!/usr/bin/env bash
 FAKE_SERVICES="/root/fake-service"
 ORIG_PATH="$PATH"
@@ -34,7 +34,7 @@ PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Optio
 apt-get -y update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --purge autoremove language-pack-en-base language-pack-en console-setup debconf-i18n dmsetup eject kbd keyboard-configuration lockfile-progs ubuntu-minimal
-PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion bzr colordiff cron-apt debsums dnsutils file git git-svn heirloom-mailx htop iputils-ping isc-dhcp-client lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
+PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion bzr colordiff cron-apt debsums dnsutils file git git-svn heirloom-mailx htop iputils-ping isc-dhcp-client lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
 dpkg-reconfigure -f noninteractive locales
 apt-add-repository -y ppa:nginx/stable
 adduser oliver sudo
@@ -43,9 +43,6 @@ rm -f /etc/ssh/ssh_host_*
 ssh-keygen -t rsa -b 4096 -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_rsa_key
 ssh-keygen -t dsa         -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_dsa_key
 ssh-keygen -t ed25519     -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_ed25519_key
-for i in /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_key; do
-	touch $i $i.pub && chmod ugo=,ug+r $i $i.pub && chattr +i $i $i.pub
-done
 chmod -R o= /root
 cp /usr/share/doc/tmux/examples/bash_completion_tmux.sh /etc/bash_completion.d/
 sed -i '/^%sudo/s/ALL$/NOPASSWD:ALL/' "/etc/sudoers"
@@ -59,14 +56,38 @@ PATH="$FAKE_PATH" apt-get -y --purge autoremove
 chown -R "oliver:" "/home/oliver"
 apt-get -y autoclean
 apt-get -y clean
+rm -f /var/log/bootstrap.log
+chmod g-w /var/log
 updatedb
 apt-file update
+rm -f /etc/rsyslog.d/*.conf
+cat <<'EODATA2' > /etc/rsyslog.conf
+$ModLoad imuxsock # provides support for local system logging
+$ModLoad imklog   # provides kernel logging support
+# Enable non-kernel facility klog messages
+$KLogPermitNonKernelFacility on
+$ActionFileDefaultTemplate RSYSLOG_TraditionalFileFormat
+# Filter duplicated messages
+$RepeatedMsgReduction on
+# Set the default permissions for all log files.
+$FileOwner syslog
+$FileGroup adm
+$FileCreateMode 0640
+$DirCreateMode 0755
+$Umask 0022
+$PrivDropToUser syslog
+$PrivDropToGroup syslog
+# Where to place spool and state files
+$WorkDirectory /var/spool/rsyslog
+$ModLoad omrelp
+*.* :omrelp:yggdrasil.lan:55555
+EODATA2
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install etckeeper
 mv "/etc/apt/apt.conf.d/70proxy" "/etc/apt/apt.conf.d/00proxy"
 echo 'Acquire::ForceIPv4 { true; };' | tee "/etc/apt/apt.conf.d/00inet-v4"
 echo "Acquire::http::Proxy \"http://yggdrasil.lan:3142\" ;"|tee "/etc/apt/apt.conf.d/00proxy"
 unset DEBIAN_FRONTEND
-EODATA
+EODATA1
 chmod +x "$rootfs/root/in-guest-job"
 chroot $rootfs "/root/in-guest-job"
 echo -n "" > $rootfs/etc/legal
