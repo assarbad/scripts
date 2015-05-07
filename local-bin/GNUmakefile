@@ -1,4 +1,4 @@
-BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids lxc-guest-create generate_mac
+BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids lxc-guest-create generate_mac sync-etc-hosts-and-lxc-guest-configs
 ALLFILES ?= $(BASICFILES)
 TARGET ?= /usr/local/bin
 

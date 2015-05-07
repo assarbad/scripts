@@ -92,6 +92,23 @@ chroot $rootfs "/root/in-guest-job"
 EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
+read -d '' awkScript << 'AWKSCRIPT'
+NR > 2 {
+	print
+	if ($1 ~ /^lxc\.include/ && $3 ~ /\.common\.conf$/) {
+		gsub(/\.common\.conf$/, ".userns.conf", $3)
+		print
+	}
+}
+AWKSCRIPT
 { set +x; } 2>&1 > /dev/null
 echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
 echo ""
+[[ -n "$DEBUG" ]] && set -x
+mv "$LXCBASE/$LXCNAME/config" "$LXCBASE/$LXCNAME/config.orig" && \
+	cat "$LXCBASE/$LXCNAME/config.orig" | awk "$awkScript" > "$LXCBASE/$LXCNAME/config" && \
+	rm -f "$LXCBASE/$LXCNAME/config.orig"
+if [[ -e "/etc/lxc/guests/lxc.${LXCNAME}.conf" ]]; then
+	echo -e "\n# Guest-specific configuration\nlxc.include = /etc/lxc/guests/lxc.${LXCNAME}.conf"|tee -a "$LXCBASE/$LXCNAME/config"
+fi
+{ set +x; } 2>&1 > /dev/null
