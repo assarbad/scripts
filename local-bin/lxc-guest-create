@@ -111,10 +111,15 @@ AWKSCRIPT
 echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
 echo ""
 [[ -n "$DEBUG" ]] && set -x
-mv "$LXCBASE/$LXCNAME/config" "$LXCBASE/$LXCNAME/config.orig" && \
-	cat "$LXCBASE/$LXCNAME/config.orig" | awk "$awkScript" > "$LXCBASE/$LXCNAME/config" && \
-	rm -f "$LXCBASE/$LXCNAME/config.orig"
-if [[ -e "/etc/lxc/guests/lxc.${LXCNAME}.conf" ]]; then
-	echo -e "\n# Guest-specific configuration\nlxc.include = /etc/lxc/guests/lxc.${LXCNAME}.conf"|tee -a "$LXCBASE/$LXCNAME/config"
+GUESTCONF="$LXCBASE/$LXCNAME/config"
+mv "${GUESTCONF}" "${GUESTCONF}.orig" && \
+	cat "${GUESTCONF}.orig" | awk "$awkScript" > "${GUESTCONF}" && \
+	rm -f "${GUESTCONF}.orig"
+GUESTSPEC="/etc/lxc/guests/lxc.${LXCNAME}.conf"
+if [[ -e "${GUESTSPEC}" ]]; then
+	echo -e "\n# Guest-specific configuration\nlxc.include = $GUESTSPEC"|tee -a "${GUESTCONF}"
+	awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^[ug]$/ {printf("uidmapshift -%s '$LXCBASE/$LXCNAME/rootfs' %s %s %s\n", $3, $4, $5, $6)}' "$GUESTSPEC"|while read cmd; do
+		( set -x; $cmd )
+	done
 fi
 { set +x; } 2>&1 > /dev/null
