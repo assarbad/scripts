@@ -84,7 +84,13 @@ echo "Acquire::http::Proxy \"http://yggdrasil.lan:3142\" ;"|tee "/etc/apt/apt.co
 unset DEBIAN_FRONTEND
 echo -n "" > /etc/legal
 rm -rf "$FAKE_SERVICES"
-rm -f "/root/in-guest-job" /var/log/bootstrap.log
+rm -f "/root/in-guest-job" /var/log/bootstrap.log /var/log/dmesg.0 /var/log/dmesg.1.gz
+chown syslog:root /var/log
+chmod u=rwX,g=rX /var/log
+[[ -d "/dev/net" ]] || mkdir /dev/net
+mknod /dev/net/tun c 10 200
+chown root:root /dev/net /dev/net/tun
+chmod 666 /dev/net/tun
 updatedb
 EODATA1
 chmod +x "$rootfs/root/in-guest-job"
