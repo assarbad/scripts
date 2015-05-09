@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+LXCPATH=$(lxc-config lxc.lxcpath)
+
+function create-group
+{
+	local NAME=$1
+	local GUEST=$3
+	local GUESTCONF="/etc/lxc/guests/lxc.$GUEST.conf"
+	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^g$/ {print $5}' "$GUESTCONF" || echo "0")
+	local ID=$(($2+$BASEID))
+	echo "groupadd -g $ID $NAME"
+}
+
+function create-user
+{
+	local NAME=$1
+	local GUEST=$3
+	local GUESTCONF="/etc/lxc/guests/lxc.$GUEST.conf"
+	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^u$/ {print $5}' "$GUESTCONF" || echo "0")
+	local ID=$(($2+$BASEID))
+	echo "useradd -M -N -o -u $ID -s /usr/sbin/nologin $NAME"
+}
+
+function create-entry
+{
+	local GUEST=$1
+	local DATABASE=$2
+	local FUNCTION=$3
+	local entry; local NAME; local ID
+	for entry in $(awk -F : '{print $1 ":" $3}' "$DATABASE"); do
+		NAME=$GUEST.${entry%:*}
+		if getent ${DATABASE##*/} $NAME; then
+			echo "Entry $NAME (${DATABASE##*/}) already exists"
+		else
+			$FUNCTION $NAME ${entry#*:} $GUEST
+		fi
+	done
+}
+
+for guest in $(lxc-ls -1); do
+	create-entry $guest "$LXCPATH/$guest/rootfs/etc/group"  create-group
+	create-entry $guest "$LXCPATH/$guest/rootfs/etc/passwd" create-user
+done|sort -u|while read cmd; do
+	echo "$cmd"
+	$cmd
+done

@@ -35,7 +35,7 @@ PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Optio
 apt-get -y update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --purge autoremove language-pack-en-base language-pack-en console-setup debconf-i18n dmsetup eject kbd keyboard-configuration lockfile-progs ubuntu-minimal
-PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion bzr colordiff cron-apt debsums dnsutils file git git-svn heirloom-mailx htop iputils-ping isc-dhcp-client less lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
+PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion colordiff cron-apt debsums dnsutils file git heirloom-mailx htop iputils-ping isc-dhcp-client less lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
 dpkg-reconfigure -f noninteractive locales
 apt-add-repository -y ppa:nginx/stable
 adduser oliver sudo
@@ -78,6 +78,7 @@ $ModLoad omrelp
 *.* :omrelp:yggdrasil.lan:55555
 EODATA2
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install etckeeper
+sed -i '/^VCS/s/^/#/;/^#VCS="git"/s/^#//' /etc/etckeeper/etckeeper.conf
 mv "/etc/apt/apt.conf.d/70proxy" "/etc/apt/apt.conf.d/00proxy"
 echo 'Acquire::ForceIPv4 { true; };' | tee "/etc/apt/apt.conf.d/00inet-v4"
 echo "Acquire::http::Proxy \"http://yggdrasil.lan:3142\" ;"|tee "/etc/apt/apt.conf.d/00proxy"
