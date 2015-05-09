@@ -93,6 +93,7 @@ chown root:root /dev/net /dev/net/tun
 chmod 666 /dev/net/tun
 updatedb
 EODATA1
+test -f /etc/ssh/ssh_known_hosts && cp -a /etc/ssh/ssh_known_hosts "$rootfs/etc/ssh/"
 chmod +x "$rootfs/root/in-guest-job"
 chroot $rootfs "/root/in-guest-job"
 EOF
