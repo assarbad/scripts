@@ -38,6 +38,8 @@ PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Optio
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion colordiff cron-apt debsums dnsutils file git heirloom-mailx htop iputils-ping isc-dhcp-client less lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
 dpkg-reconfigure -f noninteractive locales
 apt-add-repository -y ppa:nginx/stable
+apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
+apt-add-repository -y 'deb http://mirror2.hs-esslingen.de/mariadb/repo/10.0/ubuntu trusty main'
 adduser oliver sudo
 sed -i '/ssh_host_ecdsa_key/d;/^#PasswordAuthentication/ {s/#//;s/ yes/ no/}' "/etc/ssh/sshd_config"
 rm -f /etc/ssh/ssh_host_*
