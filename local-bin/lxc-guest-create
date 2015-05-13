@@ -39,7 +39,7 @@ PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Optio
 dpkg-reconfigure -f noninteractive locales
 apt-add-repository -y ppa:nginx/stable
 apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
-apt-add-repository -y 'deb http://mirror2.hs-esslingen.de/mariadb/repo/10.0/ubuntu trusty main'
+echo "deb http://mirror2.hs-esslingen.de/mariadb/repo/10.0/ubuntu trusty main\ndeb-src http://mirror2.hs-esslingen.de/mariadb/repo/10.0/ubuntu trusty main"|/etc/apt/sources.list.d/mariadb.list
 adduser oliver sudo
 sed -i '/ssh_host_ecdsa_key/d;/^#PasswordAuthentication/ {s/#//;s/ yes/ no/}' "/etc/ssh/sshd_config"
 rm -f /etc/ssh/ssh_host_*
