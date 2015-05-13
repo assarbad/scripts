@@ -121,7 +121,7 @@ GUESTCONF="$LXCBASE/$LXCNAME/config"
 mv "${GUESTCONF}" "${GUESTCONF}.orig" && \
 	cat "${GUESTCONF}.orig" | awk "$awkScript" > "${GUESTCONF}" && \
 	rm -f "${GUESTCONF}.orig"
-GUESTSPEC="/etc/lxc/guests/lxc.${LXCNAME}.conf"
+GUESTSPEC="/etc/lxc/guests/${LXCNAME}.conf"
 if [[ -e "${GUESTSPEC}" ]]; then
 	echo -e "\n# Guest-specific configuration\nlxc.include = $GUESTSPEC"|tee -a "${GUESTCONF}"
 	awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^[ug]$/ {printf("uidmapshift -%s '$LXCBASE/$LXCNAME/rootfs' %s %s %s\n", $3, $4, $5, $6)}' "$GUESTSPEC"|while read cmd; do
