@@ -5,7 +5,7 @@ function create-group
 {
 	local NAME=$1
 	local GUEST=$3
-	local GUESTCONF="/etc/lxc/guests/lxc.$GUEST.conf"
+	local GUESTCONF="/etc/lxc/guests/$GUEST.conf"
 	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^g$/ {print $5}' "$GUESTCONF" || echo "0")
 	local ID=$(($2+$BASEID))
 	echo "groupadd -g $ID $NAME"
@@ -15,7 +15,7 @@ function create-user
 {
 	local NAME=$1
 	local GUEST=$3
-	local GUESTCONF="/etc/lxc/guests/lxc.$GUEST.conf"
+	local GUESTCONF="/etc/lxc/guests/$GUEST.conf"
 	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^u$/ {print $5}' "$GUESTCONF" || echo "0")
 	local ID=$(($2+$BASEID))
 	echo "useradd -M -N -u $ID -s /usr/sbin/nologin $NAME"
