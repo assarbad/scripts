@@ -116,6 +116,8 @@ AWKSCRIPT
 { set +x; } 2>&1 > /dev/null
 echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
 echo ""
+echo -e "nameserver 10.0.3.1\ndomain lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/resolv.conf"
+grep '^search' /etc/resolv.conf|tee -a "$LXCBASE/$LXCNAME/rootfs/etc/resolv.conf"
 [[ -n "$DEBUG" ]] && set -x
 GUESTCONF="$LXCBASE/$LXCNAME/config"
 mv "${GUESTCONF}" "${GUESTCONF}.orig" && \
