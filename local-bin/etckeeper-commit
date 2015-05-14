@@ -3,20 +3,33 @@
 ## crontabs
 #/var/spool/cron/crontabs    /etc/crontabs    bind    defaults,bind
 let LIMIT=3600
+ETC="/etc"
 BZR="/usr/bin/bzr"
+GIT="/usr/bin/git"
+HG="/usr/bin/hg"
 DATE="/bin/date"
 ETCKEEPER="/usr/bin/etckeeper"
 RM="/bin/rm"
 TOUCH="/usr/bin/touch"
-SUPPRESS="/etc/.etckeeper-temp-suppress-autocommit"
+ETCKEEPERCONF="$ETC/etckeeper/etckeeper.conf"
+SUPPRESS="$ETC/.etckeeper-temp-suppress-autocommit"
+[[ -f "$ETCKEEPERCONF" ]] && [[ -r "$ETCKEEPERCONF" ]] && source "$ETCKEEPERCONF"
 [[ "x--lock" == "x$1" ]] && { $TOUCH "$SUPPRESS"; exit 0; }
 if [[ -f "$SUPPRESS" ]]; then
 	let REFF=$($DATE -r "$SUPPRESS" +'%s')
 	let CURR=$($DATE +'%s')
 	if ((CURR >= REFF+LIMIT)); then
 		$RM "$SUPPRESS" || true
+	else
+		exit 0
 	fi
-	exit 0
 fi
-export BZR_LOG=/dev/null
-$ETCKEEPER unclean && $ETCKEEPER commit "$1\n$($BZR status -SV /etc)" 2>&1 > /dev/null || true
+case "$VCS" in
+	bzr)
+		export BZR_LOG=/dev/null
+		$ETCKEEPER unclean && $ETCKEEPER commit "$1\n$($BZR status -SV $ETC)" 2>&1 > /dev/null || true;;
+	git)
+		$ETCKEEPER unclean && $ETCKEEPER commit "$1\n$($GIT -C $ETC status -s)" 2>&1 > /dev/null || true;;
+	hg)
+		$ETCKEEPER unclean && $ETCKEEPER commit "$1\n$($HG --cwd $ETC status)" 2>&1 > /dev/null || true;;
+esac
