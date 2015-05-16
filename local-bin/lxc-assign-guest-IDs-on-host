@@ -18,7 +18,7 @@ function create-user
 	local GUESTCONF="/etc/lxc/guests/$GUEST.conf"
 	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^u$/ {print $5}' "$GUESTCONF" || echo "0")
 	local ID=$(($2+$BASEID))
-	echo "useradd -M -N -u $ID -s /usr/sbin/nologin $NAME"
+	echo "useradd -l -M -N -u $ID -s /usr/sbin/nologin $NAME"
 }
 
 function create-entry

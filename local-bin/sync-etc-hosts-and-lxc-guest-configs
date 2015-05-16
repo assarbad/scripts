@@ -3,14 +3,14 @@
 grep -E '10.0.3.2' /etc/hosts|awk '{print $1 ":" $3}'|while read f; do
 	IP=${f%%:*}
 	NM=${f##*:}
-	FN="/etc/lxc/guests/lxc.${NM}.conf"
+	FN="/etc/lxc/guests/${NM}.conf"
 	if ! grep -q $IP "$FN"; then
 		echo "Didn't find $IP for $NM ... adjusting '$FN':"
-		OLDIP=$(awk '$1 ~ /^lxc\.network\.ipv4$/ {print $3}' "$FN")
+		OLDIP=$(awk '$1 ~ /^lxc\.network\.ipv4$/ && $3 ~ /^10\./ {print $3}' "$FN")
 		echo -e "\t${cR}<$OLDIP${cZ}"
 		echo -e "\t${cG}>$IP${cZ}"
 		cp -a "$FN" "${FN}.orig" && \
-			awk '{ if ($1 ~ /^lxc\.network\.ipv4$/) {$3 = "'$IP'"} print }' "${FN}.orig"|tee "$FN"|grep -E '^lxc\.network\.ipv4$'
+			awk '{ if ($1 ~ /^lxc\.network\.ipv4$/ && $3 ~ /^10\./) {$3 = "'$IP'"} print }' "${FN}.orig"|tee "$FN"|grep -E '^lxc\.network\.ipv4$'
 	else
 		echo "Matched $IP for $NM"
 	fi
