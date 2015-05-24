@@ -94,8 +94,8 @@ chmod u=rwX,g=rX /var/log
 mknod /dev/net/tun c 10 200
 chown root:root /dev/net /dev/net/tun
 chmod 666 /dev/net/tun
-etckeeper init
-etckeeper commit 'initial commit'
+#etckeeper init
+#etckeeper commit 'initial commit'
 updatedb
 EODATA1
 test -f /etc/ssh/ssh_known_hosts && cp -a /etc/ssh/ssh_known_hosts "$rootfs/etc/ssh/"
