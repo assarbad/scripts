@@ -14,7 +14,7 @@ import os, sys
 
 # Checking for compatibility with Python version
 if (sys.version_info[0] != 2) or (sys.version_info < (2,6)):
-    sys.exit("This script requires Python version 2.6 or better from the 2.x branch of Python.")
+	sys.exit("This script requires Python version 2.6 or better from the 2.x branch of Python.")
 
 # Don't create .pyc or .pyo files
 sys.dont_write_bytecode = True
@@ -23,26 +23,26 @@ sys.dont_write_bytecode = True
 
 
 def parse_args():
-    """ """
-    parser = ArgumentParser(description='PROGRAM')
-    parser.add_argument('--nologo', action='store_const', dest='nologo', const=True,
-            help='Don\'t show info about this script.')
-    return parser.parse_args()
+	""" """
+	parser = ArgumentParser(description='PROGRAM')
+	parser.add_argument('--nologo', action='store_const', dest='nologo', const=True,
+			help='Don\'t show info about this script.')
+	return parser.parse_args()
 
 def main(**kwargs):
-    """ """
-    pass
+	""" """
+	pass
 
 if __name__ == '__main__':
-    args = parse_args()
-    try:
-        main(**vars(args))
-    except SystemExit:
-        pass
-    except ImportError:
-        raise # re-raise
-    except RuntimeError:
-        raise # re-raise
-    except:
-        print __doc__
-        raise # re-raise
+	args = parse_args()
+	try:
+		main(**vars(args))
+	except SystemExit:
+		pass
+	except ImportError:
+		raise # re-raise
+	except RuntimeError:
+		raise # re-raise
+	except:
+		print __doc__
+		raise # re-raise
