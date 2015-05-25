@@ -105,7 +105,9 @@ EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
 read -d '' awkScript << 'AWKSCRIPT'
-NR > 2 {
+BEGIN {flag=1}
+$1 ~ /^#$/ && $2 ~ /^Network$/ && $3 ~ /^configuration$/ {flag=0}
+NR > 2 && flag {
 	print
 	if ($1 ~ /^lxc\.include/ && $3 ~ /\.common\.conf$/) {
 		gsub(/\.common\.conf$/, ".userns.conf", $3)
