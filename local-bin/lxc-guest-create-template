@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # vim: set autoindent smartindent tabstop=4 shiftwidth=4 noexpandtab filetype=sh:
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 [[ -n "$DEBUG" ]] && set -x
 BACKING=dir
 LXCBASE="$(lxc-config lxc.lxcpath)"
-LXCNAME="${1}"
-[[ -n "$LXCNAME" ]] || { echo -e "ERROR: you must give a name for the guest container.\n\nSYNTAX:\n\t${0##*/} <name>"; exit 1; }
+LXCNAME="${1:-TEMPLATE}"
+[[ -n "$LXCNAME" ]] || { echo -e "${cR}ERROR:${cZ} you must give a name for the guest container.\n\n${cW}SYNTAX:${cZ}\n\t${0##*/} <name>"; exit 1; }
+[[ -d "$LXCBASE/$LXCNAME" ]] && { echo -e ""; exit 1; }
 export MIRROR=$(awk "\$1 ~ /^deb\$/ && \$4 ~ /main/ && \$3 ~ /^$(lsb_release -sc)\$/ {print \$2; exit}" /etc/apt/sources.list)
 export SECURITY_MIRROR=$(awk "\$1 ~ /^deb\$/ && \$4 ~ /main/ && \$3 ~ /^$(lsb_release -sc)-security\$/ {print \$2; exit}" /etc/apt/sources.list)
 export HTTP_PROXY="http://localhost:3142"
@@ -28,6 +30,10 @@ for i in initctl invoke-rc.d restart start stop start-stop-daemon service; do (e
 echo "en_US.UTF-8 UTF-8"|tee /var/lib/locales/supported.d/local
 rm -f /var/lib/locales/supported.d/en
 echo 'LANG="en_US.UTF-8"'|tee "/etc/default/locale"
+if test -f "/usr/share/i18n/locales/en_US@isodate"; then
+	echo "en_US.UTF-8@isodate UTF-8"|tee -a /var/lib/locales/supported.d/local
+	echo 'LANG="en_US.utf8@isodate"'|tee -a "/etc/default/locale"
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
@@ -35,7 +41,7 @@ PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Optio
 apt-get -y update
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" dist-upgrade
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --purge autoremove language-pack-en-base language-pack-en console-setup debconf-i18n dmsetup eject kbd keyboard-configuration lockfile-progs ubuntu-minimal
-PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion colordiff cron-apt debsums dnsutils file git heirloom-mailx htop iputils-ping isc-dhcp-client less lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip zsh-doc zsh-static
+PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install acl bash-completion colordiff cron-apt debsums dnsutils file git heirloom-mailx htop iputils-ping isc-dhcp-client less localepurge lsof make manpages man-db mc mercurial molly-guard mlocate psmisc pv python-mako python-mechanize rsyslog-relp sharutils ssh software-properties-common sudo tmux tree unattended-upgrades unbound-host unzip vim-nox wget whois xz-utils zip
 dpkg-reconfigure -f noninteractive locales
 apt-add-repository -y ppa:nginx/stable
 apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
@@ -45,6 +51,7 @@ sed -i '/ssh_host_ecdsa_key/d;/^#PasswordAuthentication/ {s/#//;s/ yes/ no/}' "/
 rm -f /etc/ssh/ssh_host_*
 ssh-keygen -t rsa -b 4096 -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_rsa_key
 ssh-keygen -t dsa         -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_dsa_key
+ssh-keygen -t ecdsa       -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_ecdsa_key
 ssh-keygen -t ed25519     -C "root@$(cat /etc/hostname)" -N '' -o -f /etc/ssh/ssh_host_ed25519_key
 chmod -R o= /root
 cp /usr/share/doc/tmux/examples/bash_completion_tmux.sh /etc/bash_completion.d/
@@ -59,7 +66,7 @@ PATH="$FAKE_PATH" apt-get -y --purge autoremove
 chown -R "oliver:" "/home/oliver"
 apt-get -y autoclean
 apt-get -y clean
-apt-file update
+#apt-file update
 rm -f /etc/rsyslog.d/*.conf
 cat <<'EODATA2' > /etc/rsyslog.conf
 $ModLoad imuxsock # provides support for local system logging
@@ -80,6 +87,8 @@ $ModLoad omrelp
 *.* :omrelp:yggdrasil.lan:55555
 EODATA2
 PATH="$FAKE_PATH" apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install etckeeper
+apt-get -y autoclean
+apt-get -y clean
 sed -i '/^VCS/s/^/#/;/^#VCS="git"/s/^#//' /etc/etckeeper/etckeeper.conf
 mv "/etc/apt/apt.conf.d/70proxy" "/etc/apt/apt.conf.d/00proxy"
 echo 'Acquire::ForceIPv4 { true; };' | tee "/etc/apt/apt.conf.d/00inet-v4"
@@ -96,40 +105,35 @@ chown root:root /dev/net /dev/net/tun
 chmod 666 /dev/net/tun
 #etckeeper init
 #etckeeper commit 'initial commit'
-updatedb
+#updatedb
+find -L /etc/alternatives -type l -delete
+localepurge
+mandb -c
 EODATA1
+test -f /usr/share/i18n/locales/en_US@isodate && cp -a "/usr/share/i18n/locales/en_US@isodate" "$rootfs/usr/share/i18n/locales/en_US@isodate"
 test -f /etc/ssh/ssh_known_hosts && cp -a /etc/ssh/ssh_known_hosts "$rootfs/etc/ssh/"
 chmod +x "$rootfs/root/in-guest-job"
 chroot $rootfs "/root/in-guest-job"
+# Truncate the logs
+echo -n ""|tee "$rootfs/var/log/dpkg.log"|tee "$rootfs/var/log/alternatives.log"
+# Remove the apt cache
+rm -f "$rootfs/var/lib/apt/lists"/http* \
+	"$rootfs/var/lib/apt/lists"/* \
+	"$rootfs/var/cache/apt/archives"/*.deb \
+	"$rootfs/var/cache/apt/"/*.bin \
+	"$rootfs/var/cache/apt/apt-file"/*
+# Remove other crap
+rm -f "$rootfs/var/lib/mlocate/mlocate.db"
 EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
-read -d '' awkScript << 'AWKSCRIPT'
-BEGIN {flag=1}
-$1 ~ /^#$/ && $2 ~ /^Network$/ && $3 ~ /^configuration$/ {flag=0}
-NR > 2 && flag {
-	print
-	if ($1 ~ /^lxc\.include/ && $3 ~ /\.common\.conf$/) {
-		gsub(/\.common\.conf$/, ".userns.conf", $3)
-		print
-	}
-}
-AWKSCRIPT
-{ set +x; } 2>&1 > /dev/null
-echo -n "${LXCNAME}.lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/hostname"
-echo ""
-echo -e "nameserver 10.0.3.1\ndomain lan"|tee "$LXCBASE/$LXCNAME/rootfs/etc/resolv.conf"
-grep '^search' /etc/resolv.conf|tee -a "$LXCBASE/$LXCNAME/rootfs/etc/resolv.conf"
-[[ -n "$DEBUG" ]] && set -x
-GUESTCONF="$LXCBASE/$LXCNAME/config"
-mv "${GUESTCONF}" "${GUESTCONF}.orig" && \
-	cat "${GUESTCONF}.orig" | awk "$awkScript" > "${GUESTCONF}" && \
-	rm -f "${GUESTCONF}.orig"
-GUESTSPEC="/etc/lxc/guests/${LXCNAME}.conf"
-if [[ -e "${GUESTSPEC}" ]]; then
-	echo -e "\n# Guest-specific configuration\nlxc.include = $GUESTSPEC"|tee -a "${GUESTCONF}"
-	awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^[ug]$/ {printf("uidmapshift -%s '$LXCBASE/$LXCNAME/rootfs' %s %s %s\n", $3, $4, $5, $6)}' "$GUESTSPEC"|while read cmd; do
-		( set -x; $cmd )
-	done
+if [[ "TEMPLATE" == "$LXCNAME" ]]; then
+	echo "Packaging the installed template"
+	tar -C "$LXCBASE/$LXCNAME" -cjf "$LXCBASE/${LXCNAME}.tbz" . && \
+		rm -rf "$LXCBASE/$LXCNAME"
+	exit 0 # Leave a pristine copy
 fi
-{ set +x; } 2>&1 > /dev/null
+# If we happen to create some other guest, don't care and proceed to make adjustments
+if [[ -f "$CURRABSPATH/lxc-guest-reassign" ]]; then
+	SOURCED_BY=${0##*/} source "$CURRABSPATH/lxc-guest-reassign"
+fi

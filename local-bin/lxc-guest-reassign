@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# vim: set autoindent smartindent tabstop=4 shiftwidth=4 noexpandtab filetype=sh:
+if [[ -z "$SOURCED_BY" ]]; then
+	pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+	[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+	[[ -n "$DEBUG" ]] && set -x
+	BACKING=dir
+	LXCBASE="$(lxc-config lxc.lxcpath)"
+	LXCNAME="${1}"
+else
+	echo "Sourced by $SOURCED_BY"
+fi
+[[ -n "$LXCNAME" ]] || { echo -e "${cR}ERROR:${cZ} you must give a name for the guest container.\n\n${cW}SYNTAX:${cZ}\n\t${0##*/} <name>"; exit 1; }
+ROOTFS="$LXCBASE/$LXCNAME/rootfs"
+read -d '' awkScript << 'AWKSCRIPT'
+BEGIN {flag=1}
+$1 ~ /^#$/ && $2 ~ /^Network$/ && $3 ~ /^configuration$/ {flag=0}
+NR > 2 && flag {
+	print
+	if ($1 ~ /^lxc\.include/ && $3 ~ /\.common\.conf$/) {
+		gsub(/\.common\.conf$/, ".userns.conf", $3)
+		print
+	}
+}
+AWKSCRIPT
+{ set +x; } 2>&1 > /dev/null #suppress
+# Fix the host name in the container
+echo -e "${cG}Fixing container host name${cZ}: ${cW}$LXCNAME${cZ}"
+echo -n "${LXCNAME}.lan"|tee "$ROOTFS/etc/hostname"
+echo ""
+sed -i 's/TEMPLATE/'$(cat "$ROOTFS/etc/hostname")'/' "$ROOTFS/etc/hosts"
+echo -e "nameserver 10.0.3.1\ndomain lan"|tee "$ROOTFS/etc/resolv.conf"
+grep '^search' /etc/resolv.conf|tee -a "$ROOTFS/etc/resolv.conf"
+[[ -n "$DEBUG" ]] && set -x
+# New SSH host keys
+echo -e "${cG}Generating new SSH host keys${cZ}"
+rm -f "$ROOTFS/etc/ssh"/ssh_host_*
+ssh-keygen -t rsa -b 4096 -C "root@$(cat "$ROOTFS/etc/hostname")" -N '' -o -f "$ROOTFS/etc/ssh/ssh_host_rsa_key"
+ssh-keygen -t dsa         -C "root@$(cat "$ROOTFS/etc/hostname")" -N '' -o -f "$ROOTFS/etc/ssh/ssh_host_dsa_key"
+ssh-keygen -t ecdsa       -C "root@$(cat "$ROOTFS/etc/hostname")" -N '' -o -f "$ROOTFS/etc/ssh/ssh_host_ecdsa_key"
+ssh-keygen -t ed25519     -C "root@$(cat "$ROOTFS/etc/hostname")" -N '' -o -f "$ROOTFS/etc/ssh/ssh_host_ed25519_key"
+# Fix up the guest config to include the global userns configuration
+# and container-specific settings from /etc/lxc/guests
+GUESTCONF="$LXCBASE/$LXCNAME/config"
+GUESTSPEC="/etc/lxc/guests/${LXCNAME}.conf"
+if [[ -e "${GUESTSPEC}" ]]; then
+	echo -e "${cG}Preparing userns${cZ} for the container"
+	mv "${GUESTCONF}" "${GUESTCONF}.orig" && \
+		cat "${GUESTCONF}.orig" | awk "$awkScript" > "${GUESTCONF}" && \
+		rm -f "${GUESTCONF}.orig"
+	echo -e "${cG}Including container-specific config${cZ}: $GUESTSPEC"
+	echo -e "\n# Guest-specific configuration\nlxc.include = $GUESTSPEC"|tee -a "${GUESTCONF}"
+	echo -e "${cG}Reassigning subordinate IDs to rootfs${cZ}: $ROOTFS"
+	awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^[ug]$/ {printf("uidmapshift -%s '$ROOTFS' %s %s %s\n", $3, $4, $5, $6)}' "$GUESTSPEC"|while read cmd; do
+		( set -x; $cmd )
+	done
+fi
+{ set +x; } 2>&1 > /dev/null
