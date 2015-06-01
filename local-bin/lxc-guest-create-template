@@ -134,10 +134,10 @@ lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v 
 TPLARCHIVE="$LXCBASE/${LXCNAME}.tbz"
 if [[ "TEMPLATE" == "$LXCNAME" ]]; then
 	if [[ -f "$TPLARCHIVE" ]]; then
-		echo "${cY}WARNING:${cZ}: an archive with the name ${TPLARCHIVE##*/} already exists in ${LXCBASE%/*}."
+		echo -e "${cY}WARNING:${cZ}: an archive with the name ${TPLARCHIVE##*/} already exists in ${LXCBASE%/*}."
 		MVARCH="${TPLARCHIVE}_$(date --reference="$TPLARCHIVE" +"%Y-%m-%dT%H:%M:%S.%N")"
 		mv "$TPLARCHIVE" "$MVARCH" && \
-			echo "... moved out of the way. New name ${cW}$MVARCH${cZ}."
+			echo - "... moved out of the way. New name ${cW}$MVARCH${cZ}."
 	fi
 	echo "Packaging the installed template"
 	tar -C "$LXCBASE/$LXCNAME" -cjf "$TPLARCHIVE" . && \
