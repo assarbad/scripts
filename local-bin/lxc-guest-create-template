@@ -120,16 +120,23 @@ echo -n ""|tee "$rootfs/var/log/dpkg.log"|tee "$rootfs/var/log/alternatives.log"
 rm -f "$rootfs/var/lib/apt/lists"/http* \
 	"$rootfs/var/lib/apt/lists"/* \
 	"$rootfs/var/cache/apt/archives"/*.deb \
-	"$rootfs/var/cache/apt/"/*.bin \
+	"$rootfs/var/cache/apt/"/*.bin* \
 	"$rootfs/var/cache/apt/apt-file"/*
 # Remove other crap
 rm -f "$rootfs/var/lib/mlocate/mlocate.db"
 EOF
 chmod +x "$TMPLXCTPL"
 lxc-create -t "$TMPLXCTPL" -n $LXCNAME -P "$LXCBASE" -B $BACKING -- -dF|grep -v "^#"
+TPLARCHIVE="$LXCBASE/${LXCNAME}.tbz"
 if [[ "TEMPLATE" == "$LXCNAME" ]]; then
+	if [[ -f "$TPLARCHIVE" ]]; then
+		echo "${cY}WARNING:${cZ}: an archive with the name ${TPLARCHIVE##*/} already exists in ${LXCBASE%/*}."
+		MVARCH="${TPLARCHIVE}_$(date --reference="$TPLARCHIVE" +"%Y-%m-%dT%H:%M:%S.%N")"
+		mv "$TPLARCHIVE" "$MVARCH" && \
+			echo "... moved out of the way. New name ${cW}$MVARCH${cZ}."
+	fi
 	echo "Packaging the installed template"
-	tar -C "$LXCBASE/$LXCNAME" -cjf "$LXCBASE/${LXCNAME}.tbz" . && \
+	tar -C "$LXCBASE/$LXCNAME" -cjf "$TPLARCHIVE" . && \
 		rm -rf "$LXCBASE/$LXCNAME"
 	exit 0 # Leave a pristine copy
 fi
