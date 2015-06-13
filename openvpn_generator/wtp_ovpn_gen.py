@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent sts=4 ts=4 sw=4 noet:
 __author__ = "Oliver Schneider"
-__copyright__ = "Copyright (C) Oliver Schneider (assarbad.net)"
+__copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
 __version__ = "0.1"
 import os, sys
 
