@@ -35,8 +35,8 @@ if not "%~2" == "" @(
 if not "%~3" == "" @(
   call :SetVar DESCRIPTION "%~3"
 )
-set VRFYCMD=%SIGNTOOL% verify /pa "%~1"
-set SIGNCMD=%SIGNTOOL% sign /a %IDENTIFIER% /ph
+set VRFYCMD="%SIGNTOOL%" verify /pa "%~1"
+set SIGNCMD="%SIGNTOOL%" sign /a %IDENTIFIER% /ph
 if not "%VERBOSE%" == "" set SIGNCMD=%SIGNCMD% /v /debug
 if not "%DESCRIPTURL%" == "" set SIGNCMD=%SIGNCMD% /du "%DESCRIPTURL%"
 if not "%DESCRIPTION%" == "" set SIGNCMD=%SIGNCMD% /d "%DESCRIPTION%"
