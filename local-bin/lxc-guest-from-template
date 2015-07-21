@@ -17,6 +17,8 @@ if [[ -f "$LXCTPL" ]]; then
 	echo -e "${cW}Unpacking $LXCTPL${cZ} into $LXCBASE/$LXCNAME"
 	tar -C "$LXCBASE/$LXCNAME" -xjf "$LXCTPL" || \
 		{ echo -e "${cR}ERROR:${cZ} could not unpack from template archive."; exit 1; }
+	sed -i 's/TEMPLATE/'$LXCNAME'/' "$LXCBASE/$LXCNAME/config"
+	sed -i '/iface eth0/s/dhcp/manual/' "$LXCBASE/$LXCNAME/rootfs/etc/network/interfaces"
 	echo -e "${cW}Adjusting folder permissions"
 	chmod o+rX "$LXCBASE/$LXCNAME" || \
 		{ echo -e "${cR}ERROR:${cZ} failed to adjust folder permissions."; exit 1; }
