@@ -25,5 +25,5 @@ svnadmin create "$LOCALNAME"
 echo "svnadmin create \"$LOCALNAME\""
 echo '#!/bin/sh'|tee "$LOCALNAME/hooks/pre-revprop-change" && chmod +x "$LOCALNAME/hooks/pre-revprop-change"
 echo "echo '#!/bin/sh'|tee \"$LOCALNAME/hooks/pre-revprop-change\" && chmod +x \"$LOCALNAME/hooks/pre-revprop-change\""
-( set -x; svnsync init "file://$LOCALNAME" "$REMOTEURL" )
-( set -x; svnsync sync "file://$LOCALNAME" )
+( set -x; svnsync $SVNSYNCARGS init "file://$LOCALNAME" "$REMOTEURL" )
+( set -x; svnsync $SVNSYNCARGS sync "file://$LOCALNAME" )
