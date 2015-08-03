@@ -1,6 +1,3 @@
-local assemblyName = "lua"
-local programVersion = "5.2.4" -- until we find a clever way to put this into an environment variable or so ...
-local publicKeyToken = "db89f19495b8f232" -- the token for the code-signing
 local action = _ACTION or ""
 local release = false
 local slnname = ""
@@ -159,8 +156,8 @@ solution (iif(release, slnname, "lua"))
 
         vpaths
         {
-            ["Header Files/*"] = { "src/*.h" },
-            ["Source Files/*"] = { "src/*.c" },
+            ["Header Files/*"] = { "**.h" },
+            ["Source Files/*"] = { "**.c" },
             ["Special Files/*"] = { "premake4.lua", "*.cmd" },
             ["*"] = { "*.txt", "*.md" },
         }
