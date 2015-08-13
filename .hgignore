@@ -8,3 +8,6 @@ ipdeny.com/zones/**
 *.tar.bz2
 *.tar.gz
 *.tgz
+before.txt
+*.orig
+after.txt
