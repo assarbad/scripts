@@ -2,7 +2,7 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possible alternative: https://github.com/rsmmr/install-clang
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-[[ -n "$DEBUG" ]] && set -x
+[[ -n "$DEBUG" -o -n "$DBG" ]] && set -x
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_37"
 LIBCXXRT_RELEASE="stable"
@@ -13,7 +13,6 @@ TARGETS="x86,x86_64"
 BASEDIR="${BASEDIR:-$(pwd)}"
 let NOOPTIONAL=0
 for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
-env > /data/toolchains/env.txt
 
 function show_help
 {
@@ -100,6 +99,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
+[[ "$1" == "--help" ]] && { show_help; exit 0; }
 while getopts "h?BcCgGi:Oprt:v" opt; do
 	case "$opt" in
 	h|\?)
