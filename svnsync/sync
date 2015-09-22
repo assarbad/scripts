@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+[[ -n "$DEBUG" || -n "$DBG" ]] && set -x
 CURRABSPATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) # Get the directory in which the script resides
 LOCKFILE="$CURRABSPATH/.lock"
+for tool in 7z svn svnsync svnadmin; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
-	trap 'rm -f "$LOCKFILE"; exit $?' INT TERM EXIT
+	trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 	function show_time_diff
 	{
 		local START=$1
@@ -15,25 +18,35 @@ if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 		printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 	}
 
-	[[ -f "$CURRABSPATH/.syncrc" ]] && source "$CURRABSPATH/.syncrc"
-	[[ -n "$SVNSYNCARGS" ]] && SVNSYNCARGS="${SVNSYNCARGS//:/ }"
-	echo "URL: '$(svn propget svn:sync-from-url --revprop -r 0 "file://$CURRABSPATH")'"
-	svn propdel --revprop -r0 svn:sync-lock "file://$CURRABSPATH"
-	svnsync --non-interactive $SVNSYNCARGS sync "file://$CURRABSPATH" && touch "$CURRABSPATH"
-	if [[ -n "$1" ]]; then
+	if [[ -z "$1" ]]; then
+		echo -e "${cB}URL:${cZ} '$(svn propget svn:sync-from-url --revprop -r 0 "file://$CURRABSPATH")'"
+		svn propdel --revprop -r0 svn:sync-lock "file://$CURRABSPATH"
+		svnsync --non-interactive sync "file://$CURRABSPATH" && touch "$CURRABSPATH"
+	else
+		echo "$CURRABSPATH"
+		REV0=0
 		REVNO=$(svn info "file://$CURRABSPATH"|awk '/^Revision:/ {print $2}')
-		FNAME="${1//REVNO/$REVNO}"
+		FNAME="${1//REVNO/rev${REV0}_to_${REVNO}}"
+		DUMPNAME="${FNAME}.svndump"
+		ARCHNAME="${FNAME}.7z"
+		if [[ -e "$ARCHNAME" ]]; then
+			echo -e "${cR}ERROR:${cZ} ${cW}$ARCHNAME${cZ} already exists. Move it out of the way." >&2
+			exit 1
+		fi
 		echo "$FNAME"
 		if [[ ! -e "$FNAME" ]]; then
 			let TIME_START=$(date +%s)
-			trap 'echo "Cleaning up ${FNAME##*/} due to error or interrupt."; rm -f "$LOCKFILE" "$FNAME"; exit $?' INT TERM EXIT
-			svnadmin dump --incremental "$CURRABSPATH"|gzip -c9 > "$FNAME"
+			trap 'echo "Cleaning up ${FNAME##*/} due to error or interrupt."; rm -f "$LOCKFILE" "$DUMPNAME" "$ARCHNAME"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+			svnadmin dump -r $REV0:$REVNO --deltas --incremental "$CURRABSPATH" > "$DUMPNAME" && \
+				ls -ld "$DUMPNAME" && \
+				7z a -t7z -y -mx9 -m0=lzma2 -ms=on "-w${DUMPNAME%/*}" "$ARCHNAME" "$DUMPNAME" && \
+				rm -f "$DUMPNAME"
 			show_time_diff $TIME_START $(date +%s) "Packaging $FNAME took: %s"
-			trap 'rm -f "$LOCKFILE"; exit $?' INT TERM EXIT
+			trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 		fi
 
 	fi
 else
-	echo "ERROR: Lock failed, PID $(cat "$LOCKFILE")" >&2
+	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE")" >&2
 	exit 1
 fi
