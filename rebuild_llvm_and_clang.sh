@@ -13,6 +13,7 @@ TARGETS="x86,x86_64"
 BASEDIR="${BASEDIR:-$(pwd)}"
 let NOOPTIONAL=0
 for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+env > /data/toolchains/env.txt
 
 function show_help
 {
@@ -54,31 +55,31 @@ function prepare_src
 	local GITREF=$2
 	local PRJ=$(echo "${PRJNAME##*/}"|tr 'a-z' 'A-Z')
 	if ((NOCHECKOUT==0)); then
-		((VERBOSE)) && echo "[DBG:$PRJ] Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
 		# Clone the repository if we don't have it
-		((VERBOSE)) && echo "[DBG:$PRJ] Cloning repository if no clone exists."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
 		[[ -d "$BASEDIR/$PRJNAME" ]] || $GITCLONE "$BASEDIR/$PRJNAME"
 		# Sanity check the clone
-		((VERBOSE)) && echo "[DBG:$PRJ] Verifying the clone exists now."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Verifying the clone exists now."
 		[[ -d "$BASEDIR/$PRJNAME/.git" ]] || { echo -e "${cR}ERROR:${cZ} apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
 		# Set the Git stuff according to the docs
-		((VERBOSE)) && echo "[DBG:$PRJ] Setting branch.master.rebase to true."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Setting branch.master.rebase to true."
 		( cd "$BASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
-		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: branch.master.rebase = " && git config --get branch.master.rebase )
+		( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} branch.master.rebase = " && git config --get branch.master.rebase )
 		( cd "$BASEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
 		((REVIVEPKG)) && ( cd "$BASEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
 		# Scrub the working copy
-		((VERBOSE)) && echo "[DBG:$PRJ] Cleaning extraneous files from Git clone."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cleaning extraneous files from Git clone."
 		( cd "$BASEDIR/$PRJNAME" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
-		((VERBOSE)) && echo "[DBG:$PRJ] Fetching updates from upstream."
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
 		# Check out the release
-		((VERBOSE)) && echo "[DBG:$PRJ] Checking out the files on current branch."
-		( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git checkout $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Checking out the files on current branch."
+		( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git checkout $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
 		if git --git-dir="$BASEDIR/$PRJNAME/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
-			((VERBOSE)) && echo "[DBG:$PRJ] Fast-forwarding, if possible."
-			( cd "$BASEDIR/$PRJNAME" && echo -n "$PRJ: " && git merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
+			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fast-forwarding, if possible."
+			( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
 		fi
 		((GARBAGECOLLECT)) && ( echo "Now garbage-collecting the repository${GCAGGRESSIVE:+ ($GCAGGRESSIVE)}"; cd "$BASEDIR/$PRJNAME" && git gc $GCAGGRESSIVE --prune=all)
 	fi
