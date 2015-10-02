@@ -2,7 +2,7 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possible alternative: https://github.com/rsmmr/install-clang
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-[[ -n "$DEBUG" -o -n "$DBG" ]] && set -x
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && set -x
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="release_37"
 LIBCXXRT_RELEASE="stable"
