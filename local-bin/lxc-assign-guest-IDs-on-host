@@ -4,21 +4,27 @@ LXCPATH=$(lxc-config lxc.lxcpath)
 function create-group
 {
 	local NAME=$1
+	local ID=$2
 	local GUEST=$3
 	local GUESTCONF="/etc/lxc/guests/$GUEST.conf"
 	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^g$/ {print $5}' "$GUESTCONF" || echo "0")
-	local ID=$(($2+$BASEID))
-	echo "groupadd -g $ID $NAME"
+	if ((BASEID>65535)); then
+		ID=$((ID+BASEID))
+		echo "groupadd -g $ID $NAME"
+	fi
 }
 
 function create-user
 {
 	local NAME=$1
+	local ID=$2
 	local GUEST=$3
 	local GUESTCONF="/etc/lxc/guests/$GUEST.conf"
 	local BASEID=$(awk '$1 ~ /^lxc\.id_map$/ && $3 ~ /^u$/ {print $5}' "$GUESTCONF" || echo "0")
-	local ID=$(($2+$BASEID))
-	echo "useradd -l -M -N -u $ID -s /usr/sbin/nologin $NAME"
+	if ((BASEID>65535)); then
+		ID=$((ID+BASEID))
+		echo "useradd -l -M -N -u $ID -s /usr/sbin/nologin $NAME"
+	fi
 }
 
 function create-entry
