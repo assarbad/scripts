@@ -30,6 +30,7 @@ if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 		REV1000=$((REVNO%1000))
 		REVNO=$((REVNO-REV1000))
 		FNAME="${1//REVNO/rev${REV0}_to_${REVNO}}"
+		[[ "${FNAME##*/}" == "$FNAME" ]] && FNAME="./$FNAME"
 		DUMPNAME="${FNAME}.svndump"
 		ARCHNAME="${FNAME}.7z"
 		if [[ -e "$ARCHNAME" ]]; then
