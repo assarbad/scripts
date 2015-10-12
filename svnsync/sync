@@ -43,7 +43,7 @@ if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 			svnadmin dump -r $REV0:$REVNO --deltas --incremental "$CURRABSPATH" > "$DUMPNAME" && \
 				ls -ld "$DUMPNAME" && \
 				nice 7z a -t7z -y -mx9 -m0=lzma2 -ms=on "-w${DUMPNAME%/*}" "$ARCHNAME" "$DUMPNAME" && \
-				( cd "${FNAME%/*}" && sha1sum "${DUMPNAME##*/}" "${ARCHNAME##*/}"|tee "${ARCHNAME}.sha1sum" ) && \
+				( cd "${FNAME%/*}" && sha1sum "${DUMPNAME##*/}" "${ARCHNAME##*/}"|tee "${ARCHNAME##*/}.sha1sum" ) && \
 				rm -f "$DUMPNAME"
 			show_time_diff $TIME_START $(date +%s) "Packaging $FNAME took: %s"
 			trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT

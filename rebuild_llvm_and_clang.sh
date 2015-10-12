@@ -2,17 +2,26 @@
 # http://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code
 # possible alternative: https://github.com/rsmmr/install-clang
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && set -x
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; set -x; }
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="release_37"
-LIBCXXRT_RELEASE="stable"
-MUSLLIBC_RELEASE="v1.1.11"
-BINUTILS_RELEASE="binutils-2_24"
+LLVM_RELEASE="${LLVM_RELEASE:-release_36}"
+LIBCXXRT_RELEASE="${LIBCXXRT_RELEASE:-stable}"
+MUSLLIBC_RELEASE="${MUSLLIBC_RELEASE:-v1.1.11}"
+BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_24}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
-TARGETS="x86,x86_64"
 BASEDIR="${BASEDIR:-$(pwd)}"
 let NOOPTIONAL=0
 for tool in tee tar bzip2 sha1sum git date make cp; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+if ((${LLVM_RELEASE##*_} > 36)); then
+	echo -e "${cW}INFO:${cZ} preparing for build using CMake"
+	for tool in cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+	let CMAKE_BUILD=1
+	TARGETS="X86"
+else
+	let CMAKE_BUILD=0
+	TARGETS="x86,x86_64"
+	echo -e "${cW}INFO:${cZ} preparing for build using autotools"
+fi
 
 function show_help
 {
@@ -75,7 +84,7 @@ function prepare_src
 		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
 		# Check out the release
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Checking out the files on current branch."
-		( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git checkout $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
+		( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git checkout -f $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
 		if git --git-dir="$BASEDIR/$PRJNAME/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
 			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fast-forwarding, if possible."
 			( cd "$BASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
@@ -165,11 +174,15 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Doing build for $TARGETS into $INSTALL_TO."
 	if [[ -d "$BASEDIR/build/llvm" ]]; then
 		pushd "$BASEDIR/build/llvm" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-		( set -x; "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
+		if (( CMAKE_BUILD )); then
+			( set -x; cmake ${TRACE:+--trace} -DCMAKE_INSTALL_PREFIX="$INSTALL_TO" -DLLVM_BUILD_DOCS=OFF -DLLVM_ENABLE_DOXYGEN=OFF -DCMAKE_BUILD_TYPE="Release" -DLLVM_TARGETS_TO_BUILD="${TARGETS//,/;}" "$BASEDIR/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
+		else
+			( set -x; "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
+		fi
 		let TIME_CONFIGURE=$(date +%s)
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
+		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
 		let TIME_MAKE=$(date +%s)
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
+		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
 		popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		for i in scan-view scan-build; do
 			cp -r "$BASEDIR/llvm/tools/clang/tools/$i"/*  "$INSTALL_TO/bin/"/ || { echo -e "${cY}WARNING:${cZ} could not copy $i binaries/scripts."; }
