@@ -3,7 +3,8 @@
 [[ -n "$DEBUG" || -n "$DBG" ]] && set -x
 CURRABSPATH=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) # Get the directory in which the script resides
 LOCKFILE="$CURRABSPATH/.lock"
-for tool in 7z awk grep nice sha1sum svn svnsync svnadmin tee; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in awk grep nice svn svnsync tee; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+[[ -n "$1" ]] && { for tool in 7za sha1sum svnadmin; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done; }
 if (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 	trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 	function show_time_diff
