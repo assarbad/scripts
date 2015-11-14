@@ -20,7 +20,6 @@
 :::             held liable for any damages arising from the use of this
 :::             software.
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-set > before.txt
 :SCRIPT
 setlocal & pushd .
 :: Toolsets (potentially) supported
@@ -81,7 +80,6 @@ if not defined VCVARS_PATH @(
 )
 :: Return and make sure the outside world sees the results (i.e. leave the scope)
 popd & endlocal & if not "%VCVARS_PATH%" == "" @(call "%VCVARS_PATH%" %VCTGT_TOOLSET%) & if not "%VCVER_FRIENDLY%" == "" set VCVER_FRIENDLY=%VCVER_FRIENDLY%
-set > after.txt
 goto :EOF
 
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
