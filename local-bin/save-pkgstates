@@ -1,6 +1,6 @@
 #!/bin/bash
 # CRONTAB: 29   * *   *   *     /usr/bin/sudo /usr/local/bin/save-pkgstates
-BASEDIR="/etc/states.apt+dpkg"
+BASEDIR="/etc/package-states.apt+dpkg"
 DPKG="/usr/bin/dpkg"
 APTMARK="/usr/bin/apt-mark"
 EXTSTATES="/var/lib/apt/extended_states"
