@@ -1,0 +1,112 @@
+#!/bin/bash
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+
+function syntax
+{
+	echo "SYNTAX: ${0##*/} <chroot-base-directory>"
+	[[ -n "$1" ]] && echo -e "\nERROR: ${1}."
+	exit 1
+}
+
+[[ "$UID" -eq "0" ]] || syntax "${0##*/}" "You must be superuser to make use of this script"
+
+CHROOTDIR=${1:-/chroots}
+VARIANT=minbase
+DEBARCHIVE_URL="http://localhost:3142/de.archive.ubuntu.com/ubuntu/"
+USERS=$(getent group ssh-forwarders)
+USERS=${USERS##*:}
+
+# Prepare the base chroot
+BASECHROOT="$CHROOTDIR/.basedir"
+# Prepare the base system
+test -d "$BASECHROOT" || mkdir -p "$BASECHROOT"
+if [[ -d "$BASECHROOT" ]]; then
+	if [[ ! -e "$BASECHROOT/.installed" ]]; then
+		env LANG=en_US.UTF-8 \
+			debootstrap \
+			--keep-debootstrap-dir \
+			--exclude=dhcp3-common,dhcp3-client,laptop-detect,tasksel,tasksel-data,landscape-client,landscape-common,busybox-initramfs,cron,eject,e2fsprogs,e2fslibs,dmsetup,gcc-4.8-base,gcc-4.9-base,multiarch-support,logrotate,netcat-openbsd,ntpdate,initramfs-tools,initramfs-tools-bin,ifupdown,isc-dhcp-common,isc-dhcp-client,sudo,upstart,udev,ntpdate,ubuntu-minimal,initscripts,initramfs-tools-bin,initramfs-tools,sensible-utils,plymouth,module-init-tools,iproute2 \
+			--include=openssh-client \
+			--variant=$VARIANT \
+			--arch=$(dpkg --print-architecture) $(lsb_release -sc) \
+			"$BASECHROOT" "$DEBARCHIVE_URL" && \
+		touch "$BASECHROOT/.installed"
+	else
+		echo -e "${cW}INFO:${cZ} the base chroot ($BASECHROOT) appears to be installed already."
+	fi
+	if [[ ! -e "$BASECHROOT/var/lib/locales/supported.d/local" ]]; then
+		echo -e "en_US.UTF-8 UTF-8\nen_US.UTF-8@isodate UTF-8"|tee "$BASECHROOT/var/lib/locales/supported.d/local"
+	fi
+	if [[ -d "$BASECHROOT/debootstrap" ]]; then
+		rm -rf "$BASECHROOT/debootstrap"
+	fi
+fi
+# For all members of the ssh-forwarders group ...
+for user in ${USERS//,/ }; do
+	echo $user
+	test -d "$CHROOTDIR/.upper/$user" || mkdir -p "$CHROOTDIR/.upper/$user"
+	test -d "$CHROOTDIR/.work/$user" || mkdir -p "$CHROOTDIR/.work/$user"
+	test -d "$CHROOTDIR/$user" || mkdir -p "$CHROOTDIR/$user"
+	CHROOTUSRDIR=$(findmnt -nrs "$CHROOTDIR/$user"|awk '{print $1}')
+	if [[ "$CHROOTUSRDIR" == "$CHROOTDIR/$user" ]]; then
+		MNTSOURCE=$(findmnt -nrs "$CHROOTUSRDIR"|awk '{print $2}')
+		MNTFSTYPE=$(findmnt -nrs "$CHROOTUSRDIR"|awk '{print $3}')
+		MNTOPTIONS=$(findmnt -nrs "$CHROOTUSRDIR"|awk '{print $4}')
+		if [[ "$MNTSOURCE" == "$MNTFSTYPE" ]] && [[ "$MNTSOURCE" == "overlay" ]]; then
+			eval "${MNTOPTIONS//,/;}"
+			# If mounted, unmount it
+			while findmnt -mT "$CHROOTUSRDIR" | grep -q "^$CHROOTUSRDIR"; do
+				while findmnt -mT "$CHROOTUSRDIR/home/$user" | grep -q "^$CHROOTUSRDIR/home/$user"; do
+					(set -x; umount -f "$CHROOTUSRDIR/home/$user")
+				done
+				(set -x; umount -f "$CHROOTUSRDIR")
+			done
+			# Check that it's not mounted
+			if ! findmnt -mT "$CHROOTUSRDIR" | grep -q "^$CHROOTUSRDIR"; then
+				[[ -d "$lowerdir" ]]            || { echo -e "${cR}ERROR:${cZ} lowerdir for $user does not exist ($lowerdir)."; exit 1; }
+				[[ -e "$lowerdir/.installed" ]] || { echo -e "${cR}ERROR:${cZ} lowerdir for $user does not appear to contain a bootstapped system ($lowerdir/.installed)."; exit 1; }
+				[[ -d "$upperdir" ]]            || { echo -e "${cR}ERROR:${cZ} upperdir for $user does not exist ($upperdir)."; exit 1; }
+				[[ -d "$workdir" ]]             || { echo -e "${cR}ERROR:${cZ} workdir for $user does not exist ($workdir)."; exit 1; }
+				if (set -x; mount "$CHROOTUSRDIR"); then
+					for file in .installed bin/su usr/sbin/chroot; do
+						test -f "$CHROOTUSRDIR/$file" && rm "$CHROOTUSRDIR/$file"
+					done
+					for fldr in boot media srv usr/games; do
+						test -d "$CHROOTUSRDIR/$fldr" && rmdir "$CHROOTUSRDIR/$fldr"
+					done
+					for fldr in usr/local; do
+						test -d "$CHROOTUSRDIR/$fldr" && rm -rf "$CHROOTUSRDIR/$fldr"
+					done
+					rm -f "$CHROOTUSRDIR/etc/update-motd.d/*"
+					echo -n ""|tee "$CHROOTUSRDIR/etc/motd" | \
+						tee "$CHROOTUSRDIR/etc/issue" | \
+						tee "$CHROOTUSRDIR/etc/issue.net" | \
+							> "$CHROOTUSRDIR/run/motd.dynamic"
+					sed -i '/^session.*pam_motd\.so/s/^/#/g' "$CHROOTUSRDIR/etc/pam.d/login"
+					grep "pam_motd\.so" "$CHROOTUSRDIR/etc/pam.d/login"
+					chmod -x "$CHROOTUSRDIR/etc/update-motd.d"/*
+					test -d "$CHROOTUSRDIR/home/$user" || mkdir "$CHROOTUSRDIR/home/$user"
+					for db in shadow gshadow passwd group; do
+						for u in $user ssh-forwarders ssh-users; do
+							if ! grep -q "^$u:" "$CHROOTUSRDIR/etc/$db"; then
+								if grep -q "^$u:" /etc/$db; then
+									grep "^$u:" /etc/$db | tee -a "$CHROOTUSRDIR/etc/$db"
+								fi
+							fi
+						done
+					done
+				fi
+			fi
+			if ! findmnt -mT "$CHROOTUSRDIR/home/$user" | grep -q "^$CHROOTUSRDIR/home/$user"; then
+				if [[ -n "$(findmnt -nrs "$CHROOTUSRDIR/home/$user" | awk '{print $1}')" ]]; then
+					(set -x; mount "$CHROOTUSRDIR/home/$user")
+				else
+					echo -e "${cY}WARNING:${cZ} $CHROOTUSRDIR/home/$user does not seem to configured in /etc/fstab!"
+				fi
+			fi
+		else
+			echo -e "${cR}ERROR:${cZ} $CHROOTUSRDIR must be an overlayfs!"
+			exit 1
+		fi
+	fi
+done
