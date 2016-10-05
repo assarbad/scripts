@@ -11,3 +11,4 @@ ipdeny.com/zones/**
 before.txt
 *.orig
 after.txt
+build-scripts/cache/**
