@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc wget tar md5sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc wget tar md5sum autoconf autoheader; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 MEANDMYSELF=${0##*/}
@@ -131,6 +131,29 @@ else
 	echo -e " ${cR}[failed]${cZ}"
 	exit 1
 fi
+# Configure GCC for our purpose
+export CC="musl-gcc"
+export LDFLAGS="-Wl,--gc-sections"
+export CFLAGS="-ffunction-sections -fdata-sections"
+# proceed ...
+echo -e "Configuring and building ${cW}zlib${cZ}"
+(
+	cd "$BUILDDIR/zlib" && \
+		./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
+		make -j 8 && \
+		make install
+) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
+echo -e "Configuring and building ${cW}dropbear${cZ}"
+(
+	export CC="$CC -nostdinc -isystem $TEMPDIR/musl/tempinstall/include -isystem /usr/include/$(gcc -dumpmachine) -isystem /usr/include"
+	cd "$PRJSRCDIR" && \
+		autoconf && autoheader && \
+	cd "$BUILDDIR" && \
+		$PRJSRCDIR/configure "--with-zlib=$BUILDDIR/zlib/tempinstall" --disable-syslog --disable-lastlog --without-pam --enable-bundled-libtom && \
+		make -j8 PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" MULTI=1 STATIC=1 SCPPROGRESS=1 strip && \
+		DBVER=$(./dropbearmulti 2>&1|grep -oE 'v[[:digit:]]+\.[[:digit:]]+'||echo -n 'unknown')
+		tar -czvf "$CURRABSPATH/dropbear-$DBVER-static.tgz" $(find -maxdepth 1 -type l) dropbearmulti
+) || { echo -e "${cR}ERROR:${cZ} dropbear failed to build."; exit 1; }
 
 
 
@@ -139,37 +162,4 @@ fi
 
 exit 0
 
-[[ -d "$TEMPDIR" ]] || mkdir "$TEMPDIR" || { echo "FATAL: Could not create $TEMPDIR."; exit 1; }
-[[ -d "$SRCPDIR" ]] || mkdir "$SRCPDIR" || { echo "FATAL: Could not create $SRCPDIR."; exit 1; }
-
-for i in musl zlib dropbear; do
-	[[ -d "$TEMPDIR/$i" ]] && rm -rf "$TEMPDIR/$i"
-	[[ -d "$TEMPDIR/$i" ]] || mkdir "$TEMPDIR/$i" || { echo "FATAL: Could not create $TEMPDIR/$i."; exit 1; }
-done
-(
-		echo "Unpacking dropbear" && tar --strip-components=1 -C "$TEMPDIR/dropbear" -xvf "$DRPBPKG"
-) || { echo "FATAL: Could not unpack one of the required source packages. Check above output for clues."; exit 1; }
-# Configure GCC for our purpose
-export CC="musl-gcc"
-export LDFLAGS="-Wl,--gc-sections"
-export CFLAGS="-ffunction-sections -fdata-sections"
-# proceed ...
-echo "Configuring and building zlib"
-(
-	export PATH="$TEMPDIR/musl/tempinstall/bin:$PATH"
-	cd "$TEMPDIR/zlib" && \
-		./configure --static "--prefix=$TEMPDIR/zlib/tempinstall" && \
-		make -j 8 && \
-		make install
-) || { echo "FATAL: zlib failed to build. Check above output for clues."; exit 1; }
-echo "Configuring and building dropbear"
-(
-	export PATH="$TEMPDIR/musl/tempinstall/bin:$PATH"
-	export CC="$CC -nostdinc -isystem $TEMPDIR/musl/tempinstall/include -isystem /usr/include/$(gcc -dumpmachine) -isystem /usr/include"
-	cd "$TEMPDIR/dropbear" && \
-		./configure "--with-zlib=$TEMPDIR/zlib/tempinstall" --disable-syslog --disable-lastlog --without-pam --enable-bundled-libtom && \
-		make -j8 PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" MULTI=1 STATIC=1 SCPPROGRESS=1 strip && \
-		DBVER=$(./dropbearmulti 2>&1|grep -oE 'v[[:digit:]]+\.[[:digit:]]+'||echo -n 'unknown')
-		tar -czvf "$CURRABSPATH/dropbear-$DBVER-static.tgz" $(find -maxdepth 1 -type l) dropbearmulti
-) || { echo "FATAL: dropbear failed to build. Check above output for clues."; exit 1; }
 [[ -n "$NO_REMOVE_TEMPDIR" ]] || rm -rf "$TEMPDIR"
