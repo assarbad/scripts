@@ -1,22 +1,29 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && set -x
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 MEANDMYSELF=${0##*/}
 MUSLLIBC_RELEASE="v1.1.15"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl}
 BASEDIR="${BASEDIR:-$(pwd)}"
 CACHEDIR="$BASEDIR/cache"
-for tool in grep tee git date make gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in file tempfile grep tee git date make gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-i <install-dir>] [-v] [-s|-S] [-a|-A]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-i <install-dir>] [-t <target-arch>] [-v] [-V <musl-libc-tag>]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
-	echo -e "\t${cW}-i${cZ}"
+	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
+	echo -e "\t${cW}-V${cZ} <musl-libc-tag> ${cY}(if not given defaults to: $MUSLLIBC_RELEASE)${cZ}"
+	echo -e "\t  Tag to build instead of hardcoded default."
+	echo -e "\t${cW}-t${cZ} <target-arch>"
+	echo -e "\t  Target architecture, e.g. ${cW}x86_64-linux-gnu${cZ} or ${cW}i386-linux-gnu${cZ} or a"
+	echo -e "\t  comma-separated list of architectures."
+	echo -e "\t  ${cW}NOTE:${cZ} this can be useful on x86_64 to force only to build x86_64 or x86_32 instead of"
+	echo -e "\t  both."
 	echo ""
 }
 
@@ -72,7 +79,7 @@ function show_time_diff
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?saSAi:v" opt; do
+while getopts "h?t:i:vV:" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -81,8 +88,15 @@ while getopts "h?saSAi:v" opt; do
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
 		;;
+	t)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		TARGETARCH="$OPTARG"
+		let TARGETGIVEN=1
+		;;
 	v)  VERBOSE=1
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
+		;;
+	V)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		MUSLLIBC_RELEASE="$OPTARG"
 		;;
 	*)
 		echo -e "${cY}WARNING:${cZ} unknown option '$opt'"
@@ -97,48 +111,57 @@ let TIME_START=$(date +%s)
 PRJNAME="musl-libc"
 prepare_src "$PRJNAME:git clone http://git.musl-libc.org/cgit/musl/" "$MUSLLIBC_RELEASE"
 
-TARGETARCH=$(gcc -dumpmachine)
+[[ -n "$TARGETARCH" ]] || TARGETARCH=$(gcc -dumpmachine)
+TGTTRIPLET=$TARGETARCH
 TARGETDUPL=${TARGETARCH#*-}
 TARGETARCH=${TARGETARCH%%-*}
-if [[ "$TARGETARCH" == "x86_64" ]] && [[ $(gcc -dumpmachine) == $(gcc -print-multiarch) ]]; then
+if [[ -z "$TARGETGIVEN" ]] && [[ "$TARGETARCH" == "x86_64" ]] && [[ $(gcc -dumpmachine) == $(gcc -print-multiarch) ]]; then
 	if gcc -print-multi-lib|grep -q '^32;'; then
 		echo -e "${cW}INFO:${cZ} Building 32-bit ${cW}and${cZ} 64-bit Intel/AMD musl-libc"
 		TARGETARCH=$TARGETARCH,i386
 		let SPECIALSPEC=1
 	fi
 fi
+type $(gcc -dumpmachine)-gcc > /dev/null 2>&1 && CROSS_COMPILE="$(gcc -dumpmachine)-"
 echo -e "TARGETARCH=$TARGETARCH"
 
+if [[ -d "$INSTALL_TO" ]]; then
+	OLD_INSTALL_TO="backup-${INSTALL_TO##*/}-$(date -r "$INSTALL_TO" +"%Y-%m-%dT%H-%M-%S")"
+	echo -e "${cW}NOTE:${cZ} $INSTALL_TO exists, renaming it to $OLD_INSTALL_TO."
+	mv "$INSTALL_TO" "${INSTALL_TO%/*}/$OLD_INSTALL_TO" || { echo -e "${cR}ERROR:${cZ} failed to move $INSTALL_TO out of the way."; exit 1; }
+fi
 # --bindir=DIR            user executables [EPREFIX/bin]
 # --libdir=DIR            library files for the linker [PREFIX/lib]
 # --includedir=DIR        include files for the C compiler [PREFIX/include]
 # --syslibdir=DIR         location for the dynamic linker [/lib]
 for tgt in ${TARGETARCH//,/ }; do
-	echo -e "${cW}$tgt${cZ}"
-	((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cleaning extraneous files from Git clone."
+	echo -e "Now building for target ${cW}$tgt${cZ}"
+	((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
 	( cd "$CACHEDIR/$PRJNAME" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
 	case "$tgt" in
 	i?86|x86_32) # 32-bit Intel/AMD
+		ARCHARG="-m32"
 		( \
 			PREFIX="$INSTALL_TO" ; \
 			BITNESS="32" ; \
 			{ ((SPECIALSPEC)) && { DIRS="--bindir=$PREFIX/bin$BITNESS --libdir=$PREFIX/lib$BITNESS --includedir=$PREFIX/include$BITNESS"; rm -rf "$PREFIX/"{bin,lib,include}$BITNESS; true ; } || { rm -rf "$PREFIX/"{bin,lib,include}; true; } ; } ; \
 			cd "$CACHEDIR/$PRJNAME" && \
 			make distclean && \
-			( set -x; env CFLAGS=-m$BITNESS ./configure --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
+			( set -x; env CROSS_COMPILE="$CROSS_COMPILE" CFLAGS="-m$BITNESS -Wl,-melf_i386" ${DBGCONFIGURE}./configure --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
 			cp config.mak "../${tgt}-config.mak" && \
 			make -j $PM && \
 			make install \
 			)
 		;;
 	x86_64) # 64-bit Intel/AMD
+		ARCHARG="-m64"
 		( \
 			PREFIX="$INSTALL_TO" ; \
 			BITNESS="64" ; \
 			{ ((SPECIALSPEC)) && { DIRS="--bindir=$PREFIX/bin$BITNESS --libdir=$PREFIX/lib$BITNESS --includedir=$PREFIX/include$BITNESS"; rm -rf "$PREFIX/"{bin,lib,include}$BITNESS; true ; } || { rm -rf "$PREFIX/"{bin,lib,include}; true; } ; } ; \
 			cd "$CACHEDIR/$PRJNAME" && \
 			make distclean && \
-			( set -x; env CFLAGS=-m$BITNESS ./configure --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
+			( set -x; env CROSS_COMPILE="$CROSS_COMPILE" CFLAGS="-m$BITNESS -Wl,-melf_x86_64" ${DBGCONFIGURE}./configure --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
 			cp config.mak "../${tgt}-config.mak" && \
 			make -j $PM && \
 			make install \
@@ -148,7 +171,7 @@ for tgt in ${TARGETARCH//,/ }; do
 		( \
 			cd "$CACHEDIR/$PRJNAME" && \
 			make distclean && \
-			./configure --prefix="$INSTALL_TO" --disable-shared && \
+			(set -x; ${DBGCONFIGURE}./configure --prefix="$INSTALL_TO" --disable-shared ) && \
 			cp config.mak "../${tgt}-config.mak" && \
 			make -j $PM && \
 			make install \
@@ -157,5 +180,105 @@ for tgt in ${TARGETARCH//,/ }; do
 	esac
 done
 
+function test_musl_wrapper
+{
+	local HELLOC=$(tempfile -p musl-test -s .c)
+	local MUSLGCC="$1"
+	shift
+	echo -e "${cW}INFO:${cZ} Let's verify that the musl-gcc wrapper script and .specs performs as expected"
+	cat > "$HELLOC" <<-'EOF'
+		#include <stdio.h>
+		void main(void)
+		{
+			printf("Hello world!\n");
+		}
+EOF
+	for i in "$@"; do
+		if [[ -z "$i" ]]; then
+			( set -x; $MUSLGCC "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the native build."; exit 1; }
+		else
+			( set -x; $MUSLGCC $i "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the $i build."; exit 1; }
+		fi
+		file "${HELLOC%.c}"
+		rm -f "${HELLOC%.c}"
+	done
+	echo -e "${cG}musl-gcc works fine${cZ}"
+}
+
+MUSLGCC="$INSTALL_TO/musl-gcc"
+echo -e "${cW}INFO:${cZ} Preparing spec file for musl-gcc to build both 32-bit and 64-bit targets using -m32 and -m64 respectively"
+if [[ -n "$TARGETGIVEN" ]] && [[ -n "$ARCHARG" ]]; then
+	ARCHARG=" $ARCHARG"
+else
+	ARCHARG=""
+fi
+cat > "${MUSLGCC}.specs" <<-EOF
+	%rename cpp_options old_cpp_options
+
+	*path_lib32:
+	$INSTALL_TO/lib32
+
+	*path_inc32:
+	$INSTALL_TO/include32
+
+	*path_lib64:
+	$INSTALL_TO/lib64
+
+	*path_inc64:
+	$INSTALL_TO/include64
+
+	*cpp_options:
+	-nostdinc -isystem %{m32:%(path_inc32)}%{!m32:%(path_inc64)} -isystem include%s %(old_cpp_options)
+
+	*cc1:
+	%(cc1_cpu) -nostdinc -isystem %{m32:%(path_inc32)}%{!m32:%(path_inc64)} -isystem include%s
+
+	*link_libgcc:
+	-L%{m32:%(path_lib32)}%{!m32:%(path_lib64)} -L .%s
+
+	*libgcc:
+	libgcc.a%s %:if-exists(libgcc_eh.a%s)
+
+	*startfile:
+	%{!shared: %{m32:%(path_lib32)}%{!m32:%(path_lib64)}/%{pie:S}crt1.o} %{m32:%(path_lib32)}%{!m32:%(path_lib64)}/crti.o %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}
+
+	*endfile:
+	%{shared|pie:crtendS.o%s;:crtend.o%s} %{m32:%(path_lib32)}%{!m32:%(path_lib64)}/crtn.o
+
+	*link:
+	-dynamic-linker /lib/ld-musl-%{m32:i386}%{!m32:x86_64}.so.1 -nostdlib %{shared:-shared} %{static:-static} %{rdynamic:-export-dynamic} %{!m32:-melf_x86_64}%{m32:-melf_i386}
+
+	*esp_link:
+
+
+	*esp_options:
+
+
+	*esp_cpp_options:
+
+
+EOF
+[[ -f "${MUSLGCC}.specs" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc.specs file"; exit 1; }
+cat > "$MUSLGCC" <<-EOF
+	#!/usr/bin/env bash
+	exec "\${REALGCC:-gcc}" "\$@" -specs "\${0}.specs"$ARCHARG
+EOF
+[[ -f "$MUSLGCC" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc wrapper script"; exit 1; }
+chmod +x "$MUSLGCC" || { echo -e "${cR}ERROR:${cZ} failed to make musl-gcc executable."; exit 1; }
+if ((SPECIALSPEC)); then
+	test_musl_wrapper "$MUSLGCC" "" "-m32" "-m64"
+else
+	for i in 32 64; do
+		(cd "$INSTALL_TO" && ln -s include include$i)
+		(cd "$INSTALL_TO" && ln -s lib lib$i)
+	done
+	test_musl_wrapper "$MUSLGCC" ""
+fi
+rm -f "$INSTALL_TO"/lib*/*.specs "$INSTALL_TO/bin/musl-gcc" && rmdir "$INSTALL_TO/bin"
+
+echo -e "${cW}NOTE:${cZ} it is recommended to add $INSTALL_TO to your ${cW}PATH${cZ} variable and subsequently pass ${cW}CC=musl-gcc${cZ} to make."
+if [[ -n "$OLD_INSTALL_TO" ]]; then
+	echo -e "Also remember that your previous musl-libc installation was moved to ${INSTALL_TO%/*}/${OLD_INSTALL_TO}. Remove it at your own discretion."
+fi
 let TIME_END=$(date +%s)
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
