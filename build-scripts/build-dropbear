@@ -184,4 +184,6 @@ echo -e "Configuring and building ${cW}dropbear${cZ}"
 ) || { echo -e "${cR}ERROR:${cZ} dropbear failed to build."; exit 1; }
 # Cleanup took place by the traps in the subshell already by this time, so simply remove the traps in the parent shell
 trap - INT TERM EXIT
+let TIME_END=$(date +%s)
+show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
