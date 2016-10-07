@@ -3,6 +3,7 @@
 for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
+LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 MUSLLIBC_RELEASE="v1.1.15"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl}
@@ -104,6 +105,11 @@ while getopts "h?t:i:vV:" opt; do
 		;;
 	esac
 done
+if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
+	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE")" >&2
+	exit 1
+fi
+trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 echo -e "Working directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
@@ -132,11 +138,10 @@ if [[ -d "$INSTALL_TO" ]]; then
 	OLD_INSTALL_TO="backup-${INSTALL_TO##*/}-$(date -r "$INSTALL_TO" +"%Y-%m-%dT%H-%M-%S")"
 	echo -e "${cW}NOTE:${cZ} $INSTALL_TO exists, renaming it to $OLD_INSTALL_TO."
 	mv "$INSTALL_TO" "${INSTALL_TO%/*}/$OLD_INSTALL_TO" || { echo -e "${cR}ERROR:${cZ} failed to move $INSTALL_TO out of the way."; exit 1; }
+	trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Moving back your previous musl-libc from '$OLD_INSTALL_TO' due to signal"; rm -rf "'$INSTALL_TO'"; mv "'${INSTALL_TO%/*}/$OLD_INSTALL_TO'" "'$INSTALL_TO'";  echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'" "'$BUILDDIR'32" "'$BUILDDIR'64"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+else
+	trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'" "'$BUILDDIR'32" "'$BUILDDIR'64"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 fi
-# --bindir=DIR            user executables [EPREFIX/bin]
-# --libdir=DIR            library files for the linker [PREFIX/lib]
-# --includedir=DIR        include files for the C compiler [PREFIX/include]
-# --syslibdir=DIR         location for the dynamic linker [/lib]
 for tgt in ${TARGETARCH//,/ }; do
 	echo -e "Now building for target ${cW}$tgt${cZ}"
 	((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
@@ -153,7 +158,6 @@ for tgt in ${TARGETARCH//,/ }; do
 			make --no-print-directory distclean && \
 			( rm -rf "$BLDDIR"; mkdir -p "$BLDDIR"; true ) && \
 			( cd "$BLDDIR"; set -x; env CROSS_COMPILE="$CROSS_COMPILE" CFLAGS="-m$BITNESS -Wl,-melf_i386" ${DBGCONFIGURE}$PRJSRCDIR/configure --srcdir="$PRJSRCDIR" --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
-			cp "$BLDDIR/config.mak" "../${tgt}-config.mak" && \
 			make --no-print-directory -C "$BLDDIR" -j$PM && \
 			make --no-print-directory -C "$BLDDIR" install \
 			)
@@ -169,7 +173,6 @@ for tgt in ${TARGETARCH//,/ }; do
 			make distclean && \
 			( rm -rf "$BLDDIR"; mkdir -p "$BLDDIR"; true ) && \
 			( cd "$BLDDIR"; set -x; env CROSS_COMPILE="$CROSS_COMPILE" CFLAGS="-m$BITNESS -Wl,-melf_x86_64" ${DBGCONFIGURE}$PRJSRCDIR/configure --srcdir="$PRJSRCDIR" --prefix="$PREFIX" $(echo "$DIRS ")--disable-shared --target="${tgt}-${TARGETDUPL}" ) && \
-			cp "$BLDDIR/config.mak" "../${tgt}-config.mak" && \
 			make --no-print-directory -C "$BLDDIR" -j$PM && \
 			make --no-print-directory -C "$BLDDIR" install \
 			)
@@ -181,7 +184,6 @@ for tgt in ${TARGETARCH//,/ }; do
 			make --no-print-directory distclean && \
 			( rm -rf "$BLDDIR"; mkdir -p "$BLDDIR"; true ) && \
 			(cd "$BLDDIR"; set -x; ${DBGCONFIGURE}$PRJSRCDIR/configure --srcdir="$PRJSRCDIR" --prefix="$INSTALL_TO" --disable-shared ) && \
-			cp "$BLDDIR/config.mak" "../${tgt}-config.mak" && \
 			make --no-print-directory -C "$BLDDIR" -j$PM && \
 			make --no-print-directory -C "$BLDDIR" install \
 			)
@@ -283,8 +285,9 @@ else
 	done
 	test_musl_wrapper "$MUSLGCC" ""
 fi
-rm -f "$INSTALL_TO"/lib*/*.specs "$INSTALL_TO/bin/musl-gcc" && rmdir "$INSTALL_TO/bin"
+rm -f "$INSTALL_TO"/lib*/*.specs "$INSTALL_TO/bin/musl-gcc" && { test -d "$INSTALL_TO/bin" && rmdir "$INSTALL_TO/bin"; }
 
+trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'" "'$BUILDDIR'32" "'$BUILDDIR'64"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 echo -e "${cW}NOTE:${cZ} it is recommended to add $INSTALL_TO to your ${cW}PATH${cZ} variable and subsequently pass ${cW}CC=musl-gcc${cZ} to make."
 if [[ -n "$OLD_INSTALL_TO" ]]; then
 	echo -e "Also remember that your previous musl-libc installation was moved to ${INSTALL_TO%/*}/${OLD_INSTALL_TO}. Remove it at your own discretion."

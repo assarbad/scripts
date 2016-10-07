@@ -3,6 +3,7 @@
 for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc wget tar md5sum sed autoconf autoheader; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
+LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.8.tar.gz"
 ZLIBMD5="44d667c142d7cda120332623eab69f40"
@@ -97,6 +98,11 @@ while getopts "h?i:vV:" opt; do
 		;;
 	esac
 done
+if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
+	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE")" >&2
+	exit 1
+fi
+trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 echo -e "Working directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
@@ -124,6 +130,7 @@ else
 	wget -nc -O "$ZLIBPKG" "$ZLIBURL" || curl -o "$ZLIBPKG" "$ZLIBURL" || { echo -e "${cR}ERROR:${cZ} failed to download $ZLIBURL"; exit 1; }
 fi
 echo "$ZLIBMD5  $ZLIBPKG"|md5sum -c ||  { echo -e "${cR}ERROR:${cZ} MD5 hash does not match!"; exit 1; }
+trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 ( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR/zlib" )
 if echo -n "... unpacking zlib" && tar --strip-components=1 -C "$BUILDDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$BUILDDIR/zlib/tempinstall"; then
 	echo -e " ${cG}[OK]${cZ}"
@@ -140,8 +147,8 @@ echo -e "Configuring and building ${cW}zlib${cZ}"
 (
 	cd "$BUILDDIR/zlib" && \
 		$DBGCONFIGURE./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
-		make -j $PM && \
-		make install
+		make --no-print-directory -C "$BUILDDIR/zlib" -j $PM && \
+		make --no-print-directory -C "$BUILDDIR/zlib" install
 ) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
 ((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
 ( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
@@ -163,26 +170,18 @@ echo -e "Configuring and building ${cW}dropbear${cZ}"
 			--enable-bundled-libtom \
 			CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
 			&& \
-		make -j $PM \
+		make --no-print-directory -C "$BUILDDIR" -j $PM \
 			PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" \
 			MULTI=1 \
 			STATIC=1 \
 			SCPPROGRESS=1 \
 			all strip \
 			&& \
-		DBVER="$(./dropbearmulti 2>&1|grep -oE 'v[[:digit:]]+\.[[:digit:]]+'||echo -n 'unknown')" && \
-		tar -czvf "$CURRABSPATH/dropbear-$DBVER-static.tgz" $(find -maxdepth 1 -type l) dropbearmulti
+		TARFILE="$CURRABSPATH/dropbear-v${DROPBEAR_RELEASE##*_}-static.tgz" && \
+		trap 'rm -f "$LOCKFILE" "$TARFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+		tar -czvf "$TARFILE" $(find -maxdepth 1 -type l) dropbearmulti && \
+		trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 ) || { echo -e "${cR}ERROR:${cZ} dropbear failed to build."; exit 1; }
-
-
-
-
-
-
+# Cleanup took place by the traps in the subshell already by this time, so simply remove the traps in the parent shell
+trap - INT TERM EXIT
 exit 0
-		echo '#pragma message "linux/types.h"' >> "$BUILDDIR/linux/types.h" && \
-			echo '#pragma message "linux/pkt_sched"' >> "$BUILDDIR/linux/pkt_sched.h" && \
-	export CC="$CC -nostdinc -isystem $HOME/bin/musl/include64 -isystem /usr/include"
-			CC="$CC -isystem '$BUILDDIR'" \
-			CFLAGS="$CFLAGS -v" \
-		touch $BUILDDIR/linux/types.h && \
