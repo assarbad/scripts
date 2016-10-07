@@ -139,18 +139,38 @@ export CFLAGS="-ffunction-sections -fdata-sections"
 echo -e "Configuring and building ${cW}zlib${cZ}"
 (
 	cd "$BUILDDIR/zlib" && \
-		./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
-		make -j 8 && \
+		$DBGCONFIGURE./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
+		make -j $PM && \
 		make install
 ) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
+((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
+( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
+( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
 echo -e "Configuring and building ${cW}dropbear${cZ}"
 (
 	cd "$PRJSRCDIR" && \
 		autoconf && autoheader && \
 	cd "$BUILDDIR" && \
-		$PRJSRCDIR/configure "--with-zlib=$BUILDDIR/zlib/tempinstall" --disable-syslog --disable-lastlog --without-pam --enable-bundled-libtom && \
-		make -j8 PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" MULTI=1 STATIC=1 SCPPROGRESS=1 strip && \
-		DBVER=$(./dropbearmulti 2>&1|grep -oE 'v[[:digit:]]+\.[[:digit:]]+'||echo -n 'unknown')
+		mkdir $BUILDDIR/linux && \
+		touch "$BUILDDIR/linux/types.h" && \
+		grep -E '(__LINUX_PKT_SCHED_H|#define TC_PRIO_)' /usr/include/linux/pkt_sched.h > $BUILDDIR/linux/pkt_sched.h && \
+			echo '#endif' >> "$BUILDDIR/linux/pkt_sched.h" && \
+		$DBGCONFIGURE $PRJSRCDIR/configure \
+			"--with-zlib=$BUILDDIR/zlib/tempinstall" \
+			--disable-syslog \
+			--disable-lastlog \
+			--without-pam \
+			--enable-bundled-libtom \
+			CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
+			&& \
+		make -j $PM \
+			PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" \
+			MULTI=1 \
+			STATIC=1 \
+			SCPPROGRESS=1 \
+			all strip \
+			&& \
+		DBVER="$(./dropbearmulti 2>&1|grep -oE 'v[[:digit:]]+\.[[:digit:]]+'||echo -n 'unknown')" && \
 		tar -czvf "$CURRABSPATH/dropbear-$DBVER-static.tgz" $(find -maxdepth 1 -type l) dropbearmulti
 ) || { echo -e "${cR}ERROR:${cZ} dropbear failed to build."; exit 1; }
 
@@ -160,4 +180,9 @@ echo -e "Configuring and building ${cW}dropbear${cZ}"
 
 
 exit 0
-		sed -i 's|ifdef SO_PRIORITY|#ifdef SO_PRIORITY\n#undef SO_PRIORITY\n#endif\nif 0|g' $PRJSRCDIR/includes.h && \
+		echo '#pragma message "linux/types.h"' >> "$BUILDDIR/linux/types.h" && \
+			echo '#pragma message "linux/pkt_sched"' >> "$BUILDDIR/linux/pkt_sched.h" && \
+	export CC="$CC -nostdinc -isystem $HOME/bin/musl/include64 -isystem /usr/include"
+			CC="$CC -isystem '$BUILDDIR'" \
+			CFLAGS="$CFLAGS -v" \
+		touch $BUILDDIR/linux/types.h && \
