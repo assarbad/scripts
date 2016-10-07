@@ -6,7 +6,6 @@
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="${LLVM_RELEASE:-release_36}"
 LIBCXXRT_RELEASE="${LIBCXXRT_RELEASE:-stable}"
-MUSLLIBC_RELEASE="${MUSLLIBC_RELEASE:-v1.1.11}"
 BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_24}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -41,7 +40,7 @@ function show_help
 	echo -e "\t${cW}-i${cZ}"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
 	echo -e "\t${cW}-O${cZ}"
-	echo -e "\t  Do not build 'optional' components (i.e. musl + binutils)."
+	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
 	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tgz file."
 	echo -e "\t${cW}-r${cZ}"
@@ -166,7 +165,6 @@ done
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing third-party projects."
 prepare_src "llvm/projects/libcxxrt:git clone https://github.com/pathscale/libcxxrt" "$LIBCXXRT_RELEASE"
 if ((NOOPTIONAL == 0)); then
-	prepare_src "3rdparty/musl:git clone git://git.musl-libc.org/musl" "$MUSLLIBC_RELEASE"
 	prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
 fi
 let TIME_GIT=$(date +%s)
@@ -205,7 +203,7 @@ if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 fi
 if ((PACKAGEGITGZ==1)); then
 	TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
-	TARNAME="packaged-${TIMESTAMP}-LLVM+musl+binutils.tbz"
+	TARNAME="packaged-${TIMESTAMP}-LLVM+binutils.tbz"
 	UNPACKER="unpack-$TIMESTAMP-LLVM"
 	echo "Packaging the source into $TARNAME"
 	(
