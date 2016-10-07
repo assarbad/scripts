@@ -31,7 +31,7 @@ else
 	echo "$CURRABSPATH"
 	REV0=0
 	REVNO=$(svn info "file://$CURRABSPATH"|awk '/^Revision:/ {print $2}')
-	REV1000=$((REVNO%1000))
+	REV1000=$((REVNO%10000))
 	REVNO=$((REVNO-REV1000))
 	FNAME="${1//REVNO/rev${REV0}_to_${REVNO}}"
 	[[ "${FNAME##*/}" == "$FNAME" ]] && FNAME="./$FNAME"
