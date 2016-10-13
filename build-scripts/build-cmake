@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-PATH=.:$PATH
-for tool in build-musl rm rmdir dirname readlink file tempfile grep tee git date make gcc wget tar md5sum autoconf autoheader; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-ZLIBURL="http://zlib.net/zlib-1.2.8.tar.gz"
-ZLIBMD5="44d667c142d7cda120332623eab69f40"
-DROPBEAR_RELEASE="DROPBEAR_2016.74"
-INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
+CMAKE_RELEASE="v3.6.2"
+INSTALL_TO=${INSTALL_TO:-$HOME/bin/cmake}
 BASEDIR="${BASEDIR:-$(pwd)}"
 CACHEDIR="$BASEDIR/cache"
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-i <install-dir>] [-v] [-V <dropbear-release-tag>]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-i <install-dir>] [-v] [-V <cmake-release-tag>]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
 	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
-	echo -e "\t${cW}-V${cZ} <dropbear-release-tag> ${cY}(if not given defaults to: $DROPBEAR_RELEASE)${cZ}"
+	echo -e "\t${cW}-V${cZ} <cmake-release-tag> ${cY}(if not given defaults to: $CMAKE_RELEASE)${cZ}"
 	echo -e "\t  Tag to build instead of hardcoded default."
 	echo ""
 }
@@ -92,7 +89,7 @@ while getopts "h?i:vV:" opt; do
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
 	V)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
-		DROPBEAR_RELEASE="$OPTARG"
+		MUSLLIBC_RELEASE="$OPTARG"
 		;;
 	*)
 		echo -e "${cY}WARNING:${cZ} unknown option '$opt'"
@@ -108,83 +105,25 @@ echo -e "Working directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
 let TIME_START=$(date +%s)
-PRJNAME="dropbear"
+PRJNAME="cmake"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-prepare_src "$PRJNAME:git clone https://github.com/mkj/dropbear.git" "$DROPBEAR_RELEASE"
+prepare_src "$PRJNAME:git clone https://cmake.org/cmake.git" "$CMAKE_RELEASE"
 
-# Build musl-libc if not yet available
-MUSLGCC="$HOME/bin/musl/musl-gcc"
-if type "$MUSLGCC" > /dev/null 2>&1; then
-	( echo -e "${cW}${MUSLGCC##*/} already exists${cZ}" )
-else
-	( echo -e "${cW}Building ${MUSLGCC##*/} now${cZ}"; cd "$CURRABSPATH" && build-musl -t $(gcc -dumpmachine) ) || { echo -e "${cR}ERROR:${cZ} failed to build musl and there is no musl-gcc available."; exit 1; }
-fi
-PATH=${MUSLGCC%/*}:$PATH
-SRCTARBALLDIR="$CACHEDIR/source-tarballs"
-[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
-ZLIBPKG="$SRCTARBALLDIR/${ZLIBURL##*/}"
-if [[ -f "$ZLIBPKG" ]]; then
-	echo -e "${cW}${ZLIBURL##*/} already downloaded, using cached copy${cZ}"
-else
-	wget -nc -O "$ZLIBPKG" "$ZLIBURL" || curl -o "$ZLIBPKG" "$ZLIBURL" || { echo -e "${cR}ERROR:${cZ} failed to download $ZLIBURL"; exit 1; }
-fi
-echo "$ZLIBMD5  $ZLIBPKG"|md5sum -c ||  { echo -e "${cR}ERROR:${cZ} MD5 hash does not match!"; exit 1; }
 trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
-( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR/zlib" )
-if echo -n "... unpacking zlib" && tar --strip-components=1 -C "$BUILDDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$BUILDDIR/zlib/tempinstall"; then
-	echo -e " ${cG}[OK]${cZ}"
-else
-	echo -e " ${cR}[failed]${cZ}"
-	exit 1
-fi
-# Configure GCC for our purpose
-export CC="musl-gcc"
-export LDFLAGS="-Wl,--gc-sections"
-export CFLAGS="-ffunction-sections -fdata-sections"
-# proceed ...
-echo -e "Configuring and building ${cW}zlib${cZ}"
-(
-	cd "$BUILDDIR/zlib" && \
-		$DBGCONFIGURE./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
-		make --no-print-directory -C "$BUILDDIR/zlib" -j $PM && \
-		make --no-print-directory -C "$BUILDDIR/zlib" install
-) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
+( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR" )
 ((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
 ( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
 ( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
 echo -e "Configuring and building ${cW}$PRJ${cZ}"
 (
-	cd "$PRJSRCDIR" && \
-		autoconf && autoheader && \
 	cd "$BUILDDIR" && \
-		mkdir $BUILDDIR/linux && \
-		touch "$BUILDDIR/linux/types.h" && \
-		grep -E '(__LINUX_PKT_SCHED_H|#define TC_PRIO_)' /usr/include/linux/pkt_sched.h > $BUILDDIR/linux/pkt_sched.h && \
-			echo '#endif' >> "$BUILDDIR/linux/pkt_sched.h" && \
-		$DBGCONFIGURE $PRJSRCDIR/configure \
-			"--with-zlib=$BUILDDIR/zlib/tempinstall" \
-			--disable-syslog \
-			--disable-lastlog \
-			--without-pam \
-			--enable-bundled-libtom \
-			CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
-			&& \
-		make --no-print-directory -C "$BUILDDIR" -j $PM \
-			PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" \
-			MULTI=1 \
-			STATIC=1 \
-			SCPPROGRESS=1 \
-			all strip \
-			&& \
-		TARFILE="$CURRABSPATH/dropbear-v${DROPBEAR_RELEASE##*_}-static.tgz" && \
-		trap 'rm -f "$LOCKFILE" "$TARFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
-		tar -czvf "$TARFILE" $(find -maxdepth 1 -type l) dropbearmulti && \
-		trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+		$DBGCONFIGURE"$PRJSRCDIR/bootstrap" --no-qt-gui --no-system-libs --prefix="$INSTALL_TO" --parallel=$PM && \
+		make --no-print-directory -C "$BUILDDIR" -j$PM && \
+		make --no-print-directory -C "$BUILDDIR" install
 ) || { echo -e "${cR}ERROR:${cZ} $PRJ failed to build."; exit 1; }
-# Cleanup took place by the traps in the subshell already by this time, so simply remove the traps in the parent shell
-trap - INT TERM EXIT
+exit 0
 let TIME_END=$(date +%s)
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
