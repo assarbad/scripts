@@ -97,7 +97,7 @@ while getopts "h?i:vV:" opt; do
 	esac
 done
 if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
-	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE")" >&2
+	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE") [$LOCKFILE]" >&2
 	exit 1
 fi
 trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
