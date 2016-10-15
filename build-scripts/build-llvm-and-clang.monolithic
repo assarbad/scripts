@@ -180,7 +180,7 @@ if ((${LLVM_RELEASE##*_} > 36)); then
 				expand_payload "$PAYLOAD" "$BUILDCMAKE"
 				[[ -x "$BUILDCMAKE" ]] || { echo -e "${cR}ERROR:${cZ} the ${BUILDCMAKE##*/} is either not bundled or failed to unpack."; exit 1; }
 			fi
-			( echo -e "${cW}Building ${CMAKE##*/} now${cZ}"; cd "${BUILDCMAKE%/*}" && ./${BUILDCMAKE##*/} -t $(gcc -dumpmachine) ) || { echo -e "${cR}ERROR:${cZ} failed to build cmake."; exit 1; }
+			( echo -e "${cW}Building ${CMAKE##*/} now${cZ}"; cd "${BUILDCMAKE%/*}" && ./${BUILDCMAKE##*/} ) || { echo -e "${cR}ERROR:${cZ} failed to build cmake."; exit 1; }
 		fi
 		PATH=${CMAKE%/*}:$PATH
 		for tool in cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
