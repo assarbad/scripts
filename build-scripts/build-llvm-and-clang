@@ -183,7 +183,7 @@ if ((${LLVM_RELEASE##*_} > 36)); then
 			( echo -e "${cW}Building ${CMAKE##*/} now${cZ}"; cd "${BUILDCMAKE%/*}" && ./${BUILDCMAKE##*/} ) || { echo -e "${cR}ERROR:${cZ} failed to build cmake."; exit 1; }
 		fi
 		PATH=${CMAKE%/*}:$PATH
-		for tool in cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+		for tool in cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script with newer LLVM/Clang releases."; exit 1; }; done
 		let CMAKE_BUILD=1
 	fi
 	TARGETS="Native"
@@ -194,6 +194,7 @@ else
 	fi
 	TARGETS="x86,x86_64"
 fi
+
 echo -e "\tWorking directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
@@ -206,6 +207,7 @@ done
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing third-party projects."
 if ((NOOPTIONAL == 0)); then
 	prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
+	for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; exit 1; }; done
 fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
