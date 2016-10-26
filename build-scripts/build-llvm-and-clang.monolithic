@@ -265,10 +265,12 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		show_time_diff $TIME_GIT $TIME_CONFIGURE    "CMake       took:    %s"
 	else
 		show_time_diff $TIME_GIT $TIME_CONFIGURE    "./configure took:    %s"
+		show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
 	fi
-	show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
 	show_time_diff $TIME_MAKE $TIME_INSTALL     "Installation took:   %s"
-	show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
+	if ((NOOPTIONAL == 0)); then
+		show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
+	fi
 fi
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
