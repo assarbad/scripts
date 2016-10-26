@@ -1,4 +1,5 @@
 #!/bin/bash
+# APT hook (/etc/apt/apt.conf.d/): DPkg::Post-Invoke { "if [ -x /usr/local/bin/save-pkgstates ]; then save-pkgstates; fi"; };
 # CRONTAB: 29   * *   *   *     /usr/bin/sudo /usr/local/bin/save-pkgstates
 for tool in rm dirname readlink mkdir file dpkg apt-mark; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
