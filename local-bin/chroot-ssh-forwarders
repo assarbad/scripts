@@ -15,6 +15,7 @@ VARIANT=minbase
 DEBARCHIVE_URL="http://localhost:3142/de.archive.ubuntu.com/ubuntu/"
 USERS=$(getent group ssh-forwarders)
 USERS=${USERS##*:}
+USERS=${2:-$USERS}
 
 # Prepare the base chroot
 BASECHROOT="$CHROOTDIR/.basedir"
@@ -64,7 +65,7 @@ for user in ${USERS//,/ }; do
 			# Check that it's not mounted
 			if ! findmnt -mT "$CHROOTUSRDIR" | grep -q "^$CHROOTUSRDIR"; then
 				[[ -d "$lowerdir" ]]            || { echo -e "${cR}ERROR:${cZ} lowerdir for $user does not exist ($lowerdir)."; exit 1; }
-				[[ -e "$lowerdir/.installed" ]] || { echo -e "${cR}ERROR:${cZ} lowerdir for $user does not appear to contain a bootstapped system ($lowerdir/.installed)."; exit 1; }
+				[[ -e "$lowerdir/.installed" ]] || { echo -e "${cR}ERROR:${cZ} lowerdir for $user does not appear to contain a bootstrapped system ($lowerdir/.installed)."; exit 1; }
 				[[ -d "$upperdir" ]]            || { echo -e "${cR}ERROR:${cZ} upperdir for $user does not exist ($upperdir)."; exit 1; }
 				[[ -d "$workdir" ]]             || { echo -e "${cR}ERROR:${cZ} workdir for $user does not exist ($workdir)."; exit 1; }
 				if (set -x; mount "$CHROOTUSRDIR"); then

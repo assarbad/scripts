@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
+from __future__ import print_function
 __author__ = "Oliver Schneider"
 #__copyright__ = "Copyright (C) Oliver Schneider (assarbad.net)"
-__copyright__ = "2015 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__copyright__ = "2016 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
 __version__ = "0.1"
 __doc__ = """
 =========
@@ -13,8 +14,8 @@ __doc__ = """
 import os, sys
 
 # Checking for compatibility with Python version
-if (sys.version_info[0] != 2) or (sys.version_info < (2,6)):
-	sys.exit("This script requires Python version 2.6 or better from the 2.x branch of Python.")
+if (sys.version_info < (2,7)):
+	sys.exit("This script requires Python version 2.7 or better.")
 
 # Don't create .pyc or .pyo files
 sys.dont_write_bytecode = True
@@ -24,6 +25,7 @@ sys.dont_write_bytecode = True
 
 def parse_args():
 	""" """
+	from argparse import ArgumentParser
 	parser = ArgumentParser(description='PROGRAM')
 	parser.add_argument('--nologo', action='store_const', dest='nologo', const=True,
 			help='Don\'t show info about this script.')
@@ -44,5 +46,5 @@ if __name__ == '__main__':
 	except RuntimeError:
 		raise # re-raise
 	except:
-		print __doc__
+		print(__doc__)
 		raise # re-raise
