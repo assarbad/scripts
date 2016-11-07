@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 noexpandtab:
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 __author__ = "Oliver Schneider"
 #__copyright__ = "Copyright (C) Oliver Schneider (assarbad.net)"
 __copyright__ = "2016 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
