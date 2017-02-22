@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in readlink rm rmdir grep cut tee tar bzip2 sha1sum git date make cp date gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in readlink rm rmdir grep cut tee tar bzip2 sha1sum git date make cp date gcc find sha256sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
@@ -207,7 +207,9 @@ done
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing third-party projects."
 if ((NOOPTIONAL == 0)); then
 	prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
-	for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; exit 1; }; done
+	if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
+		for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; exit 1; }; done
+	fi
 fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
@@ -271,6 +273,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	if ((NOOPTIONAL == 0)); then
 		show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
 	fi
+	(HASHFILE=$(mktemp); cd "$INSTALL_TO" && find -type f -exec sha256sum {} + > "$HASHFILE" && mv "$HASHFILE" "$INSTALL_TO/SHA256SUMS")
 fi
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
