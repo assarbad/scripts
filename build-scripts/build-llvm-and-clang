@@ -18,6 +18,8 @@ function show_help
 	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O] [-t <targets>] [-v]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
+	echo -e "\t${cW}-b${cZ} <${cW}RelWithDebInfo${cZ}|Release|MinSizeRel|Debug>"
+	echo -e "\t  Pick a build type. This defaults to ${cW}RelWithDebInfo${cZ}."
 	echo -e "\t${cW}-B${cZ}"
 	echo -e "\t  Do not actually build anything, but check out and prepare build directory."
 	echo -e "\t${cW}-c${cZ}"
@@ -30,6 +32,8 @@ function show_help
 	echo -e "\t  Garbage collect aggressively (${cW}git gc --aggressive${cZ}) after checkout."
 	echo -e "\t${cW}-i${cZ}"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
+	echo -e "\t${cW}-n${cZ}"
+	echo -e "\t  Generate ninja files and use ninja to conduct the build."
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
@@ -42,8 +46,14 @@ function show_help
 	echo -e "\t  ${cW}NB:${cZ} to be called from the directory which contains ${MEANDMYSELF}."
 	echo -e "\t${cW}-t${cZ} <targets> (default=Native)"
 	echo -e "\t  Specify the target architectures for LLVM/Clang."
+	echo -e "\t${cW}-T${cZ}"
+	echo -e "\t  Run tests after building, but before installing LLVM and Clang."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
+	echo -e "\t${cW}-x${cZ}"
+	echo -e "\t  Use ${cW}ccache${cZ} to speed up builds."
+	echo -e "\t${cW}-X${cZ}"
+	echo -e "\t  Use ${cW}clang${cZ} to build LLVM and clang (you need a recent clang!)."
 	echo ""
 	echo -e "${cW}NOTE:${cZ} the main difference between ${cW}-c${cZ} and ${cW}-B${cZ} is that ${cW}-B${cZ} will remove an existing"
 	echo -e "      build directory and ${cW}-c${cZ} doesn't touch that at all."
@@ -104,7 +114,7 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-function expand_payload
+function unpack_payload
 {
 	local PAYLOAD="$1"
 	local TARGET="$2"
@@ -121,12 +131,39 @@ function expand_payload
 	fi
 }
 
+function prepare_tool
+{
+	[[ -n "$1" ]] || return
+	local NAME=$1
+	echo -e "${cW}INFO:${cZ} preparing for build using $NAME"
+	# Build the tool if not yet available
+	local TOOLPATH="$HOME/bin/$NAME/bin/$NAME"
+	if type "$TOOLPATH" > /dev/null 2>&1; then
+		( echo -e "${cW}$NAME already exists${cZ}" )
+	else
+		local BUILDTOOL="$CURRABSPATH/build-$NAME"
+		if [[ ! -e "$BUILDTOOL" ]] || ((FORCEPAYLOAD)); then
+			unpack_payload "$PAYLOAD" "$BUILDTOOL"
+			[[ -x "$BUILDTOOL" ]] || { echo -e "${cR}ERROR:${cZ} the ${BUILDTOOL##*/} script is either not bundled or failed to unpack."; exit 1; }
+		fi
+		( echo -e "${cW}Building $NAME now${cZ}"; cd "${BUILDTOOL%/*}" && ./${BUILDTOOL##*/} ) || { echo -e "${cR}ERROR:${cZ} failed to build ${cW}${TOOLPATH##*/}${cZ}."; exit 1; }
+	fi
+	PATH=${TOOLPATH%/*}:$PATH
+	for tool in $NAME; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script with newer LLVM/Clang releases."; exit 1; }; done
+}
+
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?BcCgGi:Oprt:v" opt; do
+while getopts "h?bBcCgGi:nOprt:TvxX" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
 		exit 0
+		;;
+	b)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		BUILD_TYPE="$OPTARG"
+		;;
+	B)  NOBUILD=1
+		echo -e "${cY}Skipping build${cZ}"
 		;;
 	c)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-c${cZ}/${cY}-p${cZ} are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
@@ -136,9 +173,6 @@ while getopts "h?BcCgGi:Oprt:v" opt; do
 		NOCHECKOUT=1
 		echo -e "${cY}Skipping checkout${cZ}"
 		;;
-	B)  NOBUILD=1
-		echo -e "${cY}Skipping build${cZ}"
-		;;
 	g)  GARBAGECOLLECT=1
 		;;
 	G)  GARBAGECOLLECT=1
@@ -146,6 +180,8 @@ while getopts "h?BcCgGi:Oprt:v" opt; do
 		;;
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
+		;;
+	n)  USE_NINJA=1
 		;;
 	O)  NOOPTIONAL=1
 		echo -e "${cY}Skipping build of optional components${cZ}"
@@ -162,28 +198,21 @@ while getopts "h?BcCgGi:Oprt:v" opt; do
 	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
 		[[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		;;
+	T)  RUN_TESTS=1
+		;;
 	v)  VERBOSE=1
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
+	x)  USE_CCACHE=1
+		;;
+	X)  USE_CLANG=1
+		;;
 	esac
 done
+# Newer versions of LLVM & Clang abolished the old './configure && make' in favor of CMake
 if ((${LLVM_RELEASE##*_} > 36)); then
 	if ((ONLYCHECKOUT == 0)); then
-		echo -e "${cW}INFO:${cZ} preparing for build using CMake"
-		# Build CMake if not yet available
-		CMAKE="$HOME/bin/cmake/bin/cmake"
-		if type "$CMAKE" > /dev/null 2>&1; then
-			( echo -e "${cW}${CMAKE##*/} already exists${cZ}" )
-		else
-			BUILDCMAKE="$CURRABSPATH/build-cmake"
-			if [[ ! -e "$BUILDCMAKE" ]] || ((FORCEPAYLOAD)); then
-				expand_payload "$PAYLOAD" "$BUILDCMAKE"
-				[[ -x "$BUILDCMAKE" ]] || { echo -e "${cR}ERROR:${cZ} the ${BUILDCMAKE##*/} is either not bundled or failed to unpack."; exit 1; }
-			fi
-			( echo -e "${cW}Building ${CMAKE##*/} now${cZ}"; cd "${BUILDCMAKE%/*}" && ./${BUILDCMAKE##*/} ) || { echo -e "${cR}ERROR:${cZ} failed to build cmake."; exit 1; }
-		fi
-		PATH=${CMAKE%/*}:$PATH
-		for tool in cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script with newer LLVM/Clang releases."; exit 1; }; done
+		prepare_tool cmake
 		let CMAKE_BUILD=1
 	fi
 	TARGETS="Native"
@@ -193,6 +222,15 @@ else
 		echo -e "${cW}INFO:${cZ} preparing for build using autotools"
 	fi
 	TARGETS="x86,x86_64"
+fi
+# When using CMake we prefer Ninja to GNU make
+if ((CMAKE_BUILD)) && ((USE_NINJA)); then
+	prepare_tool ninja
+	let NINJA_BUILD=1
+	CMAKE_GENERATOR="Ninja"
+else
+	let NINJA_BUILD=0
+	CMAKE_GENERATOR="Unix Makefiles"
 fi
 
 echo -e "\tWorking directory: $BASEDIR"
@@ -211,22 +249,64 @@ if ((NOOPTIONAL == 0)); then
 		for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; exit 1; }; done
 	fi
 fi
+if ((USE_CLANG)); then
+	if type clang > /dev/null 2>&1 && type clang++ > /dev/null 2>&1; then
+		CC="$(which clang)"
+		CXX="$(which clang++)"
+	fi
+	if [[ -z "$CC" ]] || [[ -z "$CXX" ]]; then
+		echo -e "${cR}ERROR:${cZ} couldn't find 'CC=$CC' or 'CXX=$CXX'."
+		exit 1
+	fi
+	CMAKE_C_COMPILER_ID=Clang
+	CMAKE_CXX_COMPILER_ID=Clang
+	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP '^clang version (\d\.)+\d'|grep -oP '(\d\.)+\d$')
+	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP '^clang version (\d\.)+\d'|grep -oP '(\d\.)+\d$')
+	CMAKE_C_STANDARD_COMPUTED_DEFAULT=11
+	CMAKE_CXX_STANDARD_COMPUTED_DEFAULT=11
+else
+	CC="gcc"
+	CXX="g++"
+	CMAKE_C_COMPILER_ID=GNU
+	CMAKE_CXX_COMPILER_ID=GNU
+	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP '(\d\.)+\d$')
+	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP '(\d\.)+\d$')
+	CMAKE_C_STANDARD_COMPUTED_DEFAULT=11
+	CMAKE_CXX_STANDARD_COMPUTED_DEFAULT=11
+fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Doing build for $TARGETS into $INSTALL_TO."
 	if [[ -d "$BASEDIR/build/llvm" ]]; then
 		pushd "$BASEDIR/build/llvm" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
 		if (( CMAKE_BUILD )); then
-			( set -x; cmake ${TRACE:+--trace} -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="$INSTALL_TO" -DLLVM_BUILD_DOCS=OFF -DLLVM_ENABLE_DOXYGEN=OFF -DCMAKE_BUILD_TYPE="Release" -DLLVM_TARGETS_TO_BUILD="${TARGETS//,/;}" "$BASEDIR/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
+			( set -x; cmake ${TRACE:+--trace} -G "$CMAKE_GENERATOR" ${USE_CLANG:+-DCMAKE_C_FLAGS=-Wno-unused-command-line-argument} ${USE_CLANG:+-DCMAKE_CXX_FLAGS=-Wno-unused-command-line-argument} -DCMAKE_C_STANDARD_COMPUTED_DEFAULT="$CMAKE_C_STANDARD_COMPUTED_DEFAULT" -DCMAKE_CXX_STANDARD_COMPUTED_DEFAULT="$CMAKE_CXX_STANDARD_COMPUTED_DEFAULT" -DCMAKE_C_COMPILER_ID="$CMAKE_C_COMPILER_ID" -DCMAKE_CXX_COMPILER_ID="$CMAKE_CXX_COMPILER_ID" -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_COMPILER_VERSION="$CMAKE_C_COMPILER_VERSION" -DCMAKE_CXX_COMPILER_VERSION="$CMAKE_CXX_COMPILER_VERSION" ${USE_CCACHE:+-DCMAKE_C_COMPILER_LAUNCHER=ccache} ${USE_CCACHE:+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache} -DCMAKE_INSTALL_PREFIX="$INSTALL_TO" -DLLVM_BUILD_DOCS=OFF -DLLVM_ENABLE_DOXYGEN=OFF -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DLLVM_TARGETS_TO_BUILD="${TARGETS//,/;}" "$BASEDIR/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
 		else
-			( set -x; "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
+			( set -x; env CC="${USE_CCACHE:+ccache }$CC" CXX="${USE_CCACHE:+ccache }$CXX" "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
 		fi
 		let TIME_CONFIGURE=$(date +%s)
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
+		if ((NINJA_BUILD==0)); then # FIXME/TODO: add options to enable optimizations and disable assertions somehow?!
+			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
+		else
+			( set -x; ninja -j$PM )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja${cZ} failed."; exit 1; }
+		fi
 		let TIME_MAKE=$(date +%s)
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
+		if ((RUN_TESTS)); then
+			if ((NINJA_BUILD==0)); then
+				( set -x; make -j$PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make clang-test${cZ} failed."; exit 1; }
+			else
+				( set -x; ninja -j$PM clang-test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja clang-test${cZ} failed."; exit 1; }
+			fi
+		fi
+		if ((NINJA_BUILD==0)); then
+			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
+		else
+			( set -x; ninja -j$PM install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja install${cZ} failed."; exit 1; }
+		fi
 		popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		let TIME_INSTALL=$(date +%s)
+		unset CC
+		unset CXX
 		if ((NOOPTIONAL == 0)); then
 			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
 			( set -x; CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} (clang) failed."; exit 1; }
