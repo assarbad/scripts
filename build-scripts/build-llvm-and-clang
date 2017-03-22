@@ -5,7 +5,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="${LLVM_RELEASE:-release_39}"
+LLVM_RELEASE="${LLVM_RELEASE:-release_40}"
 BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_27}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -40,7 +40,7 @@ function show_help
 	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tgz file."
 	echo -e "\t${cW}-P${cZ}"
 	echo -e "\t  Use the payload script instead of a pre-existing one in this folder."
-	echo -e "\t  {cW}NOTE:${cZ} normally the payload script is only used if none exists already."
+	echo -e "\t  ${cW}NOTE:${cZ} normally the payload script is only used if none exists already."
 	echo -e "\t${cW}-r${cZ}"
 	echo -e "\t  Revives the repositories previously packaged with ${cW}-p${cZ}. Implies ${cW}-c${cZ}."
 	echo -e "\t  ${cW}NB:${cZ} to be called from the directory which contains ${MEANDMYSELF}."
@@ -339,7 +339,7 @@ if ((PACKAGEGITGZ==1)); then
 			| tee "./$UNPACKER" > /dev/null && chmod +x "./$UNPACKER"
 	)
 	let TIME_TGZ=$(date +%s)
-	show_time_diff $TIME_GIT $TIME_TGZ          "Packaging took:      %s"
+	show_time_diff $TIME_GIT $TIME_TGZ              "Packaging took:      %s"
 fi
 let TIME_END=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
@@ -349,11 +349,11 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		show_time_diff $TIME_GIT $TIME_CONFIGURE    "./configure took:    %s"
 		show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
 	fi
-	show_time_diff $TIME_MAKE $TIME_INSTALL     "Installation took:   %s"
+	show_time_diff $TIME_MAKE $TIME_INSTALL         "Installation took:   %s"
 	if ((NOOPTIONAL == 0)); then
 		show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
 	fi
 	(HASHFILE=$(mktemp); cd "$INSTALL_TO" && find -type f -exec sha256sum {} + > "$HASHFILE" && mv "$HASHFILE" "$INSTALL_TO/SHA256SUMS")
 fi
-show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
+show_time_diff $TIME_START $TIME_END                "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
