@@ -30,7 +30,7 @@ if "%~1" == "" goto :NoFileToSign
 if not "%VCVER_FRIENDLY%" == "" @(
   echo Using %VCVER_FRIENDLY%
 )
-set TIMESTAMPSHA1=/tr "http://timestamp.geotrust.com/tsa"
+set TIMESTAMPSHA1=/tr "http://timestamp.verisign.com/scripts/timstamp.dll"
 set TIMESTAMPSHA2=/tr "http://sha256timestamp.ws.symantec.com/sha256/timestamp" /td sha256 /as
 set IDENTIFIER=/i Symantec%AC%
 if not "%~2" == "" @(
