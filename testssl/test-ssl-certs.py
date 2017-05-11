@@ -191,7 +191,7 @@ class ResultCollector(object):
         msg["From"] = ms.msg_from or "<unknown@localhost>"
         msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp))
         lines = []
-        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s).\n" % (datetime.utcnow(), len(certs), len(wrn), len(err)))
+        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s).\n" % (datetime.datetime.utcnow(), len(certs), len(wrn), len(err)))
         if len(soon):
             lines.append("SOON TO EXPIRE CERTIFICATES (%d):\n" % (len(soon)))
             for hostname, port in soon:
