@@ -37,8 +37,6 @@ def genkey(tree):
         root = tree.getroot()
     else:
         root = tree
-    if root.tag == "root":
-        print(root.tag, file=sys.stderr)
     # <Your_Product_Keys><Product_Key Name= Key= Key_Type= Date_Key_Claimed= /></Your_Product_Keys>
     if root.tag == "Your_Product_Keys":
         for key in root.iter("Product_Key"):
@@ -54,7 +52,7 @@ def genkey(tree):
                         retval["Date"] = tuple([int(x) for x in datestr.split("-")])
                     yield retkey, retval
     # <YourKey><Product_Key Name=><Key ID= Type= ClaimedDate= >$KEY</Key><Product_Key></Your_Product_Keys>
-    elif root.tag[-7:] == "YourKey": # seems, convoluted but takes care of namespace
+    elif root.tag[-7:] == "YourKey" or root.tag == "root": # seems, convoluted but takes care of namespace
         for pdkeys in root.iter("Product_Key"):
             for key in pdkeys.iter("Key"):
                 retkey = key.text
@@ -139,7 +137,7 @@ def dumpkeys(keys):
 def main():
     from StringIO import StringIO
     if len(sys.argv) < 2:
-        sys.exit("Usage: %s <path>" % sys.argv[0])
+        sys.exit("Usage: %s <directory with XML files>" % sys.argv[0])
     p = sys.argv[1]
     if not os.path.exists(p):
         sys.exit("ERROR: %s not found." % p)
