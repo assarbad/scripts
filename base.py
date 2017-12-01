@@ -78,12 +78,12 @@ def parse_args():
 
 def main(**kwargs):
     """ """
-    pass
+    return 0
 
 if __name__ == "__main__":
     args = parse_args()
     try:
-        main(**vars(args))
+        sys.exit(main(**vars(args)))
     except SystemExit:
         pass
     except ImportError:
