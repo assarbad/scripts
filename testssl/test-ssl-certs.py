@@ -130,6 +130,7 @@ class ResultCollector(object):
         self.__expired = []
         self.__soonexpires = []
         self.__mailsettings = None
+        self.__soonest = None
 
     def add_exception(self, hostname, port, text, exc):
         self.__errors.append((hostname, port, "%s\n%s" % (text, exc), ))
@@ -139,6 +140,9 @@ class ResultCollector(object):
 
     def add_warning(self, hostname, port, text):
         self.__warnings.append((hostname, port, text, ))
+
+    def set_soonest(self, soonest):
+        self.__soonest = soonest
 
     @property
     def errors(self):
@@ -185,13 +189,16 @@ class ResultCollector(object):
     def report(self):
         msg = self.__rpt
         assert msg is not None
-        err, wrn, exp, soon, certs = self.__errors, self.__warnings, self.__expired, self.__soonexpires, self.__certs
+        err, wrn, exp, soon, certs, soonest = self.__errors, self.__warnings, self.__expired, self.__soonexpires, self.__certs, self.__soonest
         ms = self.verify_email_settings()
+        soonestDT = dateutil.parser.parse(soonest).replace(tzinfo=None)
+        now = datetime.datetime.utcnow()
+        delta = soonestDT - now
         msg["To"] = ms.msg_to or "<unknown@localhost>"
         msg["From"] = ms.msg_from or "<unknown@localhost>"
-        msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp))
+        msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp), soonest=soonest, soonest_delta=delta)
         lines = []
-        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s).\n" % (datetime.datetime.utcnow(), len(certs), len(wrn), len(err)))
+        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s). Soonest to expire is %s (%s).\n" % (now, len(certs), len(wrn), len(err), soonest, delta))
         if len(soon):
             lines.append("SOON TO EXPIRE CERTIFICATES (%d):\n" % (len(soon)))
             for hostname, port in soon:
@@ -255,6 +262,7 @@ class CertificateExpiryTimes(object):
         ms = res.verify_email_settings()
         soondays = ms.soondays or 7
         certs = OrderedDict()
+        soonest = "9" * 14
         for hostname in cfg.options("hosts"):
             try:
                 ports = tuple([cfg.getint("hosts", hostname)])
@@ -266,6 +274,8 @@ class CertificateExpiryTimes(object):
                     if not cert.hasMatchingSAN():
                         res.add_warning(hostname, port, "No matching Subject Alternative Name, but also not the Common Name for {hostname}:{port}.")
                     validto = dateutil.parser.parse(cert.getValidTo()).replace(tzinfo=None)
+                    if soonest > cert.getValidTo()[:14]:
+                        soonest = cert.getValidTo()[:14]
                     now = datetime.datetime.utcnow()
                     delta = validto - now
                     deltasec = delta.total_seconds()
@@ -276,13 +286,20 @@ class CertificateExpiryTimes(object):
                         res.add_warning(hostname, port, "Certificate for {hostname}:{port} expires on %s (expires in %s)" % (validto, delta))
                         res.add_soonexpires(hostname, port)
                     certs[(hostname, port, )] = cert
+                except socket.gaierror as e:
+                    res.add_exception(hostname, port, "Failed getting address info from name for {hostname}:{port}. See output below.", e)
+                    certs[(hostname, port, )] = None
                 except AssertionError as e:
                     res.add_exception(hostname, port, "Assertion failed during TLS connection attempt to {hostname}:{port}. See output below.", e)
                     certs[(hostname, port, )] = None
                 except OpenSSL.SSL.Error as e:
                     res.add_exception(hostname, port, "OpenSSL reported an error for {hostname}:{port}.", e)
                     certs[(hostname, port, )] = None
+                except RuntimeError as e:
+                    res.add_exception(hostname, port, "Unusual exception caught {hostname}:{port}.", e)
+                    certs[(hostname, port, )] = None
         res.add_certlist(certs)
+        res.set_soonest(soonest)
         return res
 
 if __name__ == "__main__":
