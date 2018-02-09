@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in readlink rm rmdir grep cut tee tar bzip2 sha1sum git date make cp date gcc find sha256sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in readlink rm rmdir grep awk cut tee tar bzip2 sha1sum git date make cp date gcc find sha256sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="${LLVM_RELEASE:-release_40}"
-BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_27}"
+LLVM_RELEASE="${LLVM_RELEASE:-release_60}"
+BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_30}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS="Native"
@@ -223,15 +223,17 @@ else
 	fi
 	TARGETS="x86,x86_64"
 fi
-# When using CMake we prefer Ninja to GNU make
-if ((CMAKE_BUILD)) && ((USE_NINJA)); then
-	prepare_tool ninja
-	let NINJA_BUILD=1
-	CMAKE_GENERATOR="Ninja"
-else
-	let NINJA_BUILD=0
-	CMAKE_GENERATOR="Unix Makefiles"
-fi
+# # When using CMake we prefer Ninja to GNU make
+# if ((CMAKE_BUILD)) && ((USE_NINJA)); then
+# 	prepare_tool ninja
+# 	let NINJA_BUILD=1
+# 	CMAKE_GENERATOR="Ninja"
+# else
+# 	let NINJA_BUILD=0
+# 	CMAKE_GENERATOR="Unix Makefiles"
+# fi
+let NINJA_BUILD=0
+CMAKE_GENERATOR="Unix Makefiles"
 
 echo -e "\tWorking directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
@@ -246,7 +248,7 @@ done
 if ((NOOPTIONAL == 0)); then
 	prepare_src "3rdparty/binutils:git clone git://sourceware.org/git/binutils-gdb.git" "$BINUTILS_RELEASE"
 	if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
-		for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; exit 1; }; done
+		for tool in bison flex makeinfo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script when building optional components."; [[ "$tool" == "makeinfo" ]] && echo -e "Try installing the package ${cW}texinfo${cZ}."; exit 1; }; done
 	fi
 fi
 if ((USE_CLANG)); then
@@ -260,8 +262,8 @@ if ((USE_CLANG)); then
 	fi
 	CMAKE_C_COMPILER_ID=Clang
 	CMAKE_CXX_COMPILER_ID=Clang
-	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP '^clang version (\d\.)+\d'|grep -oP '(\d\.)+\d$')
-	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP '^clang version (\d\.)+\d'|grep -oP '(\d\.)+\d$')
+	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP 'clang version (\d+\.)+\d+'|grep -oP '(\d+\.)+\d+$')
+	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP 'clang version (\d+\.)+\d+'|grep -oP '(\d+\.)+\d+$')
 	CMAKE_C_STANDARD_COMPUTED_DEFAULT=11
 	CMAKE_CXX_STANDARD_COMPUTED_DEFAULT=11
 else
@@ -269,11 +271,13 @@ else
 	CXX="g++"
 	CMAKE_C_COMPILER_ID=GNU
 	CMAKE_CXX_COMPILER_ID=GNU
-	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP '(\d\.)+\d$')
-	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP '(\d\.)+\d$')
+	CMAKE_C_COMPILER_VERSION=$($CC --version|grep -oP '(\d+\.)+\d+(\s+\d+)?$'|awk '{print $1}')
+	CMAKE_CXX_COMPILER_VERSION=$($CXX --version|grep -oP '(\d+\.)+\d+(\s+\d+)?$'|awk '{print $1}')
 	CMAKE_C_STANDARD_COMPUTED_DEFAULT=11
 	CMAKE_CXX_STANDARD_COMPUTED_DEFAULT=11
 fi
+[[ -n "$CMAKE_C_COMPILER_VERSION" ]] || { echo -e "${cR}ERROR:${cZ} CMAKE_C_COMPILER_VERSION is empty."; exit 1; }
+[[ -n "$CMAKE_CXX_COMPILER_VERSION" ]] || { echo -e "${cR}ERROR:${cZ} CMAKE_CXX_COMPILER_VERSION is empty."; exit 1; }
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Doing build for $TARGETS into $INSTALL_TO."
