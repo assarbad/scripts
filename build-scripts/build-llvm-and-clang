@@ -181,8 +181,7 @@ while getopts "h?bBcCgGi:nOprt:TvxX" opt; do
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
 		;;
-	n)  USE_NINJA=1
-		;;
+	n)  ;;
 	O)  NOOPTIONAL=1
 		echo -e "${cY}Skipping build of optional components${cZ}"
 		;;
@@ -223,16 +222,6 @@ else
 	fi
 	TARGETS="x86,x86_64"
 fi
-# # When using CMake we prefer Ninja to GNU make
-# if ((CMAKE_BUILD)) && ((USE_NINJA)); then
-# 	prepare_tool ninja
-# 	let NINJA_BUILD=1
-# 	CMAKE_GENERATOR="Ninja"
-# else
-# 	let NINJA_BUILD=0
-# 	CMAKE_GENERATOR="Unix Makefiles"
-# fi
-let NINJA_BUILD=0
 CMAKE_GENERATOR="Unix Makefiles"
 
 echo -e "\tWorking directory: $BASEDIR"
@@ -289,24 +278,13 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			( set -x; env CC="${USE_CCACHE:+ccache }$CC" CXX="${USE_CCACHE:+ccache }$CXX" "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
 		fi
 		let TIME_CONFIGURE=$(date +%s)
-		if ((NINJA_BUILD==0)); then # FIXME/TODO: add options to enable optimizations and disable assertions somehow?!
-			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
-		else
-			( set -x; ninja -j$PM )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja${cZ} failed."; exit 1; }
-		fi
+		# FIXME/TODO: add options to enable optimizations and disable assertions somehow?!
+		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
 		let TIME_MAKE=$(date +%s)
 		if ((RUN_TESTS)); then
-			if ((NINJA_BUILD==0)); then
-				( set -x; make -j$PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make clang-test${cZ} failed."; exit 1; }
-			else
-				( set -x; ninja -j$PM clang-test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja clang-test${cZ} failed."; exit 1; }
-			fi
+			( set -x; make -j$PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make clang-test${cZ} failed."; exit 1; }
 		fi
-		if ((NINJA_BUILD==0)); then
-			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
-		else
-			( set -x; ninja -j$PM install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}ninja install${cZ} failed."; exit 1; }
-		fi
+		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
 		popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		let TIME_INSTALL=$(date +%s)
 		unset CC
