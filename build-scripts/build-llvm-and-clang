@@ -32,8 +32,6 @@ function show_help
 	echo -e "\t  Garbage collect aggressively (${cW}git gc --aggressive${cZ}) after checkout."
 	echo -e "\t${cW}-i${cZ}"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
-	echo -e "\t${cW}-n${cZ}"
-	echo -e "\t  Generate ninja files and use ninja to conduct the build."
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
