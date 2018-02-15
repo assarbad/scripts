@@ -25,6 +25,7 @@ for repotype in Git Hg SVN; do
                                 fi
                                 git --git-dir="$dname/.git" fetch --all
                                 #git --git-dir="$dname/.git" remote prune origin
+                                # TODO: Garbage collection for Git based on environment variable (so we can do it once every few hours instead of every sync)
                                 #git --git-dir="$dname/.git" gc --auto --prune=all
                                 #git --git-dir="$dname/.git" fsck
                         fi
@@ -35,8 +36,12 @@ for repotype in Git Hg SVN; do
                                 hg --cwd "$dname" pull
                         fi
                         ;;
+                SVN)    if [[ -x "$dname/sync" ]]; then
+                                echo "Updating for ${cW}$dname${cZ}"
+                                (cd "$dname" && ./sync)
+                        fi
+                        ;;
                 esac
         done
 done
 )
-# Garbage collection for Git based on environment variable (so we can do it once every few hours instead of every sync)
