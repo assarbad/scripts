@@ -31,13 +31,13 @@ for repotype in Git Hg SVN; do
                         fi
                         ;;
                 Hg)     if [[ -d "$dname/.hg" ]]; then
-                                echo "Updating for ${cW}$dname${cZ}"
+                                echo -e "Updating for ${cW}$dname${cZ}"
                                 (cd "$dname" && find -maxdepth 1 ! -name .hg -a ! -name . -exec rm -rf {} \;)
                                 hg --cwd "$dname" pull
                         fi
                         ;;
                 SVN)    if [[ -x "$dname/sync" ]]; then
-                                echo "Updating for ${cW}$dname${cZ}"
+                                echo -e "Updating for ${cW}$dname${cZ}"
                                 (cd "$dname" && ./sync)
                         fi
                         ;;
