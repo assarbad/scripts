@@ -206,6 +206,11 @@ while getopts "h?bBcCgGi:nOprt:TvxX" opt; do
 		;;
 	esac
 done
+if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
+	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE") [$LOCKFILE]" >&2
+	exit 1
+fi
+trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 # Newer versions of LLVM & Clang abolished the old './configure && make' in favor of CMake
 if ((${LLVM_RELEASE##*_} > 36)); then
 	if ((ONLYCHECKOUT == 0)); then
