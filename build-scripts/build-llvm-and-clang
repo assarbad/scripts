@@ -192,8 +192,8 @@ while getopts "h?bBcCgGi:nOprt:TvxX" opt; do
 		REVIVEPKG=1
 		echo "Reviving bare repos, followed a checkout."
 		;;
-	t)  [[ -n "$OPTARG" ]] && TARGETS="$OPTARG"
-		[[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+	t)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		TARGETS="$OPTARG"
 		;;
 	T)  RUN_TESTS=1
 		;;
