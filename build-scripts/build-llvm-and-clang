@@ -10,6 +10,7 @@ BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_30}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS="Native"
+BUILD_TYPE=MinSizeRel
 let NOOPTIONAL=0
 PAYLOAD=""
 
@@ -18,8 +19,9 @@ function show_help
 	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O] [-t <targets>] [-v]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
-	echo -e "\t${cW}-b${cZ} <${cW}RelWithDebInfo${cZ}|Release|MinSizeRel|Debug>"
-	echo -e "\t  Pick a build type. This defaults to ${cW}RelWithDebInfo${cZ}."
+	echo -e "\t${cW}-b${cZ} <RelWithDebInfo|Release|MinSizeRel|Debug>"
+	echo -e "\t  Pick a build type. Can also be done by setting ${cW}BUILD_TYPE${cZ}."
+	echo -e "\t  This defaults to ${cW}BUILD_TYPE=${BUILD_TYPE}${cZ}."
 	echo -e "\t${cW}-B${cZ}"
 	echo -e "\t  Do not actually build anything, but check out and prepare build directory."
 	echo -e "\t${cW}-c${cZ}"
@@ -30,8 +32,9 @@ function show_help
 	echo -e "\t  Garbage collect after checkout."
 	echo -e "\t${cW}-G${cZ}"
 	echo -e "\t  Garbage collect aggressively (${cW}git gc --aggressive${cZ}) after checkout."
-	echo -e "\t${cW}-i${cZ}"
+	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
+	echo -e "\t  This defaults to ${cW}INSTALL_TO=${INSTALL_TO}${cZ}."
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
@@ -151,7 +154,7 @@ function prepare_tool
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?bBcCgGi:nOprt:TvxX" opt; do
+while getopts "h?b:BcCgGi:nOprt:TvxX" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
