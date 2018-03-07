@@ -41,6 +41,10 @@ from smtplib import SMTP, SMTPRecipientsRefused, SMTPHeloError, SMTPSenderRefuse
 
 MailSettings = namedtuple("MailSettings", ["server", "msg_from", "msg_to", "subject", "sendon", "gpgrcpt", "gpgexe", "soondays"])
 
+def prettydate(inp):
+    assert len(inp) == 14
+    return "%s-%s-%s %s:%s:%s" % (inp[0:4], inp[4:6], inp[6:8], inp[8:10], inp[10:12], inp[12:14])
+
 class SslCertificate(object):
     __cert = None
     __hostname = None
@@ -190,15 +194,16 @@ class ResultCollector(object):
         msg = self.__rpt
         assert msg is not None
         err, wrn, exp, soon, certs, soonest = self.__errors, self.__warnings, self.__expired, self.__soonexpires, self.__certs, self.__soonest
+        assert isinstance(soonest, tuple) and len(soonest) > 1
         ms = self.verify_email_settings()
-        soonestDT = dateutil.parser.parse(soonest).replace(tzinfo=None)
+        soonestDT = dateutil.parser.parse(soonest[0]).replace(tzinfo=None)
         now = datetime.datetime.utcnow()
         delta = soonestDT - now
         msg["To"] = ms.msg_to or "<unknown@localhost>"
         msg["From"] = ms.msg_from or "<unknown@localhost>"
-        msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp), soonest=soonest, soonest_delta=delta)
+        msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp), soonest=prettydate(soonest[0]), soonest_delta=delta)
         lines = []
-        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s). Soonest to expire is %s (%s).\n" % (now, len(certs), len(wrn), len(err), soonest, delta))
+        lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s). Soonest to expire is %s at %s (%s).\n" % (now, len(certs), len(wrn), len(err), soonest[1], prettydate(soonest[0]), delta))
         if len(soon):
             lines.append("SOON TO EXPIRE CERTIFICATES (%d):\n" % (len(soon)))
             for hostname, port in soon:
@@ -219,12 +224,25 @@ class ResultCollector(object):
             for hostname, port, text in wrn:
                 lines.append("  * %s:%d:\n    %s" % (hostname, port, text.format(hostname=hostname, port=port)))
             lines.append("\n")
-        lines.append("CHECKED HOSTS (%d):\n" % (len(certs)))
+        lines.append("CHECKED HOSTS (%d), SOONEST TO EXPIRE FIRST:\n" % (len(certs)))
+        certexpiry = {}
+        certinvalid = []
         for host, cert in certs.iteritems():
             if cert is None:
-                lines.append("  * %s:%d -> invalid certificate or other error" % (host[0], host[1]))
+                certinvalid.append(host)
             else:
-                lines.append("  * %s:%d -> %s until %s" % (host[0], host[1], cert.getValidFrom(), cert.getValidTo()))
+                tmptpl = (cert.getValidTo()[:14], cert.getValidFrom()[:14],)
+                if tmptpl not in certexpiry:
+                    certexpiry[tmptpl] = []
+                certexpiry[tmptpl].append(host)
+                #lines.append("  * %s:%d -> %s until %s" % (host[0], host[1], cert.getValidFrom()[:14], cert.getValidTo()[:14]))
+        for tod, fromd in sorted(certexpiry.keys()):
+            lines.append("  * Valid from %s through %s" % (prettydate(fromd), prettydate(tod)))
+            for host in certexpiry[(tod, fromd,)]:
+                lines.append("    -> %s:%d" % (host[0], host[1]))
+        if len(certinvalid):
+            for host in certinvalid:
+                lines.append("  * %s:%d -> invalid certificate or other error" % (host[0], host[1]))
         msg.set_payload("\n".join(lines))
         return msg
 
@@ -262,7 +280,7 @@ class CertificateExpiryTimes(object):
         ms = res.verify_email_settings()
         soondays = ms.soondays or 7
         certs = OrderedDict()
-        soonest = "9" * 14
+        soonest = ("9" * 14, "localhost",)
         for hostname in cfg.options("hosts"):
             try:
                 ports = tuple([cfg.getint("hosts", hostname)])
@@ -274,8 +292,8 @@ class CertificateExpiryTimes(object):
                     if not cert.hasMatchingSAN():
                         res.add_warning(hostname, port, "No matching Subject Alternative Name, but also not the Common Name for {hostname}:{port}.")
                     validto = dateutil.parser.parse(cert.getValidTo()).replace(tzinfo=None)
-                    if soonest > cert.getValidTo()[:14]:
-                        soonest = cert.getValidTo()[:14]
+                    if soonest[0] > cert.getValidTo()[:14]:
+                        soonest = (cert.getValidTo()[:14], hostname,)
                     now = datetime.datetime.utcnow()
                     delta = validto - now
                     deltasec = delta.total_seconds()
