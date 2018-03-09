@@ -5,7 +5,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-MUSLLIBC_RELEASE="v1.1.15"
+MUSLLIBC_RELEASE="v1.1.18"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl}
 BASEDIR="$CURRABSPATH"
 CACHEDIR="$BASEDIR/cache"
