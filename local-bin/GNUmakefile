@@ -6,6 +6,7 @@ TARGET ?= /usr/local/bin
 
 all: $(addprefix $(TARGET)/,$(ALLFILES))
 basic: $(addprefix $(TARGET)/,$(BASICFILES))
+bare: $(addprefix $(TARGET)/,etckeeper-commit  save-pkgstates  showsubids)
 
 $(TARGET)/%: %
 	@test -d $(dir $@) || mkdir -p $(dir $@)
