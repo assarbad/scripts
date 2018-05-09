@@ -1,6 +1,7 @@
 @echo off
 :: Create the folder which will be made into an ISO with:
 ::   vs_Professional.exe --layout %CD%\vs2017pro --lang en-US
+::   vs_BuildTools.exe --layout %CD%\vs2017bldtools --lang en-US
 if not exist "%~dp0oscdimg.exe" echo Could not find oscdimg.exe next to this script in %~dp0&exit /b 1
 set IMGLABEL=%~1
 if "%IMGLABEL%" == "" echo You need to give a label for the image to be created&exit /b 1
