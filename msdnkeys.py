@@ -159,7 +159,7 @@ def main():
             print("ERROR: %s appears to be empty or only line breaks." % (f[fn]), file=sys.stderr)
             continue
         try:
-            tree = ET.fromstring(xmldata)
+            tree = ET.fromstring(xmldata.encode("utf-8"))
             assert isinstance(tree, ET.Element), "The tree should be an ElementTree, but got %r" % (tree)
         except UnicodeError as e:
             print("Error: with file %s: %s. Ignoring that file." % (fn, e), file=sys.stderr)
