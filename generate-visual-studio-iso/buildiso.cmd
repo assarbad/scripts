@@ -7,10 +7,12 @@ set IMGLABEL=%~1
 if "%IMGLABEL%" == "" echo You need to give a label for the image to be created&exit /b 1
 set VSDIR=%~2
 if not exist "%VSDIR%" echo The folder supposed to contain the offline installation components ^(%VSDIR%^) does not exist&exit /b 1
-xcopy /y "%~dpnx0" "%VSDIR%\"
-if not exist "%VSDIR%\%~nx0" echo Could not copy %~nx0 into %VSDIR%&exit /b 1
-xcopy /y "%~dp0oscdimg.exe" "%VSDIR%\"
-if not exist "%VSDIR%\oscdimg.exe" echo Could not copy oscdimg.exe into %VSDIR%&exit /b 1
+set METADIR=%VSDIR%\.meta
+md "%METADIR%\"
+xcopy /y "%~dpnx0" "%METADIR%\"
+if not exist "%METADIR%\%~nx0" echo Could not copy %~nx0 into %METADIR%&exit /b 1
+xcopy /y "%~dp0oscdimg.exe" "%METADIR%\"
+if not exist "%METADIR%\oscdimg.exe" echo Could not copy oscdimg.exe into %METADIR%&exit /b 1
 :: -oc This option will encode duplicate files only once.  It does
 ::     a binary compare on the files and is slower.
 :: -g  This option  makes all times encoded in GMT time rather than the
