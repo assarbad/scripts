@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2011/16, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN.
+::: 2011..18, Oliver Schneider (assarbad.net) - Released into the PUBLIC DOMAIN.
 :::
 ::: DISCLAIMER: Disclaimer: This software is provided 'as-is', without any
 :::             express or implied warranty. In no event will the author be
@@ -22,16 +22,16 @@ if "%~1" == "--append"  shift&set APPENDSHA2=1
 if "%~1" == "/a"        shift&set APPENDSHA2=1
 if "%~1" == "" goto :NoFileToSign
 :: Check if that succeeds and look for Windows 8.1 SDK (x64) otherwise
-"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\8.1\bin\x64\signtool.exe
+"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\x64\signtool.exe
 :: Check if that succeeds and look for Windows 8.1 SDK (x86) otherwise
-"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\8.1\bin\x86\signtool.exe
+"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\x86\signtool.exe
 :: Otherwise look for the newest Visual Studio we can get
 "%SIGNTOOL%" /? >NUL 2>NUL || call setvcvars.cmd > NUL 2>&1
 if not "%VCVER_FRIENDLY%" == "" @(
   echo Using %VCVER_FRIENDLY%
 )
 set TIMESTAMPSHA1=/tr "http://time.certum.pl" /as
-set TIMESTAMPSHA2=/tr "http://time.certum.pl/sha256" /td sha256 /as
+set TIMESTAMPSHA2=/tr "http://timestamp.digicert.com" /td sha256 /as
 set IDENTIFIER=/i Certum%AC%
 if not "%~2" == "" @(
   call :SetVar DESCRIPTURL "%~2"

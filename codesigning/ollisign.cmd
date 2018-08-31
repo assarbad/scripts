@@ -22,16 +22,16 @@ if "%~1" == "--append"  shift&set APPENDSHA2=1
 if "%~1" == "/a"        shift&set APPENDSHA2=1
 if "%~1" == "" goto :NoFileToSign
 :: Check if that succeeds and look for Windows 8.1 SDK (x64) otherwise
-"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\8.1\bin\x64\signtool.exe
+"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\x64\signtool.exe
 :: Check if that succeeds and look for Windows 8.1 SDK (x86) otherwise
-"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\8.1\bin\x86\signtool.exe
+"%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\x86\signtool.exe
 :: Otherwise look for the newest Visual Studio we can get
 "%SIGNTOOL%" /? >NUL 2>NUL || call setvcvars.cmd > NUL 2>&1
 if not "%VCVER_FRIENDLY%" == "" @(
   echo Using %VCVER_FRIENDLY%
 )
-set TIMESTAMPSHA1=/tr "http://sha1timestamp.ws.symantec.com/sha1/timestamp"
-set TIMESTAMPSHA2=/tr "http://sha256timestamp.ws.symantec.com/sha256/timestamp" /td sha256 /as
+set TIMESTAMPSHA1=/tr "http://timestamp.digicert.com"
+set TIMESTAMPSHA2=/tr "http://timestamp.digicert.com" /td sha256 /as
 set IDENTIFIER=/i Symantec%AC%
 if not "%~2" == "" @(
   call :SetVar DESCRIPTURL "%~2"
