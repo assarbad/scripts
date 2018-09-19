@@ -1,12 +1,12 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2009-2016, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: 2009-2018, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 ::: Available from: <https://bitbucket.org/assarbad/scripts/>
 :::
 ::: PURPOSE:    This script can be used to run the vcvars32.bat/vcvarsall.bat
 :::             from any of the existing Visual C++ versions starting with .NET
-:::             (2002) through 2015 or versions (or a single version) given on
+:::             (2002) through 2017 or versions (or a single version) given on
 :::             the command line.
 :::             The script will try to find the newest installed VC version by
 :::             iterating over the space-separated (descending) list of versions
@@ -25,9 +25,9 @@ setlocal & pushd .
 :: Toolsets (potentially) supported
 set SUPPORTED_TSET=amd64 x86 ia64 x86_ia64 x86_amd64 amd64_x86 x86_arm amd64_arm
 :: Internal representation of the version number
-set SUPPORTED_VC=14.0 12.0 11.0 10.0 9.0 8.0 7.1 7.0
+set SUPPORTED_VC=15.0 14.0 12.0 11.0 10.0 9.0 8.0 7.1 7.0
 :: Marketing name of the Visual Studio versions
-set SUPPORTED_NICE=2015 2013 2012 2010 2008 2005 2003 2002
+set SUPPORTED_NICE=2017 2015 2013 2012 2010 2008 2005 2003 2002
 set DEFAULT_TSET=x86
 if not "%~1" == "" @(
   if "%~1" == "/?"     goto :Help
@@ -39,9 +39,9 @@ if not "%~1" == "" @(
 )
 if defined VCVER_FRIENDLY echo This script expects a clean environment. Don't run it several times in the same instance of CMD! Or use setlocal and endlocal in your own script to limit the effect of this one.&popd&endlocal&goto :EOF
 set MIN_VC=7.0
-set MAX_VC=14.0
+set MAX_VC=15.0
 set MIN_NICE=2002
-set MAX_NICE=2015
+set MAX_NICE=2017
 reg /? > NUL 2>&1 || echo "REG.EXE is a prerequisite but wasn't found!" && goto :EOF
 set SETVCV_ERROR=0
 :: First parameter may point to a particular toolset ...
@@ -92,7 +92,7 @@ goto :EOF
 setlocal ENABLEEXTENSIONS & set VCVER=%~1
 :: We're not interested in overwriting an already existing value
 if defined VCVARS_PATH @( endlocal & goto :EOF )
-:: Now let's distinguish the "nice" version numbers (2002, ... 2015) from the internal ones
+:: Now let's distinguish the "nice" version numbers (2002, ... 2017) from the internal ones
 set VCVER=%VCVER:vs=%
 if "%VCVER%" geq "%MIN_NICE%" call :NICE_%VCVER% > NUL 2>&1
 :: Figure out the set of supported toolsets
@@ -100,6 +100,9 @@ set VCVERLBL=%VCVER:.=_%
 call :TSET_%VCVERLBL% > NUL 2>&1
 :: Jump over those "subs"
 goto :NICE_SET
+:NICE_2017
+    set VCVER=15.0
+    goto :EOF
 :NICE_2015
     set VCVER=14.0
     goto :EOF
@@ -124,6 +127,7 @@ goto :NICE_SET
 :NICE_2002
     set VCVER=7.0
     goto :EOF
+:TSET_15_0
 :TSET_14_0
 :TSET_12_0
     set SUPPORTED_TSET=x86 amd64 arm x86_amd64 x86_arm amd64_x86 amd64_arm
@@ -138,6 +142,20 @@ goto :NICE_SET
     goto :EOF
 :NICE_SET
 :: This is where we intend to find the installation path in the registry
+set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\SxS\VS7
+if not defined _VCINSTALLDIR @(
+  for /f "tokens=2*" %%i in ('reg query "%_VSINSTALLKEY%" /v %VCVER% 2^> NUL') do @(
+    call :SetVar _VCINSTALLDIR "%%j"
+  )
+)
+set _VSINSTALLKEY=HKLM\SOFTWARE\Wow6432Node\Microsoft\VisualStudio\SxS\VS7
+:: If we haven't found it by now, try the WOW64 "Software" key
+if not defined _VCINSTALLDIR @(
+  for /f "tokens=2*" %%i in ('reg query "%_VSINSTALLKEY%" /v %VCVER% 2^> NUL') do @(
+    call :SetVar _VCINSTALLDIR "%%j"
+  )
+)
+:: The versions of Visual Studio prior to 2017 were all using this key
 set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\%VCVER%\Setup\VC
 echo Trying to locate Visual C++ %VCVER% ^(%VCTGT_TOOLSET%^)
 for /f "tokens=2*" %%i in ('reg query "%_VSINSTALLKEY%" /v ProductDir 2^> NUL') do @(
@@ -153,6 +171,9 @@ if not defined _VCINSTALLDIR @(
 set TEMP_TOOLSET=%VCTGT_TOOLSET%
 set TEMP_SUPPORTED=
 if defined _VCINSTALLDIR @(
+  if EXIST "%_VCINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" @(
+    call :SetVar VCVARS_PATH "%_VCINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat"
+  )
   if EXIST "%_VCINSTALLDIR%\vcvarsall.bat" @(
     call :SetVar VCVARS_PATH "%_VCINSTALLDIR%\vcvarsall.bat"
   )
@@ -176,6 +197,9 @@ set VCVERLBL=%VCVER:.=_%
 call :FRIENDLY_%VCVERLBL% > NUL 2>&1
 :: Jump over those "subs"
 goto :FRIENDLY_SET
+:FRIENDLY_15_0
+    set _VCVER=2017 ^[%TEMP_TOOLSET%^]
+    goto :EOF
 :FRIENDLY_14_0
     set _VCVER=2015 ^[%TEMP_TOOLSET%^]
     goto :EOF
