@@ -11,7 +11,7 @@
 setlocal ENABLEEXTENSIONS
 :: Look in current directory
 set SIGNTOOL=%~dp0signtool.exe
-::set AC= /ac "%~dp0Certum Trusted Network CA.crt"
+set AC= /ac "%~dp0Certum Trusted Network CA.crt"
 :: Check whether the caller wants verbose signtool.exe output
 if "%~1" == "-v"        shift&set VERBOSE=1
 if "%~1" == "--verbose" shift&set VERBOSE=1
@@ -20,6 +20,9 @@ if "%~1" == "/verbose"  shift&set VERBOSE=1
 if "%~1" == "-a"        shift&set APPENDSHA2=1
 if "%~1" == "--append"  shift&set APPENDSHA2=1
 if "%~1" == "/a"        shift&set APPENDSHA2=1
+if "%~1" == "-2"        shift&set SHA2ONLY=1
+if "%~1" == "--sha2"    shift&set SHA2ONLY=1
+if "%~1" == "/2"        shift&set SHA2ONLY=1
 if "%~1" == "" goto :NoFileToSign
 :: Check if that succeeds and look for Windows 8.1 SDK (x64) otherwise
 "%SIGNTOOL%" /? >NUL 2>NUL || set SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\x64\signtool.exe
@@ -30,8 +33,8 @@ if "%~1" == "" goto :NoFileToSign
 if not "%VCVER_FRIENDLY%" == "" @(
   echo Using %VCVER_FRIENDLY%
 )
-set TIMESTAMPSHA1=/tr "http://time.certum.pl" /as
-set TIMESTAMPSHA2=/tr "http://timestamp.digicert.com" /td sha256 /as
+set TIMESTAMPSHA1=/tr "http://time.certum.pl"
+set TIMESTAMPSHA2=/tr "http://timestamp.digicert.com" /td sha256
 set IDENTIFIER=/i Certum%AC%
 if not "%~2" == "" @(
   call :SetVar DESCRIPTURL "%~2"
@@ -45,9 +48,10 @@ if not "%VERBOSE%" == "" set SIGNCMD=%SIGNCMD% /v /debug
 if not "%DESCRIPTURL%" == "" set SIGNCMD=%SIGNCMD% /du "%DESCRIPTURL%"
 if not "%DESCRIPTION%" == "" set SIGNCMD=%SIGNCMD% /d "%DESCRIPTION%"
 set SIGNCMD=%SIGNCMD%
+if not "%SHA2ONLY%" == "1" set APPENDSIG= /as
 :: Now sign ...
-echo %SIGNCMD% %TIMESTAMPSHA1% "%~1"&%SIGNCMD% %TIMESTAMPSHA1% "%~1"
-if "%APPENDSHA2%" == "1" echo %SIGNCMD% /fd sha256 %TIMESTAMPSHA2% "%~1"&%SIGNCMD% /fd sha256 %TIMESTAMPSHA2% "%~1"
+if not "%SHA2ONLY%" == "1" echo %SIGNCMD% %TIMESTAMPSHA1% "%~1"&%SIGNCMD% %TIMESTAMPSHA1% "%~1"
+if not "%APPENDSHA2%%SHA2ONLY%" == "" echo %SIGNCMD% /fd sha256 %TIMESTAMPSHA2%%APPENDSIG% "%~1"&%SIGNCMD% /fd sha256 %TIMESTAMPSHA2%%APPENDSIG% "%~1"
 :: And verify
 if "%APPENDSHA2%" == "1" %VRFYCMD% /pa /all "%~1"
 if not "%APPENDSHA2%" == "1" %VRFYCMD% /kp "%~1"
