@@ -102,6 +102,7 @@ call :TSET_%VCVERLBL% > NUL 2>&1
 goto :NICE_SET
 :NICE_2017
     set VCVER=15.0
+    set NEWVS=1
     goto :EOF
 :NICE_2015
     set VCVER=14.0
@@ -141,6 +142,8 @@ goto :NICE_SET
     set SUPPORTED_TSET=x86 ia64 amd64 x86_amd64 x86_ia64
     goto :EOF
 :NICE_SET
+echo Trying to locate Visual C++ %VCVER% ^(%VCTGT_TOOLSET%^)
+if "%NEWVS%" == "" goto :OLDVS
 :: This is where we intend to find the installation path in the registry
 set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\SxS\VS7
 if not defined _VCINSTALLDIR @(
@@ -155,11 +158,14 @@ if not defined _VCINSTALLDIR @(
     call :SetVar _VCINSTALLDIR "%%j"
   )
 )
+goto :DETECTION_FINISHED
+:OLDVS
 :: The versions of Visual Studio prior to 2017 were all using this key
 set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\%VCVER%\Setup\VC
-echo Trying to locate Visual C++ %VCVER% ^(%VCTGT_TOOLSET%^)
-for /f "tokens=2*" %%i in ('reg query "%_VSINSTALLKEY%" /v ProductDir 2^> NUL') do @(
-  call :SetVar _VCINSTALLDIR "%%j"
+if not defined _VCINSTALLDIR @(
+  for /f "tokens=2*" %%i in ('reg query "%_VSINSTALLKEY%" /v ProductDir 2^> NUL') do @(
+    call :SetVar _VCINSTALLDIR "%%j"
+  )
 )
 set _VSINSTALLKEY=HKLM\SOFTWARE\Wow6432Node\Microsoft\VisualStudio\%VCVER%\Setup\VC
 :: If we haven't found it by now, try the WOW64 "Software" key
@@ -168,6 +174,7 @@ if not defined _VCINSTALLDIR @(
     call :SetVar _VCINSTALLDIR "%%j"
   )
 )
+:DETECTION_FINISHED
 set TEMP_TOOLSET=%VCTGT_TOOLSET%
 set TEMP_SUPPORTED=
 if defined _VCINSTALLDIR @(

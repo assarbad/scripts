@@ -12,7 +12,7 @@
 :::             software.
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 cls
-set TESTSTORUN=HelpSwitches VS_nosuch VS2002 VS2003 VS2005 VS2008 VS2010 VS2012 VS2013 VS2015 VS2005_amd64 VS2008_amd64 VS2010_amd64 VS2012_amd64 VS2013_amd64 VS2015_amd64 VS2005_ia64 VS2008_ia64 VS2010_ia64 VS2012_ia64 VS2013_ia64 VS2015_ia64
+set TESTSTORUN=HelpSwitches VS_nosuch VS2002 VS2003 VS2005 VS2008 VS2010 VS2012 VS2013 VS2015 VS2017 VS2005_amd64 VS2008_amd64 VS2010_amd64 VS2012_amd64 VS2013_amd64 VS2015_amd64 VS2017_amd64 VS2005_ia64 VS2008_ia64 VS2010_ia64 VS2012_ia64 VS2013_ia64 VS2015_ia64 VS2017_ia64
 for %%i in (%TESTSTORUN%) do @(
   @echo TEST %%i
   prompt $G & call :%%i
@@ -128,6 +128,17 @@ call %~dp0setvcvars.cmd 2015
 call %~dp0setvcvars.cmd 14.0
 @popd&endlocal
 @goto :EOF
+:VS2017
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd vs2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 15.0
+@popd&endlocal
+@goto :EOF
 :: Some versions that don't exist
 :VS_nosuch
 @setlocal&pushd .&echo on
@@ -216,6 +227,17 @@ call %~dp0setvcvars.cmd amd64 2015
 call %~dp0setvcvars.cmd amd64 14.0
 @popd&endlocal
 @goto :EOF
+:VS2017_amd64
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 vs2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 15.0
+@popd&endlocal
+@goto :EOF
 :: Checking ia64 toolset on all
 :VS2005_ia64
 @setlocal&pushd .&echo on
@@ -281,5 +303,16 @@ call %~dp0setvcvars.cmd ia64 2015
 @popd&endlocal
 @setlocal&pushd .&echo on
 call %~dp0setvcvars.cmd ia64 14.0
+@popd&endlocal
+@goto :EOF
+:VS2017_ia64
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 vs2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 2017
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 15.0
 @popd&endlocal
 @goto :EOF
