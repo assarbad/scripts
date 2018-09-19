@@ -41,7 +41,6 @@ if defined VCVER_FRIENDLY echo This script expects a clean environment. Don't ru
 set MIN_VC=7.0
 set MAX_VC=15.0
 set MIN_NICE=2002
-set MAX_NICE=2017
 reg /? > NUL 2>&1 || echo "REG.EXE is a prerequisite but wasn't found!" && goto :EOF
 set SETVCV_ERROR=0
 :: First parameter may point to a particular toolset ...
@@ -94,6 +93,10 @@ setlocal ENABLEEXTENSIONS & set VCVER=%~1
 if defined VCVARS_PATH @( endlocal & goto :EOF )
 :: Now let's distinguish the "nice" version numbers (2002, ... 2017) from the internal ones
 set VCVER=%VCVER:vs=%
+set NICEVER=%VCVER%
+set NUMVER=%VCVER:.0=%
+echo %NUMVER%
+:: Not a "real" version number, but the marketing one (2002, ... 2017)?
 if "%VCVER%" geq "%MIN_NICE%" call :NICE_%VCVER% > NUL 2>&1
 :: Figure out the set of supported toolsets
 set VCVERLBL=%VCVER:.=_%
@@ -143,7 +146,9 @@ goto :NICE_SET
     goto :EOF
 :NICE_SET
 echo Trying to locate Visual C++ %VCVER% ^(%VCTGT_TOOLSET%^)
-if "%NEWVS%" == "" goto :OLDVS
+:: Is it a version below 15? Then we use the old registry keys
+if "%NUMVER%" lss "15" goto :OLDVS
+echo Modern (^>=2017) Visual Studio
 :: This is where we intend to find the installation path in the registry
 set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\SxS\VS7
 if not defined _VCINSTALLDIR @(
@@ -160,6 +165,7 @@ if not defined _VCINSTALLDIR @(
 )
 goto :DETECTION_FINISHED
 :OLDVS
+echo Old (^<2017) Visual Studio
 :: The versions of Visual Studio prior to 2017 were all using this key
 set _VSINSTALLKEY=HKLM\SOFTWARE\Microsoft\VisualStudio\%VCVER%\Setup\VC
 if not defined _VCINSTALLDIR @(
