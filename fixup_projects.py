@@ -99,7 +99,9 @@ def process_vcproj(fpath, dryrun):
                     if verbose > 0:
                         print("\tEntering <%s Name=\"%s\" /> for attribute patching (%s:%d)" % (elems[-1], cfgname, basename, lineno), file=sys.stderr)
                     assert cfgname in cfg_fixes or "*" in cfg_fixes
-                    loc_fixes = cfg_fixes[cfgname]
+                    loc_fixes = {}
+                    if cfgname in cfg_fixes:
+                        loc_fixes = cfg_fixes[cfgname]
                     if "*" in cfg_fixes:
                         for k, v in cfg_fixes["*"].iteritems():
                             if k not in loc_fixes:
