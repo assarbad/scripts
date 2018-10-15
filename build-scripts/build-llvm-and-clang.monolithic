@@ -16,7 +16,7 @@ PAYLOAD="BUILD_CMAKE"
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O|-o] [-I] [-t <targets>] [-v]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
 	echo -e "\t${cW}-b${cZ} <RelWithDebInfo|Release|MinSizeRel|Debug>"
@@ -35,6 +35,10 @@ function show_help
 	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
 	echo -e "\t  This defaults to ${cW}INSTALL_TO=${INSTALL_TO}${cZ}."
+	echo -e "\t${cW}-I${cZ}"
+	echo -e "\t  Do not install after building the targets."
+	echo -e "\t${cW}-o${cZ}"
+	echo -e "\t  Only build 'optional' components (i.e. binutils). Skips building Clang/LLVM."
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
@@ -154,7 +158,7 @@ function prepare_tool
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?b:BcCgGi:nOprt:TvxX" opt; do
+while getopts "h?b:BcCgGi:InoOprt:TvxX" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -182,8 +186,17 @@ while getopts "h?b:BcCgGi:nOprt:TvxX" opt; do
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
 		;;
+	I)  NOINSTALL=1
+		;;
 	n)  ;;
-	O)  NOOPTIONAL=1
+	o)  ((NOOPTIONAL)) && { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} and ${cY}-O${cZ} are mutually exclusive."; exit 1; }
+		ONLYOPTIONAL=1
+		NOOPTIONAL=0
+		echo -e "${cY}Building only optional components${cZ}"
+		;;
+	O)  ((ONLYOPTIONAL)) && { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} and ${cY}-o${cZ} are mutually exclusive."; exit 1; }
+		NOOPTIONAL=1
+		ONLYOPTIONAL=0
 		echo -e "${cY}Skipping build of optional components${cZ}"
 		;;
 	p)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-p${cZ}/${cY}-c${cZ} are mutually exclusive."; exit 1; }
@@ -204,8 +217,11 @@ while getopts "h?b:BcCgGi:nOprt:TvxX" opt; do
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
 	x)  USE_CCACHE=1
+		echo -e "${cY}Using ${cW}ccache${cY} to speed up subsequent builds${cZ}"
 		;;
-	X)  USE_CLANG=1
+	X)  ((ONLYOPTIONAL)) && { echo -e "${cW}INFO:${cZ} ignoring ${cY}-$opt${cZ} as we aren't going to build Clang/LLVM (${cY}-o${cZ} used)."; }
+		USE_CLANG=1
+		echo -e "${cY}Using ${cW}clang${cY} to build Clang/LLVM${cZ}"
 		;;
 	esac
 done
@@ -277,28 +293,34 @@ let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Doing build for $TARGETS into $INSTALL_TO."
 	if [[ -d "$BASEDIR/build/llvm" ]]; then
-		pushd "$BASEDIR/build/llvm" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-		if (( CMAKE_BUILD )); then
-			( set -x; cmake ${TRACE:+--trace} -G "$CMAKE_GENERATOR" ${USE_CLANG:+-DCMAKE_C_FLAGS=-Wno-unused-command-line-argument} ${USE_CLANG:+-DCMAKE_CXX_FLAGS=-Wno-unused-command-line-argument} -DCMAKE_C_STANDARD_COMPUTED_DEFAULT="$CMAKE_C_STANDARD_COMPUTED_DEFAULT" -DCMAKE_CXX_STANDARD_COMPUTED_DEFAULT="$CMAKE_CXX_STANDARD_COMPUTED_DEFAULT" -DCMAKE_C_COMPILER_ID="$CMAKE_C_COMPILER_ID" -DCMAKE_CXX_COMPILER_ID="$CMAKE_CXX_COMPILER_ID" -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_COMPILER_VERSION="$CMAKE_C_COMPILER_VERSION" -DCMAKE_CXX_COMPILER_VERSION="$CMAKE_CXX_COMPILER_VERSION" ${USE_CCACHE:+-DCMAKE_C_COMPILER_LAUNCHER=ccache} ${USE_CCACHE:+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache} -DCMAKE_INSTALL_PREFIX="$INSTALL_TO" -DLLVM_BUILD_DOCS=OFF -DLLVM_ENABLE_DOXYGEN=OFF -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DLLVM_TARGETS_TO_BUILD="${TARGETS//,/;}" "$BASEDIR/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
-		else
-			( set -x; env CC="${USE_CCACHE:+ccache }$CC" CXX="${USE_CCACHE:+ccache }$CXX" "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
+		if ((ONLYOPTIONAL == 0)); then
+			pushd "$BASEDIR/build/llvm" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
+			if (( CMAKE_BUILD )); then
+				( set -x; cmake ${TRACE:+--trace} -G "$CMAKE_GENERATOR" ${USE_CLANG:+-DCMAKE_C_FLAGS=-Wno-unused-command-line-argument} ${USE_CLANG:+-DCMAKE_CXX_FLAGS=-Wno-unused-command-line-argument} -DCMAKE_C_STANDARD_COMPUTED_DEFAULT="$CMAKE_C_STANDARD_COMPUTED_DEFAULT" -DCMAKE_CXX_STANDARD_COMPUTED_DEFAULT="$CMAKE_CXX_STANDARD_COMPUTED_DEFAULT" -DCMAKE_C_COMPILER_ID="$CMAKE_C_COMPILER_ID" -DCMAKE_CXX_COMPILER_ID="$CMAKE_CXX_COMPILER_ID" -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_C_COMPILER_VERSION="$CMAKE_C_COMPILER_VERSION" -DCMAKE_CXX_COMPILER_VERSION="$CMAKE_CXX_COMPILER_VERSION" ${USE_CCACHE:+-DCMAKE_C_COMPILER_LAUNCHER=ccache} ${USE_CCACHE:+-DCMAKE_CXX_COMPILER_LAUNCHER=ccache} -DCMAKE_INSTALL_PREFIX="$INSTALL_TO" -DLLVM_BUILD_DOCS=OFF -DLLVM_ENABLE_DOXYGEN=OFF -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DLLVM_TARGETS_TO_BUILD="${TARGETS//,/;}" "$BASEDIR/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
+			else
+				( set -x; env CC="${USE_CCACHE:+ccache }$CC" CXX="${USE_CCACHE:+ccache }$CXX" "$BASEDIR/llvm/configure" --prefix=$INSTALL_TO --disable-docs --disable-doxygen --enable-optimized --enable-targets=$TARGETS ) || { echo -e "${cR}ERROR:${cZ}  ${cW}./configure${cZ} failed."; exit 1; }
+			fi
+			let TIME_CONFIGURE=$(date +%s)
+			# FIXME/TODO: add _options_ to enable optimizations and disable assertions somehow?! (i.e. don't hardcode them)
+			( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
+			let TIME_MAKE=$(date +%s)
+			if ((RUN_TESTS)); then
+				( set -x; make -j$PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make clang-test${cZ} failed."; exit 1; }
+			fi
+			if ((NOINSTALL == 0)); then
+				( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
+			fi
+			popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		fi
-		let TIME_CONFIGURE=$(date +%s)
-		# FIXME/TODO: add options to enable optimizations and disable assertions somehow?!
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
-		let TIME_MAKE=$(date +%s)
-		if ((RUN_TESTS)); then
-			( set -x; make -j$PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make clang-test${cZ} failed."; exit 1; }
-		fi
-		( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
-		popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		let TIME_INSTALL=$(date +%s)
 		unset CC
 		unset CXX
 		if ((NOOPTIONAL == 0)); then
 			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-			( set -x; CC="$INSTALL_TO/bin/clang" ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} (clang) failed."; exit 1; }
-			( set -x; make -j$PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} (clang) failed."; exit 1; }
+			( set -x; ${USE_CLANG:+CC=clang CXX=clang++} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
+			if ((NOINSTALL == 0)); then
+				( set -x; make -j$PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} failed."; exit 1; }
+			fi
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cW}popd${cZ}."; exit 1; }
 		fi
 		let TIME_BINUTILS=$(date +%s)
@@ -327,23 +349,27 @@ if ((PACKAGEGITGZ==1)); then
 			| tee "./$UNPACKER" > /dev/null && chmod +x "./$UNPACKER"
 	)
 	let TIME_TGZ=$(date +%s)
-	show_time_diff $TIME_GIT $TIME_TGZ              "Packaging took:      %s"
+	show_time_diff $TIME_GIT $TIME_TGZ                      "Packaging took:      %s"
 fi
 let TIME_END=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
-	if (( CMAKE_BUILD )); then
-		show_time_diff $TIME_GIT $TIME_CONFIGURE    "CMake       took:    %s"
-	else
-		show_time_diff $TIME_GIT $TIME_CONFIGURE    "./configure took:    %s"
-		show_time_diff $TIME_CONFIGURE $TIME_MAKE   "GNU make took:       %s"
+	if ((ONLYOPTIONAL == 0)); then
+		if (( CMAKE_BUILD )); then
+			show_time_diff $TIME_GIT $TIME_CONFIGURE        "CMake       took:    %s"
+		else
+			show_time_diff $TIME_GIT $TIME_CONFIGURE        "./configure took:    %s"
+			show_time_diff $TIME_CONFIGURE $TIME_MAKE       "GNU make took:       %s"
+		fi
+		if ((NOINSTALL == 0)); then
+			show_time_diff $TIME_MAKE $TIME_INSTALL         "Installation took:   %s"
+		fi
 	fi
-	show_time_diff $TIME_MAKE $TIME_INSTALL         "Installation took:   %s"
 	if ((NOOPTIONAL == 0)); then
-		show_time_diff $TIME_INSTALL $TIME_BINUTILS "Binutils took:       %s"
+		show_time_diff $TIME_INSTALL $TIME_BINUTILS         "Binutils took:       %s"
 	fi
 	(HASHFILE=$(mktemp); cd "$INSTALL_TO" && find -type f -exec sha256sum {} + > "$HASHFILE" && mv "$HASHFILE" "$INSTALL_TO/SHA256SUMS")
 fi
-show_time_diff $TIME_START $TIME_END                "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
+show_time_diff $TIME_START $TIME_END                        "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
 exit 0
 BUILD_CMAKE:
