@@ -236,7 +236,7 @@ EOF
 		if [[ -z "$i" ]]; then
 			( set -x; $MUSLGCC -static "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the native build."; exit 1; }
 		else
-			( set -x; $MUSLGCC -static $i "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the $i build."; exit 1; }
+			( set -x; $MUSLGCC -static $i "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the $i build (did you install the ${cW}lib32gcc-*-dev${cZ} package or similar?)."; exit 1; }
 		fi
 		file "${HELLOC%.c}"
 		rm -f "${HELLOC%.c}"
