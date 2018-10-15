@@ -7,7 +7,8 @@ LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
-DROPBEAR_RELEASE="DROPBEAR_2017.75"
+DROPBEAR_RELEASE="DROPBEAR_2018.76"
+DROPBEAR_GITREPO="https://github.com/mkj/dropbear.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
 BASEDIR="${BASEDIR:-$(pwd)}"
 CACHEDIR="$BASEDIR/cache"
@@ -134,7 +135,7 @@ PRJNAME="dropbear"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-prepare_src "$PRJNAME:git clone https://github.com/mkj/dropbear.git" "$DROPBEAR_RELEASE"
+prepare_src "$PRJNAME:git clone $DROPBEAR_GITREPO" "$DROPBEAR_RELEASE"
 
 # Build musl-libc if not yet available
 MUSLGCC="$HOME/bin/musl/musl-gcc"
