@@ -10,9 +10,12 @@ function syntax
 
 [[ "$UID" -eq "0" ]] || syntax "${0##*/}" "You must be superuser to make use of this script"
 
+[[ -n "$DBG" ]] && set -x
+
 CHROOTDIR=${1:-/chroots}
 VARIANT=minbase
-DEBARCHIVE_URL="http://localhost:3142/de.archive.ubuntu.com/ubuntu/"
+DEBARCHIVE_URL="http://de.archive.ubuntu.com/ubuntu/"
+#DEBARCHIVE_URL="http://localhost:3142/de.archive.ubuntu.com/ubuntu/"
 USERS=$(getent group ssh-forwarders)
 USERS=${USERS##*:}
 USERS=${2:-$USERS}
@@ -26,16 +29,16 @@ if [[ -d "$BASECHROOT" ]]; then
 		env LANG=en_US.UTF-8 \
 			debootstrap \
 			--keep-debootstrap-dir \
-			--exclude=dhcp3-common,dhcp3-client,laptop-detect,tasksel,tasksel-data,landscape-client,landscape-common,busybox-initramfs,cron,eject,e2fsprogs,e2fslibs,dmsetup,gcc-4.8-base,gcc-4.9-base,multiarch-support,logrotate,netcat-openbsd,ntpdate,initramfs-tools,initramfs-tools-bin,ifupdown,isc-dhcp-common,isc-dhcp-client,sudo,upstart,udev,ntpdate,ubuntu-minimal,initscripts,initramfs-tools-bin,initramfs-tools,sensible-utils,plymouth,module-init-tools,iproute2 \
-			--include=openssh-client \
+			--include=openssh-client,tmux,unzip,make \
 			--variant=$VARIANT \
 			--arch=$(dpkg --print-architecture) $(lsb_release -sc) \
 			"$BASECHROOT" "$DEBARCHIVE_URL" && \
-		touch "$BASECHROOT/.installed"
+		touch "$BASECHROOT/.installed" || { echo -e "${cR}ERROR:${cZ} failed to debootstrap the new system"; exit 1; }
 	else
 		echo -e "${cW}INFO:${cZ} the base chroot ($BASECHROOT) appears to be installed already."
 	fi
 	if [[ ! -e "$BASECHROOT/var/lib/locales/supported.d/local" ]]; then
+		test -d "$BASECHROOT/var/lib/locales/supported.d" || mkdir -p "$BASECHROOT/var/lib/locales/supported.d"
 		echo -e "en_US.UTF-8 UTF-8\nen_US.UTF-8@isodate UTF-8"|tee "$BASECHROOT/var/lib/locales/supported.d/local"
 	fi
 	if [[ -d "$BASECHROOT/debootstrap" ]]; then
