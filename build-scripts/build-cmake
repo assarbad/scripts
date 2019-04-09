@@ -5,7 +5,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-CMAKE_RELEASE="v3.12.3"
+CMAKE_RELEASE="v3.14.1"
 CMAKE_GITREPO="https://cmake.org/cmake.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/cmake}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -110,7 +110,7 @@ PRJNAME="cmake"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-prepare_src "$PRJNAME:git clone "$CMAKE_GITREPO" "$CMAKE_RELEASE"
+prepare_src "$PRJNAME:git clone $CMAKE_GITREPO" "$CMAKE_RELEASE"
 
 trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 ( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR" )
