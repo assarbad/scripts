@@ -25,9 +25,9 @@ setlocal & pushd .
 :: Toolsets (potentially) supported
 set SUPPORTED_TSET=amd64 x86 ia64 x86_ia64 x86_amd64 amd64_x86 x86_arm amd64_arm
 :: Internal representation of the version number
-set SUPPORTED_VC=15.0 14.0 12.0 11.0 10.0 9.0 8.0 7.1 7.0
+set SUPPORTED_VC=16.0 15.0 14.0 12.0 11.0 10.0 9.0 8.0 7.1 7.0
 :: Marketing name of the Visual Studio versions
-set SUPPORTED_NICE=2017 2015 2013 2012 2010 2008 2005 2003 2002
+set SUPPORTED_NICE=2019 2017 2015 2013 2012 2010 2008 2005 2003 2002
 set DEFAULT_TSET=x86
 if not "%~1" == "" @(
   if "%~1" == "/?"     goto :Help
@@ -39,7 +39,7 @@ if not "%~1" == "" @(
 )
 if defined VCVER_FRIENDLY echo This script expects a clean environment. Don't run it several times in the same instance of CMD! Or use setlocal and endlocal in your own script to limit the effect of this one.&popd&endlocal&goto :EOF
 set MIN_VC=7.0
-set MAX_VC=15.0
+set MAX_VC=16.0
 set MIN_NICE=2002
 reg /? > NUL 2>&1 || echo "REG.EXE is a prerequisite but wasn't found!" && goto :EOF
 set SETVCV_ERROR=0
@@ -103,6 +103,9 @@ call :TSET_%VCVERLBL% > NUL 2>&1
 if not defined NICEVER @( echo ERROR: This script does not know the given version Visual C++ version&endlocal&set SETVCV_ERROR=1&goto :EOF )
 :: Jump over those "subs"
 goto :NICE_SET
+:PRETTY_16_0
+    set NICEVER=2019
+    goto :EOF
 :PRETTY_15_0
     set NICEVER=2017
     goto :EOF
@@ -129,6 +132,10 @@ goto :NICE_SET
     goto :EOF
 :PRETTY_7_0
     set NICEVER=2002
+    goto :EOF
+:NICE_2019
+    set VCVER=16.0
+    set NEWVS=1
     goto :EOF
 :NICE_2017
     set VCVER=15.0
@@ -158,6 +165,7 @@ goto :NICE_SET
 :NICE_2002
     set VCVER=7.0
     goto :EOF
+:TSET_16_0
 :TSET_15_0
 :TSET_14_0
 :TSET_12_0
@@ -237,6 +245,9 @@ set VCVERLBL=%VCVER:.=_%
 call :FRIENDLY_%VCVERLBL% > NUL 2>&1
 :: Jump over those "subs"
 goto :FRIENDLY_SET
+:FRIENDLY_16_0
+    set _VCVER=%NICEVER% ^[%TEMP_TOOLSET%^]
+    goto :EOF
 :FRIENDLY_15_0
     set _VCVER=%NICEVER% ^[%TEMP_TOOLSET%^]
     goto :EOF
