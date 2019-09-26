@@ -305,7 +305,7 @@ cat > "$MUSLGCC" <<-EOF
 	#!/usr/bin/env bash
 	GCCTORUN="\${REALGCC:-gcc}"
 	if "\$GCCTORUN" -v 2>&1|grep '^Configured with:'|grep -q -- '--enable-default-pie'; then
-		PIEFLAG=-pie
+	    PIEFLAG=-pie
 	fi
 	exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs"$ARCHARG
 EOF
