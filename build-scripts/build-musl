@@ -5,7 +5,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-MUSLLIBC_VERSION="1.1.20"
+MUSLLIBC_VERSION="1.1.23"
 MUSLLIBC_RELEASE="v$MUSLLIBC_VERSION"
 MUSLLIBC_PKG="https://www.musl-libc.org/releases/musl-${MUSLLIBC_VERSION}.tar.gz"
 MUSLLIBC_SIG="$MUSLLIBC_PKG.asc"
@@ -254,17 +254,20 @@ fi
 cat > "${MUSLGCC}.specs" <<-EOF
 	%rename cpp_options old_cpp_options
 
+	*local_prefix:
+	$INSTALL_TO
+
 	*path_lib32:
-	$INSTALL_TO/lib32
+	%(local_prefix)/lib32
 
 	*path_inc32:
-	$INSTALL_TO/include32
+	%(local_prefix)/include32
 
 	*path_lib64:
-	$INSTALL_TO/lib64
+	%(local_prefix)/lib64
 
 	*path_inc64:
-	$INSTALL_TO/include64
+	%(local_prefix)/include64
 
 	*cpp_options:
 	-nostdinc -isystem %{m32:%(path_inc32)}%{!m32:%(path_inc64)} -isystem include%s %(old_cpp_options)
@@ -300,7 +303,11 @@ EOF
 [[ -f "${MUSLGCC}.specs" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc.specs file"; exit 1; }
 cat > "$MUSLGCC" <<-EOF
 	#!/usr/bin/env bash
-	exec "\${REALGCC:-gcc}" "\$@" -specs "\${0}.specs"$ARCHARG
+	GCCTORUN="\${REALGCC:-gcc}"
+	if "\$GCCTORUN" -v 2>&1|grep '^Configured with:'|grep -q -- '--enable-default-pie'; then
+		PIEFLAG=-pie
+	fi
+	exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs"$ARCHARG
 EOF
 [[ -f "$MUSLGCC" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc wrapper script"; exit 1; }
 chmod +x "$MUSLGCC" || { echo -e "${cR}ERROR:${cZ} failed to make musl-gcc executable."; exit 1; }

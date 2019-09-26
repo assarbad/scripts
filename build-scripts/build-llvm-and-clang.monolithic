@@ -5,8 +5,8 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="${LLVM_RELEASE:-release_70}"
-BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_31_1}"
+LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-8.0.0}"
+BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_32}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS="Native"
@@ -16,7 +16,7 @@ PAYLOAD="BUILD_CMAKE"
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O|-o] [-I] [-t <targets>] [-v]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O|-o] [-I] [-t <targets>] [-v] [-P]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
 	echo -e "\t${cW}-b${cZ} <RelWithDebInfo|Release|MinSizeRel|Debug>"
@@ -44,7 +44,7 @@ function show_help
 	echo -e "\t${cW}-p${cZ}"
 	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tgz file."
 	echo -e "\t${cW}-P${cZ}"
-	echo -e "\t  Use the payload script instead of a pre-existing one in this folder."
+	echo -e "\t  Unpack payload script instead of a pre-existing one in this folder."
 	echo -e "\t  ${cW}NOTE:${cZ} normally the payload script is only used if none exists already."
 	echo -e "\t${cW}-r${cZ}"
 	echo -e "\t  Revives the repositories previously packaged with ${cW}-p${cZ}. Implies ${cW}-c${cZ}."
@@ -158,7 +158,7 @@ function prepare_tool
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?b:BcCgGi:InoOprt:TvxX" opt; do
+while getopts "h?b:BcCgGi:InoOPprt:TvxX" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -199,6 +199,8 @@ while getopts "h?b:BcCgGi:InoOprt:TvxX" opt; do
 		ONLYOPTIONAL=0
 		echo -e "${cY}Skipping build of optional components${cZ}"
 		;;
+	P)  FORCEPAYLOAD=1
+		;;
 	p)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-p${cZ}/${cY}-c${cZ} are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		PACKAGEGITGZ=1
@@ -231,7 +233,7 @@ if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 fi
 trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 # Newer versions of LLVM & Clang abolished the old './configure && make' in favor of CMake
-if ((${LLVM_RELEASE##*_} > 36)); then
+if [[ "${LLVM_RELEASE:0:8}" == "llvmorg-" ]] || ((${LLVM_RELEASE##*_} > 36)); then
 	if ((ONLYCHECKOUT == 0)); then
 		prepare_tool cmake
 		let CMAKE_BUILD=1
@@ -252,7 +254,7 @@ let PM=$(grep -c processor /proc/cpuinfo)
 let TIME_START=$(date +%s)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing core projects."
 # Preparational steps
-for i in "llvm:git clone http://llvm.org/git/llvm.git" "llvm/tools/clang:git clone http://llvm.org/git/clang.git" "llvm/projects/compiler-rt:git clone http://llvm.org/git/compiler-rt.git" "llvm/projects/libcxx:git clone http://llvm.org/git/libcxx.git" "llvm/projects/libcxxabi:git clone http://llvm.org/git/libcxxabi.git" "llvm/tools/clang/tools/extra:git clone http://llvm.org/git/clang-tools-extra.git"; do
+for i in "llvm:git clone https://github.com/llvm/llvm-project.git"; do
 	prepare_src "$i" "$LLVM_RELEASE"
 done
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing third-party projects."
@@ -380,7 +382,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-CMAKE_RELEASE="v3.12.3"
+CMAKE_RELEASE="v3.15.3"
 CMAKE_GITREPO="https://cmake.org/cmake.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/cmake}
 BASEDIR="${BASEDIR:-$(pwd)}"

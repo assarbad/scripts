@@ -7,7 +7,7 @@ LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
-DROPBEAR_RELEASE="DROPBEAR_2018.76"
+DROPBEAR_RELEASE="DROPBEAR_2019.78"
 DROPBEAR_GITREPO="https://github.com/mkj/dropbear.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -197,6 +197,7 @@ echo -e "Configuring and building ${cW}$PRJ${cZ}"
 			--disable-lastlog \
 			--without-pam \
 			--enable-bundled-libtom \
+			--host=$(uname -m)-linux
 			CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
 			&& \
 		make --no-print-directory -C "$BUILDDIR" -j $PM \

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 set -x
-MUSLPKG="musl:musl.tgz:http://www.musl-libc.org/releases/musl-1.0.0.tar.gz"
+MUSLPKG="musl:musl.tgz:http://www.musl-libc.org/releases/musl-1.1.23.tar.gz"
 LEVTPKG="libevent:libevent2.tgz:https://github.com/downloads/libevent/libevent/libevent-2.0.21-stable.tar.gz"
 TMUXPKG="tmux:tmux.tgz:http://downloads.sourceforge.net/project/tmux/tmux/tmux-1.9/tmux-1.9a.tar.gz?r=&use_mirror=heanet"
 NCRSPKG="ncurses:ncurses.tgz:NONE"

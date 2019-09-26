@@ -7,7 +7,7 @@ LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
-DROPBEAR_RELEASE="DROPBEAR_2018.76"
+DROPBEAR_RELEASE="DROPBEAR_2019.78"
 DROPBEAR_GITREPO="https://github.com/mkj/dropbear.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -225,7 +225,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-MUSLLIBC_VERSION="1.1.20"
+MUSLLIBC_VERSION="1.1.23"
 MUSLLIBC_RELEASE="v$MUSLLIBC_VERSION"
 MUSLLIBC_PKG="https://www.musl-libc.org/releases/musl-${MUSLLIBC_VERSION}.tar.gz"
 MUSLLIBC_SIG="$MUSLLIBC_PKG.asc"
@@ -474,17 +474,20 @@ fi
 cat > "${MUSLGCC}.specs" <<-EOF
 	%rename cpp_options old_cpp_options
 
+	*local_prefix:
+	$INSTALL_TO
+
 	*path_lib32:
-	$INSTALL_TO/lib32
+	%(local_prefix)/lib32
 
 	*path_inc32:
-	$INSTALL_TO/include32
+	%(local_prefix)/include32
 
 	*path_lib64:
-	$INSTALL_TO/lib64
+	%(local_prefix)/lib64
 
 	*path_inc64:
-	$INSTALL_TO/include64
+	%(local_prefix)/include64
 
 	*cpp_options:
 	-nostdinc -isystem %{m32:%(path_inc32)}%{!m32:%(path_inc64)} -isystem include%s %(old_cpp_options)
