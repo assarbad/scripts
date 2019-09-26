@@ -110,7 +110,7 @@ PRJNAME="cmake"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-prepare_src "$PRJNAME:git clone $CMAKE_GITREPO" "$CMAKE_RELEASE"
+prepare_src "$PRJNAME:git clone "$CMAKE_GITREPO" "$CMAKE_RELEASE"
 
 trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 ( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR" )

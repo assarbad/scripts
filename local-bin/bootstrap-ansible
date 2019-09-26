@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+EXPECTDISTRO="Ubuntu or Linux Mint"
+EXPECTDISTROID="^(linuxmint|ubuntu)"
+let EXPECTEDDISTVER=18
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+[[ $UID -eq 0 ]] || { echo -e "${cR}ERROR:${cZ} This script must be run as ${cW}root${cZ}."; exit 1; }
+if [[ -e /etc/debian_version ]] && [[ -e /etc/os-release ]]; then
+	NAME=$(source /etc/os-release; echo $NAME)
+	DISTROID=$(source /etc/os-release; echo $ID)
+	VERNUM=$(source /etc/os-release; echo ${VERSION_ID%.*})
+	CODENAME=$(source /etc/os-release; echo $UBUNTU_CODENAME)
+	SRCLIST=$(echo /etc/apt/sources.list.d/ansible-*-${CODENAME}.list)
+	if [[ "$DISTROID" =~ $EXPECTDISTROID ]] && (( VERNUM >= EXPECTEDDISTVER )); then
+		if dpkg -l|grep ^ii|grep -q software-properties-common; then
+			echo -e "${cW}INFO:${cZ} prerequisites for Ansible PPA are already installed."
+		else
+			( set -x; apt-get -q -y update )
+			( set-x; apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install software-properties-common ) || { echo -e "${cR}ERROR:${cZ} Could not install software-properties-common package."; exit 1; }
+		fi
+		if [[ -f "$SRCLIST" ]]; then
+			echo -e "${cW}INFO:${cZ} The Ansible PPA seems to be already configured (determined by the presence of ${SRCLIST}). Remove it manually if needed."
+		else
+			( set -x; apt-add-repository --yes ppa:ansible/ansible ) || { echo -e "${cR}ERROR:${cZ} Could not add the Ansible PPA."; exit 1; }
+		fi
+		if dpkg -l|grep ^ii|grep -q ansible; then
+			echo -e "${cW}INFO:${cZ} Assuming that Ansible is already installed as per ${cW}dpkg -l${cZ}. Uninstall manually, if needed."
+		else
+			( set -x; apt-get -y update ) || { echo -e "${cR}ERROR:${cZ} Could not update package cache."; exit 1; }
+			( set -x; apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install ansible ) || { echo -e "${cR}ERROR:${cZ} Failed to install Ansible."; exit 1; }
+		fi
+	else
+		echo -e "${cR}ERROR:${cZ} This script is meant to be run on $EXPECTDISTRO (version >=$EXPECTEDDISTVER; found $NAME)."
+		exit 1
+	fi
+else
+	echo -e "${cR}ERROR:${cZ} This script is meant to be run on $EXPECTDISTRO."
+	exit 1
+fi

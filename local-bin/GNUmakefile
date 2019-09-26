@@ -1,4 +1,4 @@
-BASICFILES ?= etckeeper-commit istat save-pkgstates reinstall-grub showsubids lxc-guest-create-template lxc-guest-from-template lxc-guest-reassign generate_mac sync-etc-hosts-and-lxc-guest-configs lxc-assign-guest-IDs-on-host
+BASICFILES ?= etckeeper-commit bootstrap-ansible istat save-pkgstates reinstall-grub showsubids lxc-guest-create-template lxc-guest-from-template lxc-guest-reassign generate_mac sync-etc-hosts-and-lxc-guest-configs lxc-assign-guest-IDs-on-host
 ALLFILES ?= $(BASICFILES)
 TARGET ?= /usr/local/bin
 
