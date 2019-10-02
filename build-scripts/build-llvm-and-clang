@@ -314,6 +314,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 					trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Moving back your previous LLVM from '$OLD_INSTALL_TO' due to signal"; rm -rf "'$INSTALL_TO'"; mv "'${INSTALL_TO%/*}/$OLD_INSTALL_TO'" "'$INSTALL_TO'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 				fi
 				( set -x; make -j$PM ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make install${cZ} failed."; exit 1; }
+				trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 			fi
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		fi
