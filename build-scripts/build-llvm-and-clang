@@ -356,11 +356,8 @@ if ((BUNDLEGIT==1)); then
 		echo -e "#!/usr/bin/env bash\n./$MEANDMYSELF -r \"\$@\""|tee $REVIVE > /dev/null && chmod +x $REVIVE
 		echo "Now bundling repositories"
 		find llvm 3rdparty -type d -name '.git'|while read dname; do
-			echo "$dname"
 			reponame=${dname%/.git}
-			echo "$reponame"
 			reponame=${reponame##*/}
-			echo "$reponame"
 			( set -x; git -C "$dname" bundle create "$BASEDIR/$reponame-$TIMESTAMP.gitbundle" --all )
 		done
 		echo "Now packing the contents with tar"
