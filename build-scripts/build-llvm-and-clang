@@ -18,7 +18,7 @@ PAYLOAD=""
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p|-r] [-g] [-i <install-dir>] [-O|-o] [-I] [-t <targets>] [-v] [-P]"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-B] [-C|-c|-p] [-r <version>] [-g] [-i <install-dir>] [-O|-o] [-I] [-t <targets>] [-v] [-P]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
 	echo -e "\t${cW}-b${cZ} <RelWithDebInfo|Release|MinSizeRel|Debug>"
@@ -48,7 +48,7 @@ function show_help
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
-	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .txz file."
+	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tar file after bundling them."
 	echo -e "\t${cW}-P${cZ}"
 	echo -e "\t  Unpack payload script instead of a pre-existing one in this folder."
 	echo -e "\t  ${cW}NOTE:${cZ} normally the payload script is only used if none exists already."
@@ -78,9 +78,14 @@ function prepare_src
 	local PRJ=$(echo "${PRJNAME##*/}"|tr 'a-z' 'A-Z')
 	if ((NOCHECKOUT==0)); then
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
-		# Clone the repository if we don't have it
-		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
-		[[ -d "$BASEDIR/$PRJNAME" ]] || $GITCLONE "$BASEDIR/$PRJNAME"
+		if ((REVIVEPKG)); then
+			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning Git bundle if no clone exists."
+			[[ -d "$BASEDIR/$PRJNAME" ]] || ( set -x; git clone ${PRJNAME##*/}-${REVIVETS}.gitbundle "$BASEDIR/$PRJNAME" )
+		else
+			# Clone the repository if we don't have it
+			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
+			[[ -d "$BASEDIR/$PRJNAME" ]] || $GITCLONE "$BASEDIR/$PRJNAME"
+		fi
 		# Sanity check the clone
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Verifying the clone exists now."
 		[[ -d "$BASEDIR/$PRJNAME/.git" ]] || { echo -e "${cR}ERROR:${cZ} apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
@@ -164,7 +169,7 @@ function prepare_tool
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?b:BcCe:gGi:InoOPprt:TvxX" opt; do
+while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -213,12 +218,14 @@ while getopts "h?b:BcCe:gGi:InoOPprt:TvxX" opt; do
 		;;
 	p)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-p${cZ}/${cY}-c${cZ} are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
-		PACKAGEGITXZ=1
-		echo "Doing only a checkout and then packaging bare clones into .tbz (requires tar+xz)."
+		BUNDLEGIT=1
+		echo "Doing only a checkout and then packaging bundled clones into a .tar file."
 		;;
-	r)  ((NOCHECKOUT)) || ONLYCHECKOUT=1
+	r)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		((NOCHECKOUT)) || ONLYCHECKOUT=1
 		REVIVEPKG=1
-		echo "Reviving bare repos, followed a checkout."
+		REVIVETS="$OPTARG"
+		echo "Reviving Git bundles, followed a checkout."
 		;;
 	t)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		TARGETS="$OPTARG"
@@ -338,29 +345,49 @@ fi
 if ((ONLYCHECKOUT==1)) || ((NOBUILD==1)); then
 	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
 fi
-if ((PACKAGEGITXZ==1)); then
+if ((BUNDLEGIT==1)); then
 	TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
-	TARNAME="packaged-${TIMESTAMP}-LLVM+binutils.tbz"
+	TARNAME="packaged-${TIMESTAMP}-LLVM.tar"
 	UNPACKER="unpack-$TIMESTAMP-LLVM"
 	echo "Packaging the source into $TARNAME"
 	(
 		REVIVE=./revive
 		cd "$BASEDIR"
-		echo -e "#!/usr/bin/env bash\n./$MEANDMYSELF -r"|tee $REVIVE > /dev/null && chmod +x $REVIVE
-		echo "Now packing the contents with tar+bzip2"
-		tar -cjf "$TARNAME" $MEANDMYSELF $REVIVE $(find llvm 3rdparty -type d -name '.git') && \
+		echo -e "#!/usr/bin/env bash\n./$MEANDMYSELF -r \"\$@\""|tee $REVIVE > /dev/null && chmod +x $REVIVE
+		echo "Now bundling repositories"
+		find llvm 3rdparty -type d -name '.git'|while read dname; do
+			echo "$dname"
+			reponame=${dname%/.git}
+			echo "$reponame"
+			reponame=${reponame##*/}
+			echo "$reponame"
+			( set -x; git -C "$dname" bundle create "$BASEDIR/$reponame-$TIMESTAMP.gitbundle" --all )
+		done
+		echo "Now packing the contents with tar"
+		tar -chf "$TARNAME" $MEANDMYSELF $REVIVE *-$TIMESTAMP.gitbundle && \
 			echo "Find the package under the name $TARNAME"
 		rm $REVIVE
-		echo -e "#!/usr/bin/env bash\nT=\"$TARNAME\"\nD=\"$TIMESTAMP-LLVM\"\nR=\"$REVIVE\"\nU=\"$UNPACKER\"\necho \"Unpacking \$T into ./\$D \$( [[ \"x\$1\" == \"x-c\" ]] && echo \"and removing archive plus unpacker upon success\" )\"\nmkdir \"./\$D\" && tar -C \"./\$D\" -xjf \"./\$T\" && ( cd \"./\$D\" && [[ -x \$R ]] && \$R && rm -f \$R )\n[[ \"x\$1\" == \"x-c\" ]] && { echo \"Also removing \$U and \$T\"; rm -f \"./\$U\" \"./\$T\"; }" \
-			| tee "./$UNPACKER" > /dev/null && chmod +x "./$UNPACKER"
+		cat - >> "./$UNPACKER" <<-EOF
+			#!/usr/bin/env bash
+			TS="$TIMESTAMP"
+			T="$TARNAME"
+			D="\$TS-LLVM"
+			R="$REVIVE"
+			U="$UNPACKER"
+			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R "\$TS" )
+			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
+		EOF
+		chmod +x "./$UNPACKER"
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle
 	)
-	let TIME_TXZ=$(date +%s)
-	show_time_diff $TIME_GIT $TIME_TXZ                      "Packaging took:      %s"
+	let TIME_GITBUNDLE=$(date +%s)
+	show_time_diff $TIME_GIT $TIME_GITBUNDLE                "Packaging took:      %s"
 fi
 let TIME_END=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	if ((ONLYOPTIONAL == 0)); then
-		show_time_diff $TIME_GIT $TIME_CONFIGURE        "CMake       took:    %s"
+		show_time_diff $TIME_GIT $TIME_CONFIGURE            "CMake took:          %s"
 		if ((NOINSTALL == 0)); then
 			show_time_diff $TIME_MAKE $TIME_INSTALL         "Installation took:   %s"
 		fi
