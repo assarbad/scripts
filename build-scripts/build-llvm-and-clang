@@ -333,7 +333,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		unset CXX
 		if ((NOOPTIONAL == 0)); then
 			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-			( set -x; ${USE_CLANG:+CC=clang CXX=clang++} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
+			( set -x; ${USE_CLANG:+env CC=clang CXX=clang++} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
 			if ((NOINSTALL == 0)); then
 				( set -x; make -j$PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} failed."; exit 1; }
 			fi
