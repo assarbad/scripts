@@ -80,7 +80,10 @@ function prepare_src
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
 		if ((REVIVEPKG)); then
 			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning Git bundle if no clone exists."
-			[[ -d "$BASEDIR/$PRJNAME" ]] || ( set -x; git clone ${PRJNAME##*/}-${REVIVETS}.gitbundle "$BASEDIR/$PRJNAME" )
+			if [[ ! -d "$BASEDIR/$PRJNAME" ]]; then
+				( set -x; git clone ${PRJNAME##*/}-${REVIVETS}.gitbundle "$BASEDIR/$PRJNAME" )
+				( set -x; git -C "$BASEDIR/$PRJNAME" remote set-url origin "${GITCLONE#git clone }" )
+			fi
 		else
 			# Clone the repository if we don't have it
 			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
