@@ -103,7 +103,7 @@ function prepare_src
 		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -x) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean -d -f -x' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fetching updates from upstream."
-		( cd "$BASEDIR/$PRJNAME" && git fetch ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
+		( cd "$BASEDIR/$PRJNAME" && git fetch; git fetch --tags ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
 		# Prune branches
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Pruning remote branches."
 		( cd "$BASEDIR/$PRJNAME" && git remote prune origin ) || { echo -e "${cY}WARNING:${cZ} failed to 'git remote prune origin' $PRJNAME."; }
