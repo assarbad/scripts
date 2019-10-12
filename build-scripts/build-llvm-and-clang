@@ -354,9 +354,7 @@ if ((BUNDLEGIT==1)); then
 	UNPACKER="unpack-$TIMESTAMP-LLVM"
 	echo "Packaging the source into $TARNAME"
 	(
-		REVIVE=./revive
 		cd "$BASEDIR"
-		echo -e "#!/usr/bin/env bash\n./$MEANDMYSELF -r \"\$@\""|tee $REVIVE > /dev/null && chmod +x $REVIVE
 		echo "Now bundling repositories"
 		find llvm 3rdparty -type d -name '.git'|while read dname; do
 			reponame=${dname%/.git}
@@ -364,18 +362,17 @@ if ((BUNDLEGIT==1)); then
 			( set -x; git -C "$dname" bundle create "$BASEDIR/$reponame-$TIMESTAMP.gitbundle" --all )
 		done
 		echo "Now packing the contents with tar"
-		tar -chf "$TARNAME" $MEANDMYSELF $REVIVE *-$TIMESTAMP.gitbundle && \
+		tar -chf "$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle && \
 			echo "Find the package under the name $TARNAME"
-		rm $REVIVE
 		cat - >> "./$UNPACKER" <<-EOF
 			#!/usr/bin/env bash
 			TS="$TIMESTAMP"
 			T="$TARNAME"
 			D="\$TS-LLVM"
-			R="$REVIVE"
+			R="./$MEANDMYSELF"
 			U="$UNPACKER"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
-			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R "\$TS" )
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
 		EOF
 		chmod +x "./$UNPACKER"
