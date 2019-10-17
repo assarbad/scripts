@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in rm rmdir dirname readlink file tempfile grep cut tee git date make gcc wget tar sha256sum autoconf autoheader; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+CC_TO_USE=${CROSS_COMPILE}gcc
+ORIG_CC="$CC_TO_USE"
+for tool in rm rmdir dirname readlink file tempfile grep cut tee git date make "${CC_TO_USE}" wget tar sha256sum autoconf autoheader; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
@@ -12,7 +14,6 @@ DROPBEAR_GITREPO="https://github.com/mkj/dropbear.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
 BASEDIR="${BASEDIR:-$(pwd)}"
 CACHEDIR="$BASEDIR/cache"
-PAYLOAD=""
 
 function show_help
 {
@@ -21,9 +22,6 @@ function show_help
 	echo -e "\t  Show this help"
 	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
-	echo -e "\t${cW}-P${cZ}"
-	echo -e "\t  Use the payload script instead of a pre-existing one in this folder."
-	echo -e "\t  ${cW}NOTE:${cZ} normally the payload script is only used if none exists already."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
 	echo -e "\t${cW}-V${cZ} <dropbear-release-tag> ${cY}(if not given defaults to: $DROPBEAR_RELEASE)${cZ}"
@@ -82,23 +80,6 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-function expand_payload
-{
-	local PAYLOAD="$1"
-	local TARGET="$2"
-	echo "PAYLOAD = $PAYLOAD"
-	echo "TARGET = $TARGET"
-	if [[ -n "$PAYLOAD" ]]; then
-		local MATCH=$(grep --text --line-number '^'"$PAYLOAD"':$' "$MEANDMYSELF" | cut -d ':' -f 1)
-		local PAYLOADSTART=$((MATCH+1))
-		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Extracting from line $PAYLOADSTART."
-		tail -n +$PAYLOADSTART "$MEANDMYSELF" > "$TARGET" && \
-			chmod +x "$TARGET"
-	else
-		echo -e "${cY}WARNING:${cZ} can't unpack payload script as it doesn't seem to be bundled."
-	fi
-}
-
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
 while getopts "h?i:vV:" opt; do
 	case "$opt" in
@@ -108,8 +89,6 @@ while getopts "h?i:vV:" opt; do
 		;;
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
-		;;
-	P)  FORCEPAYLOAD=1
 		;;
 	v)  VERBOSE=1
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
@@ -138,18 +117,15 @@ BUILDDIR="${PRJSRCDIR}.build"
 prepare_src "$PRJNAME:git clone $DROPBEAR_GITREPO" "$DROPBEAR_RELEASE"
 
 # Build musl-libc if not yet available
-MUSLGCC="$HOME/bin/musl/musl-gcc"
-if type "$MUSLGCC" > /dev/null 2>&1; then
-	( echo -e "${cW}${MUSLGCC##*/} already exists${cZ}" )
+MUSLGCC="musl-${ORIG_CC##*/}"
+MUSL_INSTALLDIR="$CACHEDIR/$MUSLGCC"
+if [[ -x "$MUSL_INSTALLDIR/$MUSLGCC" ]]; then
+	echo -e "${cW}INFO:${cZ} Skipping build of musl-libc (found cached copy at $MUSL_INSTALLDIR)."
 else
 	BUILDMUSL="$CURRABSPATH/build-musl"
-	if [[ ! -e "$BUILDMUSL" ]] || ((FORCEPAYLOAD)); then
-		expand_payload "$PAYLOAD" "$BUILDMUSL"
-		[[ -x "$BUILDMUSL" ]] || { echo -e "${cR}ERROR:${cZ} the ${BUILDMUSL##*/} is either not bundled or failed to unpack."; exit 1; }
-	fi
-	( echo -e "${cW}Building ${MUSLGCC##*/} now${cZ}"; cd "${BUILDMUSL%/*}" && ./${BUILDMUSL##*/} -t $(gcc -dumpmachine) ) || { echo -e "${cR}ERROR:${cZ} failed to build musl and there is no musl-gcc available."; exit 1; }
+	( echo -e "${cW}Building ${MUSLGCC##*/} now${cZ}"; cd "${BUILDMUSL%/*}" && ./${BUILDMUSL##*/} -i "$MUSL_INSTALLDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to build musl-libc for ${ORIG_CC}."; exit 1; }
 fi
-PATH=${MUSLGCC%/*}:$PATH
+export PATH="$MUSL_INSTALLDIR:$PATH"
 SRCTARBALLDIR="$CACHEDIR/source-tarballs"
 [[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
 ZLIBPKG="$SRCTARBALLDIR/${ZLIBURL##*/}"
@@ -168,9 +144,9 @@ else
 	exit 1
 fi
 # Configure GCC for our purpose
-export CC="musl-gcc"
-export LDFLAGS="-Wl,--gc-sections"
-export CFLAGS="-ffunction-sections -fdata-sections"
+export CC="$MUSLGCC"
+export LDFLAGS="-Wl,--gc-sections -Wl,--hash-style=both"
+export CFLAGS="-ffunction-sections -fdata-sections" # -fnostack-protector
 # proceed ...
 echo -e "Configuring and building ${cW}zlib${cZ}"
 (

@@ -297,7 +297,7 @@ cat > "$MUSLGCC" <<-EOF
 	if "\$GCCTORUN" -v 2>&1|grep '^Configured with:'|grep -q -- '--enable-default-pie'; then
 	    PIEFLAG=${PIEFLAG:--pie}
 	fi
-	( set -x; exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs" )
+	( [[ -n "$DBG" ]] && set -x; exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs" ) || exit \$?
 EOF
 [[ -f "$MUSLGCC" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc wrapper ((${cW}$MUSLGCC${cZ})) script"; exit 1; }
 chmod +x "$MUSLGCC" || { echo -e "${cR}ERROR:${cZ} failed to make musl-gcc (${cW}$MUSLGCC${cZ}) executable."; exit 1; }
