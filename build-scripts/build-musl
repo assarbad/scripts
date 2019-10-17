@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc gpg tar wc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+CC_TO_USE=${CROSS_COMPILE}gcc
+ORIG_CC="$CC_TO_USE"
+for tool in rm rmdir dirname readlink file tempfile grep tee git date make "${CC_TO_USE}" gpg tar wc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-MUSLLIBC_VERSION="1.1.23"
+MUSLLIBC_VERSION="1.1.24"
 MUSLLIBC_RELEASE="v$MUSLLIBC_VERSION"
-MUSLLIBC_PKG="https://www.musl-libc.org/releases/musl-${MUSLLIBC_VERSION}.tar.gz"
-MUSLLIBC_SIG="$MUSLLIBC_PKG.asc"
-MUSLLIBC_KEY="8364 8929 0BB6 B70F 99FF DA05 56BC DB59 3020 450F"
 MUSLLIBC_GITREPO="http://git.musl-libc.org/cgit/musl"
-BLDSRC="git"
-INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl}
+INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl${CROSS_COMPILE:+.${CROSS_COMPILE%-}}}
 BASEDIR="$CURRABSPATH"
 CACHEDIR="$BASEDIR/cache"
 
@@ -29,7 +27,7 @@ function show_help
 	echo -e "\t  Tag to build instead of hardcoded default."
 	echo -e "\t${cW}-t${cZ} <target-triplet>"
 	echo -e "\t  Target triplet, e.g. ${cW}x86_64-linux-gnu${cZ} or ${cW}i386-linux-gnu${cZ} or a"
-	echo -e "\t  comma-separated list of architectures."
+	echo -e "\t  comma-separated list of architectures (default is to build both)."
 	echo -e "\t  ${cW}NOTE:${cZ} this can be useful on x86_64 to force only to build x86_64 or x86_32 instead of"
 	echo -e "\t  both."
 	echo ""
@@ -55,7 +53,6 @@ function prepare_src
 		( cd "$CACHEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
 		( cd "$CACHEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} branch.master.rebase = " && git config --get branch.master.rebase )
 		( cd "$CACHEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
-		((REVIVEPKG)) && ( cd "$CACHEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
 		# Scrub the working copy
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cleaning extraneous files from Git clone."
 		( cd "$CACHEDIR/$PRJNAME" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
@@ -115,6 +112,9 @@ if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 	echo -e "${cR}ERROR:${cZ} Lock failed, PID $(cat "$LOCKFILE") [$LOCKFILE]" >&2
 	exit 1
 fi
+if [[ "$CC_TO_USE" != "$ORIG_CC" ]]; then
+	echo -e "${cW}INFO:${cZ} cross-compilation was requested: CROSS_COMPILE=$CROSS_COMPILE"
+fi
 trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 echo -e "Working directory: $BASEDIR"
 let PM=$(grep -c processor /proc/cpuinfo)
@@ -124,40 +124,27 @@ PRJNAME="musl-libc"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-if [[ "$BLDSRC" == "git" ]]; then
-	prepare_src "$PRJNAME:git clone --progress --verbose $MUSLLIBC_GITREPO" "$MUSLLIBC_RELEASE"
-else
-	SRCTARBALLDIR="$CACHEDIR/source-tarballs"
-	[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
-	MUSLPKG="$SRCTARBALLDIR/${MUSLLIBC_PKG##*/}"
-	MUSLSIG="$SRCTARBALLDIR/${MUSLLIBC_SIG##*/}"
-	if [[ -f "$MUSLPKG" ]] && [[ -f "$MUSLSIG" ]]; then
-		echo -e "${cW}${MUSLLIBC_PKG##*/} already downloaded, using cached copy${cZ}"
-	else
-		wget -O "$MUSLPKG" "$MUSLLIBC_PKG" || curl -o "$MUSLPKG" "$MUSLLIBC_PKG" || { echo -e "${cR}ERROR:${cZ} failed to download $MUSLLIBC_PKG"; exit 1; }
-		wget -O "$MUSLSIG" "$MUSLLIBC_SIG" || curl -o "$MUSLSIG" "$MUSLLIBC_SIG" || { echo -e "${cR}ERROR:${cZ} failed to download $MUSLLIBC_SIG"; exit 1; }
-	fi
-	gpg --quiet --no-greeting --batch --no-permission-warning --homedir "$SRCTARBALLDIR" --recv-keys "8364 8929 0BB6 B70F 99FF DA05 56BC DB59 3020 450F" || { echo -e "${cR}ERROR:${cZ} failed to download public key $MUSLLIBC_KEY"; exit 1; }
-	gpg --quiet --no-greeting --batch --no-permission-warning --homedir "$SRCTARBALLDIR" --verify "$MUSLSIG" "$MUSLPKG" || { echo -e "${cR}ERROR:${cZ} failed to verify $MUSLSIG"; exit 1; }
-	if [[ -d "$PRJSRCDIR" ]]; then
-		rm -rf "$PRJSRCDIR" || { echo -e "${cR}ERROR:${cZ} failed to wipe old $PRJSRCDIR"; exit 1; }
-	fi
-	mkdir "$PRJSRCDIR" || { echo -e "${cR}ERROR:${cZ} failed to create empty $PRJSRCDIR"; exit 1; }
-	tar -C "$PRJSRCDIR" --strip-components=1 -xf "$MUSLPKG" || { echo -e "${cR}ERROR:${cZ} failed to unpack $MUSLPKG"; exit 1; }
-fi
+prepare_src "$PRJNAME:git clone --progress --verbose $MUSLLIBC_GITREPO" "$MUSLLIBC_RELEASE"
 
-[[ -n "$TARGETARCH" ]] || TARGETARCH=$(gcc -dumpmachine)
+BUILD_MACH=$("${CC_TO_USE}" -dumpmachine 2> /dev/null)
+DEF_ARCH=$("${CC_TO_USE}" -print-multiarch 2> /dev/null)
+M32_ARCH=$("${CC_TO_USE}" -m32 -print-multiarch 2> /dev/null)
+M64_ARCH=$("${CC_TO_USE}" -m64 -print-multiarch 2> /dev/null)
+[[ -n "$TARGETARCH" ]] || TARGETARCH="$DEF_ARCH"
 TGTTRIPLET=$TARGETARCH
 TARGETDUPL=${TARGETARCH#*-}
 TARGETARCH=${TARGETARCH%%-*}
-if [[ -z "$TARGETGIVEN" ]] && [[ "$TARGETARCH" == "x86_64" ]] && [[ $(gcc -dumpmachine) == $(gcc -print-multiarch) ]]; then
-	if gcc -print-multi-lib|grep -q '^32;'; then
-		echo -e "${cW}INFO:${cZ} Building 32-bit ${cW}and${cZ} 64-bit Intel/AMD musl-libc"
+CC_VERSION=$("${CC_TO_USE}" -dumpversion)
+((CC_VERSION >= 4)) || { echo -e "${cR}ERROR:${cZ} The compiler version is less than 4 (actual value: $CC_VERSION) and thus unsupported."; exit 1; }
+if [[ -z "$TARGETGIVEN" ]] && [[ "$TARGETARCH" == "x86_64" ]] && [[ "$DEF_ARCH" == "$M64_ARCH" ]]; then
+	if "${CC_TO_USE}" -print-multi-lib 2> /dev/null|grep -q '^32;'; then
+		echo -e "${cW}INFO:${cZ} Building 32-bit ${cW}and${cZ} 64-bit Intel/AMD musl-libc (IA-32)"
 		TARGETARCH=$TARGETARCH,i386
+		BITNESS_ELF_TYPE="%{!m32:-melf_x86_64}%{m32:-melf_i386}"
 		let SPECIALSPEC=1
 	fi
 fi
-type $(gcc -dumpmachine)-gcc > /dev/null 2>&1 && CROSS_COMPILE="$(gcc -dumpmachine)-"
+type ${DEF_ARCH}-gcc > /dev/null 2>&1 && CROSS_COMPILE="${DEF_ARCH}-"
 echo -e "TARGETARCH=$TARGETARCH"
 
 if [[ -d "$INSTALL_TO" ]]; then
@@ -170,10 +157,8 @@ else
 fi
 for tgt in ${TARGETARCH//,/ }; do
 	echo -e "Now building for target ${cW}$tgt${cZ}"
-	if [[ "$BLDSRC" == "git" ]]; then
-		((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
-		( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
-	fi
+	((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
+	( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
 	case "$tgt" in
 	i?86|x86_32) # 32-bit Intel/AMD
 		ARCHARG="-m32"
@@ -224,7 +209,7 @@ function test_musl_wrapper
 	local HELLOC=$(tempfile -p musl-test -s .c)
 	local MUSLGCC="$1"
 	shift
-	echo -e "${cW}INFO:${cZ} Let's verify that the musl-gcc wrapper script and .specs performs as expected"
+	echo -e "${cW}INFO:${cZ} Let's verify that the musl-gcc wrapper (${cW}$MUSLGCC${cZ}) script and .specs performs as expected"
 	cat > "$HELLOC" <<-'EOF'
 		#include <stdio.h>
 		void main(void)
@@ -236,16 +221,16 @@ EOF
 		if [[ -z "$i" ]]; then
 			( set -x; $MUSLGCC -static "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the native build."; exit 1; }
 		else
-			( set -x; $MUSLGCC -static $i "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the $i build (did you install the ${cW}lib32gcc-*-dev${cZ} package or similar?)."; exit 1; }
+			( set -x; $MUSLGCC -static $i "$HELLOC" -o "${HELLOC%.c}" ) || { echo -e "${cR}ERROR:${cZ} failed the $i build (did you install the ${cW}lib32gcc-*-dev${cZ} (search with ${cW}apt-cache search lib32gcc-.-dev${cZ}) package or similar?)."; exit 1; }
 		fi
 		file "${HELLOC%.c}"
 		rm -f "${HELLOC%.c}"
 	done
-	echo -e "${cG}musl-gcc works fine${cZ}"
+	echo -e "${cG}musl-gcc (${cW}$MUSLGCC${cG}) works fine${cZ}"
 }
 
-MUSLGCC="$INSTALL_TO/musl-gcc"
-echo -e "${cW}INFO:${cZ} Preparing spec file for musl-gcc to build both 32-bit and 64-bit targets using -m32 and -m64 respectively"
+MUSLGCC="$INSTALL_TO/musl-${ORIG_CC##*/}"
+echo -e "${cW}INFO:${cZ} Preparing spec file for ${cW}musl-gcc${cZ} (${cW}$MUSLGCC${cZ}) to build both 32-bit and 64-bit targets using ${cW}-m32${cZ} and ${cW}-m64${cZ} respectively"
 if [[ -n "$TARGETGIVEN" ]] && [[ -n "$ARCHARG" ]] && (($(wc -w <<< $TARGETGIVEN) == 1)); then
 	ARCHARG=" $ARCHARG"
 else
@@ -287,8 +272,11 @@ cat > "${MUSLGCC}.specs" <<-EOF
 	*endfile:
 	%{shared|pie:crtendS.o%s;:crtend.o%s} %{m32:%(path_lib32)}%{!m32:%(path_lib64)}/crtn.o
 
+	*bitness_elf_type:
+	$BITNESS_ELF_TYPE
+
 	*link:
-	-dynamic-linker /lib/ld-musl-%{m32:i386}%{!m32:x86_64}.so.1 -nostdlib %{shared:-shared} %{static:-static} %{rdynamic:-export-dynamic} %{!m32:-melf_x86_64}%{m32:-melf_i386}
+	-dynamic-linker /lib/ld-musl-%{m32:i386}%{!m32:x86_64}.so.1 -nostdlib %{shared:-shared} %{static:-static} %{rdynamic:-export-dynamic} %(bitness_elf_type)
 
 	*esp_link:
 
@@ -300,17 +288,19 @@ cat > "${MUSLGCC}.specs" <<-EOF
 
 
 EOF
-[[ -f "${MUSLGCC}.specs" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc.specs file"; exit 1; }
+[[ -f "${MUSLGCC}.specs" ]] || { echo -e "${cR}ERROR:${cZ} failed to write ${MUSLGCC}.specs file"; exit 1; }
 cat > "$MUSLGCC" <<-EOF
 	#!/usr/bin/env bash
-	GCCTORUN="\${REALGCC:-gcc}"
+	MUSLLIBC_RELEASE="$MUSLLIBC_RELEASE"
+	MUSLLIBC_GITREPO="$MUSLLIBC_GITREPO"
+	GCCTORUN="\${REALGCC:-$ORIG_CC}"
 	if "\$GCCTORUN" -v 2>&1|grep '^Configured with:'|grep -q -- '--enable-default-pie'; then
-	    PIEFLAG=-pie
+	    PIEFLAG=${PIEFLAG:--pie}
 	fi
-	exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs"$ARCHARG
+	( set -x; exec "\$GCCTORUN" \${PIEFLAG} "\$@" -specs "\${0}.specs" )
 EOF
-[[ -f "$MUSLGCC" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc wrapper script"; exit 1; }
-chmod +x "$MUSLGCC" || { echo -e "${cR}ERROR:${cZ} failed to make musl-gcc executable."; exit 1; }
+[[ -f "$MUSLGCC" ]] || { echo -e "${cR}ERROR:${cZ} failed to write musl-gcc wrapper ((${cW}$MUSLGCC${cZ})) script"; exit 1; }
+chmod +x "$MUSLGCC" || { echo -e "${cR}ERROR:${cZ} failed to make musl-gcc (${cW}$MUSLGCC${cZ}) executable."; exit 1; }
 if ((SPECIALSPEC)); then
 	test_musl_wrapper "$MUSLGCC" "" "-m32" "-m64"
 else
@@ -323,7 +313,7 @@ fi
 rm -f "$INSTALL_TO"/lib*/*.specs "$INSTALL_TO/bin/musl-gcc" && { test -d "$INSTALL_TO/bin" && rmdir "$INSTALL_TO/bin"; }
 
 trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'" "'$BUILDDIR'32" "'$BUILDDIR'64"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
-echo -e "${cW}NOTE:${cZ} it is recommended to add $INSTALL_TO to your ${cW}PATH${cZ} variable and subsequently pass ${cW}CC=musl-gcc${cZ} to make."
+echo -e "${cW}NOTE:${cZ} it is recommended to add $INSTALL_TO to your ${cW}PATH${cZ} variable and subsequently pass ${cW}CC=$MUSLGCC${cZ} to make."
 if [[ -n "$OLD_INSTALL_TO" ]]; then
 	echo -e "Also remember that your previous musl-libc installation was moved to ${INSTALL_TO%/*}/${OLD_INSTALL_TO}. Remove it at your own discretion."
 fi
