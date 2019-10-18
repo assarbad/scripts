@@ -5,6 +5,11 @@ ORIG_CC="$CC_TO_USE"
 for tool in rm rmdir dirname readlink file tempfile grep tee git date make "${CC_TO_USE}" gpg tar wc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
+CROSS_COMPILE_PATH=${CROSS_COMPILE%/*}
+CROSS_COMPILE=${CROSS_COMPILE##*/}
+if [[ -n "$CROSS_COMPILE_PATH" ]]; then
+	export PATH="$CROSS_COMPILE_PATH:$PATH"
+fi
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 MUSLLIBC_VERSION="1.1.24"
@@ -127,7 +132,7 @@ BUILDDIR="${PRJSRCDIR}.build"
 prepare_src "$PRJNAME:git clone --progress --verbose $MUSLLIBC_GITREPO" "$MUSLLIBC_RELEASE"
 
 BUILD_MACH=$("${CC_TO_USE}" -dumpmachine 2> /dev/null)
-DEF_ARCH=$("${CC_TO_USE}" -print-multiarch 2> /dev/null)
+DEF_ARCH=$("${CC_TO_USE}" -print-multiarch 2> /dev/null || echo "$BUILD_MACH")
 M32_ARCH=$("${CC_TO_USE}" -m32 -print-multiarch 2> /dev/null)
 M64_ARCH=$("${CC_TO_USE}" -m64 -print-multiarch 2> /dev/null)
 [[ -n "$TARGETARCH" ]] || TARGETARCH="$DEF_ARCH"
@@ -135,7 +140,7 @@ TGTTRIPLET=$TARGETARCH
 TARGETDUPL=${TARGETARCH#*-}
 TARGETARCH=${TARGETARCH%%-*}
 CC_VERSION=$("${CC_TO_USE}" -dumpversion)
-((CC_VERSION >= 4)) || { echo -e "${cR}ERROR:${cZ} The compiler version is less than 4 (actual value: $CC_VERSION) and thus unsupported."; exit 1; }
+((${CC_VERSION%%.*} >= 4)) || { echo -e "${cR}ERROR:${cZ} The compiler version is less than 4 (actual value: $CC_VERSION) and thus unsupported."; exit 1; }
 if [[ -z "$TARGETGIVEN" ]] && [[ "$TARGETARCH" == "x86_64" ]] && [[ "$DEF_ARCH" == "$M64_ARCH" ]]; then
 	if "${CC_TO_USE}" -print-multi-lib 2> /dev/null|grep -q '^32;'; then
 		echo -e "${cW}INFO:${cZ} Building 32-bit ${cW}and${cZ} 64-bit Intel/AMD musl-libc (IA-32)"
