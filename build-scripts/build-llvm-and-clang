@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in readlink rm rmdir grep awk cut tee tar xz sha1sum git date make cp date gcc find sha256sum cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in readlink rm rmdir grep git date make cp date gcc find sha256sum cmake; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
@@ -14,7 +14,6 @@ PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp
 BUILD_TYPE=MinSizeRel
 CMAKE_GENERATOR="Unix Makefiles"
 let NOOPTIONAL=0
-PAYLOAD=""
 
 function show_help
 {
@@ -43,18 +42,20 @@ function show_help
 	echo -e "\t  Do not install after building the targets."
 	echo -e "\t${cW}-n${cZ}"
 	echo -e "\t  Generate ${cW}Ninja${cZ} files (instead of ${cW}$CMAKE_GENERATOR${cZ})."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ninja${cZ}."
 	echo -e "\t${cW}-o${cZ}"
 	echo -e "\t  Only build 'optional' components (i.e. binutils). Skips building Clang/LLVM."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}bison flex makeinfo${cZ}."
+	echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires packages ${cW}bison flex texinfo${cZ}."
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
 	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tar file after bundling them."
-	echo -e "\t${cW}-P${cZ}"
-	echo -e "\t  Unpack payload script instead of a pre-existing one in this folder."
-	echo -e "\t  ${cW}NOTE:${cZ} normally the payload script is only used if none exists already."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}git tar xz${cZ}."
 	echo -e "\t${cW}-r${cZ}"
 	echo -e "\t  Revives the repositories previously packaged with ${cW}-p${cZ}. Implies ${cW}-c${cZ}."
 	echo -e "\t  ${cW}NB:${cZ} to be called from the directory which contains ${MEANDMYSELF}."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}git${cZ}."
 	echo -e "\t${cW}-t${cZ} <targets> (default=${cW}$TARGETS${cZ})"
 	echo -e "\t  Specify the target architectures (comma/semi-colon-separated list) for LLVM/Clang."
 	echo -e "\t${cW}-T${cZ}"
@@ -63,8 +64,11 @@ function show_help
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
 	echo -e "\t${cW}-x${cZ}"
 	echo -e "\t  Use ${cW}ccache${cZ} to speed up subsequent builds."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ccache${cZ}."
+	echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ccache${cZ}."
 	echo -e "\t${cW}-X${cZ}"
 	echo -e "\t  Use ${cW}clang${cZ} to build LLVM and clang (you need a recent clang!)."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}clang clang++${cZ} (override with CLANG/CLANGPPLUS)."
 	echo ""
 	echo -e "${cW}NOTE:${cZ} the main difference between ${cW}-c${cZ} and ${cW}-B${cZ} is that ${cW}-B${cZ} will remove an existing"
 	echo -e "      build directory and ${cW}-c${cZ} doesn't touch that at all."
@@ -133,42 +137,16 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-function unpack_payload
+function assert_tools
 {
-	local PAYLOAD="$1"
-	local TARGET="$2"
-	echo "PAYLOAD = $PAYLOAD"
-	echo "TARGET = $TARGET"
-	if [[ -n "$PAYLOAD" ]]; then
-		local MATCH=$(grep --text --line-number '^'"$PAYLOAD"':$' "$MEANDMYSELF" | cut -d ':' -f 1)
-		local PAYLOADSTART=$((MATCH+1))
-		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Extracting from line $PAYLOADSTART."
-		tail -n +$PAYLOADSTART "$MEANDMYSELF" > "$TARGET" && \
-			chmod +x "$TARGET"
-	else
-		echo -e "${cY}WARNING:${cZ} can't unpack payload script as it doesn't seem to be bundled."
-	fi
-}
-
-function prepare_tool
-{
-	[[ -n "$1" ]] || return
-	local NAME=$1
-	echo -e "${cW}INFO:${cZ} preparing for build using $NAME"
-	# Build the tool if not yet available
-	local TOOLPATH="$HOME/bin/$NAME/bin/$NAME"
-	if type "$TOOLPATH" > /dev/null 2>&1; then
-		( echo -e "${cW}$NAME already exists${cZ}" )
-	else
-		local BUILDTOOL="$CURRABSPATH/build-$NAME"
-		if [[ ! -e "$BUILDTOOL" ]] || ((FORCEPAYLOAD)); then
-			unpack_payload "$PAYLOAD" "$BUILDTOOL"
-			[[ -x "$BUILDTOOL" ]] || { echo -e "${cR}ERROR:${cZ} the ${BUILDTOOL##*/} script is either not bundled or failed to unpack."; exit 1; }
+	local opt=$1
+	shift
+	for tool in "$@"; do
+		if ! type $tool > /dev/null 2>&1; then
+			echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires ${cW}$tool${cZ} which was not found!"
+			exit 1
 		fi
-		( echo -e "${cW}Building $NAME now${cZ}"; cd "${BUILDTOOL%/*}" && ./${BUILDTOOL##*/} ) || { echo -e "${cR}ERROR:${cZ} failed to build ${cW}${TOOLPATH##*/}${cZ}."; exit 1; }
-	fi
-	PATH=${TOOLPATH%/*}:$PATH
-	for tool in $NAME; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script with newer LLVM/Clang releases."; exit 1; }; done
+	done
 }
 
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
@@ -186,6 +164,7 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 		;;
 	c)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-c${cZ}/${cY}-p${cZ} are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
+		assert_tools "$opt" git
 		echo "Doing only a checkout"
 		;;
 	C)  ((ONLYCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-c${cZ}/${cY}-p${cZ} are mutually exclusive."; exit 1; }
@@ -206,10 +185,12 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 	I)  NOINSTALL=1
 		;;
 	n)  CMAKE_GENERATOR="Ninja"
+		assert_tools "$opt" ninja
 		;;
 	o)  ((NOOPTIONAL)) && { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} and ${cY}-O${cZ} are mutually exclusive."; exit 1; }
 		ONLYOPTIONAL=1
 		NOOPTIONAL=0
+		assert_tools "$opt" bison flex makeinfo
 		echo -e "${cY}Building only optional components${cZ}"
 		;;
 	O)  ((ONLYOPTIONAL)) && { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} and ${cY}-o${cZ} are mutually exclusive."; exit 1; }
@@ -217,17 +198,19 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 		ONLYOPTIONAL=0
 		echo -e "${cY}Skipping build of optional components${cZ}"
 		;;
-	P)  FORCEPAYLOAD=1
+	P)  echo -e "${cY}WARNING:${cZ} ${cW}-$opt${cZ} ignored for compatibility reasons."
 		;;
 	p)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-p${cZ}/${cY}-c${cZ} are mutually exclusive."; exit 1; }
 		ONLYCHECKOUT=1
 		BUNDLEGIT=1
+		assert_tools "$opt" tar xz
 		echo "Doing only a checkout and then packaging bundled clones into a .tar file."
 		;;
 	r)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		((NOCHECKOUT)) || ONLYCHECKOUT=1
 		REVIVEPKG=1
 		REVIVETS="$OPTARG"
+		assert_tools "$opt" git
 		echo "Reviving Git bundles, followed a checkout."
 		;;
 	t)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
@@ -239,10 +222,12 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
 	x)  USE_CCACHE=1
+		assert_tools "$opt" ccache
 		echo -e "${cY}Using ${cW}ccache${cY} to speed up subsequent builds${cZ}"
 		;;
 	X)  ((ONLYOPTIONAL)) && { echo -e "${cW}INFO:${cZ} ignoring ${cY}-$opt${cZ} as we aren't going to build Clang/LLVM (${cY}-o${cZ} used)."; }
 		USE_CLANG=1
+		assert_tools "$opt" ${CLANG:-clang} ${CLANGPPLUS:-clang++}
 		echo -e "${cY}Using ${cW}clang${cY} to build Clang/LLVM${cZ}"
 		;;
 	esac
@@ -270,9 +255,9 @@ if ((NOOPTIONAL == 0)); then
 	fi
 fi
 if ((USE_CLANG)); then
-	if type clang > /dev/null 2>&1 && type clang++ > /dev/null 2>&1; then
-		CC="$(which clang)"
-		CXX="$(which clang++)"
+	if type ${CLANG:-clang} > /dev/null 2>&1 && type ${CLANGPPLUS:-clang++} > /dev/null 2>&1; then
+		CC="$(which ${CLANG:-clang})"
+		CXX="$(which ${CLANGPPLUS:-clang++})"
 	fi
 	if [[ -z "$CC" ]] || [[ -z "$CXX" ]]; then
 		echo -e "${cR}ERROR:${cZ} couldn't find 'CC=$CC' or 'CXX=$CXX'."
@@ -333,7 +318,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 		unset CXX
 		if ((NOOPTIONAL == 0)); then
 			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-			( set -x; ${USE_CLANG:+env CC=clang CXX=clang++} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
+			( set -x; ${USE_CLANG:+env CC=${CLANG:-clang} CXX=${CLANGPPLUS:-clang++}} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
 			if ((NOINSTALL == 0)); then
 				( set -x; make -j$PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} failed."; exit 1; }
 			fi
