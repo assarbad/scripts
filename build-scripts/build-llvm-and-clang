@@ -5,7 +5,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-9.0.0}"
+LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-9.0.1}"
 BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_32}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -55,7 +55,7 @@ function show_help
 	echo -e "\t${cW}-r${cZ}"
 	echo -e "\t  Revives the repositories previously packaged with ${cW}-p${cZ}. Implies ${cW}-c${cZ}."
 	echo -e "\t  ${cW}NB:${cZ} to be called from the directory which contains ${MEANDMYSELF}."
-	echo -e "\t  ${cY}NB:${cZ} requires ${cW}git${cZ}."
+	echo -e "\t  ${cY}NB:${cZ} requires a working ${cW}git${cZ}."
 	echo -e "\t${cW}-t${cZ} <targets> (default=${cW}$TARGETS${cZ})"
 	echo -e "\t  Specify the target architectures (comma/semi-colon-separated list) for LLVM/Clang."
 	echo -e "\t${cW}-T${cZ}"
@@ -87,6 +87,7 @@ function prepare_src
 			if [[ ! -d "$BASEDIR/$PRJNAME" ]]; then
 				( set -x; git clone ${PRJNAME##*/}-${REVIVETS}.gitbundle "$BASEDIR/$PRJNAME" )
 				( set -x; git -C "$BASEDIR/$PRJNAME" remote set-url origin "${GITCLONE#git clone }" )
+				( set -x; git -C "$BASEDIR/$PRJNAME" fetch --tags )
 			fi
 		else
 			# Clone the repository if we don't have it
@@ -352,10 +353,10 @@ if ((BUNDLEGIT==1)); then
 		cat - >> "./$UNPACKER" <<-EOF
 			#!/usr/bin/env bash
 			TS="$TIMESTAMP"
-			T="$TARNAME"
+			T="${TARNAME//$TIMESTAMP/\$TS}"
 			D="\$TS-LLVM"
 			R="./$MEANDMYSELF"
-			U="$UNPACKER"
+			U="${UNPACKER//$TIMESTAMP/\$TS}"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
 			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }

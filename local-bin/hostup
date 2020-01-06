@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+SUBNET=$1
+(
+	nmap -sP $SUBNET -oG -;
+	nmap -sP -PS22,80,139,443,445,3389 $SUBNET -oG -;
+	nmap -sP -PU161 $SUBNET -oG -;
+	nmap -sP -PA21,22,25,80,139,443,445,3389 $SUBNET -oG -;
+) \
+| grep -v '^#' \
+| awk '\
+/^Host:/ {
+	IP=$2;
+	HOSTNAME=$3;
+	STATUS=$5;
+	if (HOSTNAME == "()") {
+		printf "%s %s\n", IP, STATUS
+	} else {
+		printf "%s %s %s\n", IP, STATUS, HOSTNAME
+	}
+}
+' \
+| sort -Vu
