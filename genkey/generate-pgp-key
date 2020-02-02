@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+for tool in awk cat expect gpg mktemp; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+set -x
+REALNAME=${REALNAME:-John Doe}
+MAXVALIDYEARS=${MAXVALIDYEARS:-3}
+MINENTROPY=${MINENTROPY:-1500}
+CREATIONDATE=${CREATIONDATE:-$(date +"%Y-%m-%d")}
+EXPIRYDATE="$((${CREATIONDATE:0:4}+MAXVALIDYEARS))0101T000000"
+# One per line:
+# Full Name:email@address.tld:Comment
+IDENTITIES=${1:-$(pwd)/identities.conf}
+let ENTROPY=$(cat /proc/sys/kernel/random/entropy_avail)
+# https://www.gnupg.org/documentation/manuals/gnupg/Ephemeral-home-directories.html
+export GNUPGHOME=$(mktemp -d)
+{ set +x; } > /dev/null 2>&1
+
+function error_exit
+{
+	echo -e "${cR}ERROR:${cZ} $@"
+	exit 1
+}
+
+((ENTROPY >= MINENTROPY)) || error_exit "entropy ($ENTROPY) insufficient (< $MINENTROPY). Create more entropy (e.g. with disk I/O) and retry."
+
+GPG="gpg --no-random-seed-file --no-greeting --no-permission-warning"
+
+# Populate the settings
+cat > "$GNUPGHOME/gpg.conf" <<EOF1
+# Derived from https://github.com/drduh/config/blob/master/gpg.conf
+# https://www.gnupg.org/documentation/manuals/gnupg/GPG-Configuration-Options.html
+# https://www.gnupg.org/documentation/manuals/gnupg/GPG-Esoteric-Options.html
+# Use AES256, 192, or 128 as cipher
+personal-cipher-preferences AES256 AES192 AES
+# Use SHA512, 384, or 256 as digest
+personal-digest-preferences SHA512 SHA384 SHA256
+# Use ZLIB, BZIP2, ZIP, or no compression
+personal-compress-preferences ZLIB BZIP2 ZIP Uncompressed
+# Default preferences for new keys
+default-preference-list SHA512 SHA384 SHA256 AES256 AES192 AES ZLIB BZIP2 ZIP Uncompressed
+# SHA512 as digest to sign keys
+cert-digest-algo SHA512
+# SHA512 as digest for symmetric ops
+s2k-digest-algo SHA512
+# AES256 as cipher for symmetric ops
+s2k-cipher-algo AES256
+# UTF-8 support for compatibility
+charset utf-8
+# Show Unix timestamps
+fixed-list-mode
+# No comments in signature
+no-comments
+# No version in signature
+no-emit-version
+# Long hexidecimal key format
+keyid-format 0xlong
+# Display UID validity
+list-options show-uid-validity
+verify-options show-uid-validity
+# Display all keys and their fingerprints
+with-fingerprint
+# Display key origins and updates
+with-key-origin
+# Cross-certify subkeys are present and valid
+require-cross-certification
+# Enable smartcard
+use-agent
+EOF1
+
+# https://www.gnupg.org/documentation/manuals/gnupg/Unattended-GPG-key-generation.html
+cat > "$GNUPGHOME/generate-master.gnupg" <<EOF2
+%echo Generating master key
+Key-Type: RSA
+Key-Length: 4096
+Key-Usage: cert
+Name-Real: $REALNAME
+# Master key never expires
+Expire-Date: 0
+Creation-Date: $CREATIONDATE
+%commit
+%echo done
+EOF2
+
+PASSPHRASE=$($GPG --batch --gen-random -a 0 32 2> /dev/null)
+
+( set -x; $GPG --batch --pinentry-mode loopback --passphrase "$PASSPHRASE" --generate-key "$GNUPGHOME/generate-master.gnupg" ) || error_exit "failed to generate master key."
+
+KEYFPR=$($GPG --batch --list-secret-keys --with-colons|awk -F : '$1 ~ /^fpr$/ {print $10}')
+echo "Generated master key with ID: $KEYFPR"
+
+# https://www.gnupg.org/documentation/manuals/gnupg/OpenPGP-Key-Management.html
+( set -x; $GPG --batch --pinentry-mode loopback --passphrase "$PASSPHRASE" --quick-add-key "$KEYFPR" rsa4096 sign $EXPIRYDATE ) || error_exit "failed to generate signing subkey."
+( set -x; $GPG --batch --pinentry-mode loopback --passphrase "$PASSPHRASE" --quick-add-key "$KEYFPR" rsa4096 encr $EXPIRYDATE ) || error_exit "failed to generate encryption subkey."
+( set -x; $GPG --batch --pinentry-mode loopback --passphrase "$PASSPHRASE" --quick-add-key "$KEYFPR" rsa4096 auth $EXPIRYDATE ) || error_exit "failed to generate authentication subkey."
+
+# Build an expect script to add the identities and do further editing
+EXPECTSCR="$GNUPGHOME/edit-key.expect"
+
+cat > "$EXPECTSCR" <<EOF3
+#!/usr/bin/expect
+exp_internal 1
+spawn gpg --pinentry-mode loopback --passphrase "$PASSPHRASE" --edit-key $KEYFPR
+EOF3
+
+if [[ ! -f "$IDENTITIES" ]]; then
+	echo -e "${cY}WARNING:${cZ} you gave no identities to add (file $IDENTITIES)"
+else
+	while read identity; do
+		NAME=${identity%%:*}
+		REMAINDER=${identity#*:}
+		EMAIL=${REMAINDER%%:*}
+		COMMENT=${REMAINDER##*:}
+		[[ -z "$NAME" ]] && continue
+		[[ -z "$EMAIL" ]] && continue
+		cat >> "$EXPECTSCR" <<-EOF4
+		send_user "\nAdding identity: $NAME <$EMAIL>\n"
+		expect {
+			"gpg>" { send -- "\r" }
+			"Enter passphrase:" {
+				send -- "$PASSPHRASE\r"
+			}
+		}
+		expect "gpg>"
+		send -- "adduid\r"
+		expect "Real name:"
+		send -- "$NAME\r"
+		expect "Email address:"
+		send -- "$EMAIL\r"
+		expect "Comment:"
+		send -- "$COMMENT\r"
+		expect "Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit?"
+		send -- "o\r"
+		EOF4
+	done < "$IDENTITIES"
+	cat >> "$EXPECTSCR" <<-EOF5
+	expect "gpg>"
+	send -- "save\r"
+	exit 0;
+	interact
+	EOF5
+	chmod +x "$EXPECTSCR" || error_exit "could not make $EXPECTSCR executable."
+	echo "Invoking expect script to edit user identities"
+	command "$EXPECTSCR" || error_exit "an error occurred during expect script processing."
+fi
+
+echo
+echo -e "${cW}ATTENTION:${cZ} keep the passphrase ${cW}$PASSPHRASE${cZ} in a secure location, write it down ... you'll need it later!"
+echo
+echo -e "To edit the newly generated key use:\ngpg --homedir '$GNUPGHOME' --edit-key $KEYFPR"
