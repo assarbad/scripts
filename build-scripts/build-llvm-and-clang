@@ -6,7 +6,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-9.0.1}"
-BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_32}"
+BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_34}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS=all
