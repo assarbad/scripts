@@ -245,7 +245,7 @@ fi
 trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 
 echo -e "\tWorking directory: $BASEDIR"
-let PM=$(grep -c processor /proc/cpuinfo)
+let PM=$(grep -c processor /proc/cpuinfo || echo 2)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
 let TIME_START=$(date +%s)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing core projects."
