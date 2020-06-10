@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 __author__ = "Oliver Schneider"
-__copyright__ = "2017 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.1"
+__copyright__ = "Placed in the Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__version__ = "0.2"
 __doc__ = """
 ================
  test-ssl-certs
@@ -16,8 +16,8 @@ connecting to these hosts and verifying the expiry date of the SSL certificates.
 import os, sys
 
 # Checking for compatibility with Python version
-if (sys.version_info[0] != 2) or (sys.version_info < (2,7)):
-    sys.exit("This script requires Python version 2.7 or better from the 2.x branch of Python.")
+if (sys.version_info[0] != 3) or (sys.version_info < (3,6)):
+    sys.exit("This script requires Python version 3.6 or better from the 2.x branch of Python.")
 
 # Don't create .pyc or .pyo files
 sys.dont_write_bytecode = True
@@ -28,16 +28,20 @@ import argparse
 import collections
 import contextlib
 import datetime
-import dateutil.parser
 import email
 import smtplib
 import socket
 import subprocess
-import ConfigParser
+try:
+    from ConfigParser import RawConfigParser
+except ImportError:
+    from configparser import RawConfigParser
 import OpenSSL
 from collections import namedtuple, OrderedDict
+from contextlib import closing, suppress
 from email.message import Message
 from smtplib import SMTP, SMTPRecipientsRefused, SMTPHeloError, SMTPSenderRefused, SMTPDataError
+assert tuple(int(x, 10) for x in OpenSSL.version.__version__.split(".")) >= (17,5, 0), "Version of pyOpenSSL too low."
 
 MailSettings = namedtuple("MailSettings", ["server", "msg_from", "msg_to", "subject", "sendon", "gpgrcpt", "gpgexe", "soondays"])
 
@@ -45,11 +49,8 @@ def prettydate(inp):
     assert len(inp) == 14
     return "%s-%s-%s %s:%s:%s" % (inp[0:4], inp[4:6], inp[6:8], inp[8:10], inp[10:12], inp[12:14])
 
-class SslCertificate(object):
+class SslCertificate:
     __cert = None
-    __hostname = None
-    __port = None
-    __peername = None
     __validFrom = None
     __validTo = None
     __CN = None
@@ -57,57 +58,81 @@ class SslCertificate(object):
     __SANs = []
     __hasMatchingSAN = None # intentional, as opposed to False which may be set
 
+    class TLSConnection:
+        __hostname = None
+        __port = None
+        __peername = None
+        __connection = None
+
+        def __init__(self, hostname, port):
+            from OpenSSL.SSL import Context, Connection, OP_NO_SSLv2, OP_NO_SSLv3
+            from OpenSSL.SSL import TLSv1_METHOD, TLSv1_1_METHOD, TLSv1_2_METHOD
+            try_methods = (TLSv1_2_METHOD, TLSv1_1_METHOD, TLSv1_METHOD,) # newest first
+
+            self.__hostname = hostname
+            self.__port = port
+
+            for method in try_methods:
+                client_sock = socket.socket()
+                client_sock.connect((hostname, port, ))
+                tls_ctx = Context(method)
+                tls_ctx.set_options(OP_NO_SSLv2 | OP_NO_SSLv3)
+                with suppress(OpenSSL.SSL.Error):
+                    tls_client = Connection(tls_ctx, client_sock)
+                    # Establish connection
+                    tls_client.set_connect_state()
+                    # SNI (send hostname indication)
+                    shostname = hostname.encode("ascii")
+                    tls_client.set_tlsext_host_name(shostname)
+                    tls_client.do_handshake()
+                    assert tls_client.get_servername() == shostname, \
+                        "Hostname and servername don't match: %r vs. %r" % (tls_client.get_servername(), shostname)
+                    tls_client.set_connect_state()
+
+                    self.__peername = tls_client.getpeername()
+                    self.__connection = tls_client
+                    break # successfully connected
+
+        def close(self):
+            tls_client = self.__connection
+            if tls_client is not None:
+                with suppress(OpenSSL.SSL.Error):
+                    tls_client.shutdown()
+                with suppress(OSError): # e.g. bad file descriptor
+                    tls_client.sock_shutdown(socket.SHUT_RDWR)
+                with suppress(OpenSSL.SSL.Error):
+                    tls_client.close()
+
+        def get_peer_certificate(self):
+            return self.__connection.get_peer_certificate()
+
     def __init__(self, hostname, port):
-        from OpenSSL.SSL import TLSv1_METHOD, Context, Connection, OP_NO_SSLv2, OP_NO_SSLv3
-        from contextlib import closing
-
-        self.__hostname = hostname
-        self.__port = port
-
-        client_sock = socket.socket()
-        client_sock.connect((hostname, port, ))
-        ssl_ctx = Context(TLSv1_METHOD)
-        ssl_ctx.set_options(OP_NO_SSLv2 | OP_NO_SSLv3)
-        with closing(Connection(Context(TLSv1_METHOD), client_sock)) as ssl_client:
-            try:
-                ssl_client.set_connect_state()
-                ssl_client.set_tlsext_host_name(hostname)
-                ssl_client.do_handshake()
-                assert ssl_client.get_servername() == hostname
-                self.__peername = ssl_client.getpeername()
-                cert = ssl_client.get_peer_certificate()
-                self.__validFrom = cert.get_notBefore()
-                self.__validTo = cert.get_notAfter()
-                sn = dict(cert.get_subject().get_components())
-                sans = [str(cert.get_extension(i)) for i in range(cert.get_extension_count()) if cert.get_extension(i).get_short_name() == "subjectAltName"]
-                assert len(sans) == 1
-                self.__SANs = [x.strip() for x in sans[0].split(",")]
-                assert "CN" in sn
-                self.__CN = sn["CN"]
-                if len(self.__SANs):
-                    if self.__CN == hostname:
-                        self.__hasMatchingSAN = True
-                    else:
-                        self.__hasMatchingSAN =  "DNS:%s" % (hostname) in self.__SANs
-                self.__cert = cert
-                self.__certstr = str(cert)
-            finally:
-                ssl_client.shutdown()
+        with closing(SslCertificate.TLSConnection(hostname, port)) as connection:
+            cert = connection.get_peer_certificate()
+            self.__validFrom = cert.get_notBefore().decode("ascii")
+            self.__validTo = cert.get_notAfter().decode("ascii")
+            sn = {x.decode("ascii"): y.decode("ascii") for x, y in cert.get_subject().get_components()}
+            sans = [str(cert.get_extension(i)) for i in range(cert.get_extension_count()) if cert.get_extension(i).get_short_name() == b"subjectAltName"]
+            assert len(sans) == 1
+            self.__SANs = [x.strip() for x in sans[0].split(",")]
+            assert "CN" in sn
+            self.__CN = sn["CN"]
+            if len(self.__SANs):
+                if self.__CN == hostname:
+                    self.__hasMatchingSAN = True
+                else:
+                    self.__hasMatchingSAN =  "DNS:%s" % (hostname) in self.__SANs
+            self.__cert = cert
+            self.__certstr = str(cert)
 
     def getCN(self):
         return self.__CN
 
     def getValidFrom(self):
-        cert = self.__cert
-        if cert is not None:
-            return cert.get_notBefore()
-        return None
+        return self.__validFrom
 
     def getValidTo(self):
-        cert = self.__cert
-        if cert is not None:
-            return cert.get_notAfter()
-        return None
+        return self.__validTo
 
     def getHostname(self):
         return self.__hostname
@@ -196,7 +221,7 @@ class ResultCollector(object):
         err, wrn, exp, soon, certs, soonest = self.__errors, self.__warnings, self.__expired, self.__soonexpires, self.__certs, self.__soonest
         assert isinstance(soonest, tuple) and len(soonest) > 1
         ms = self.verify_email_settings()
-        soonestDT = dateutil.parser.parse(soonest[0]).replace(tzinfo=None)
+        soonestDT = datetime.datetime.strptime(soonest[0][:-1], "%Y%m%d%H%M%S").replace(tzinfo=None)
         now = datetime.datetime.utcnow()
         delta = soonestDT - now
         msg["To"] = ms.msg_to or "<unknown@localhost>"
@@ -227,7 +252,7 @@ class ResultCollector(object):
         lines.append("CHECKED HOSTS (%d), SOONEST TO EXPIRE FIRST:\n" % (len(certs)))
         certexpiry = {}
         certinvalid = []
-        for host, cert in certs.iteritems():
+        for host, cert in certs.items():
             if cert is None:
                 certinvalid.append(host)
             else:
@@ -254,7 +279,7 @@ class ResultCollector(object):
             from subprocess import Popen, PIPE
             args = [ms.gpgexe.strip(), "--batch", "--no-tty", "--yes", "-ear", ms.gpgrcpt.strip(), "--", "-"]
             emsg = Popen(args, stdin=PIPE, stdout=PIPE, bufsize=1)
-            newmsg, errors = emsg.communicate(msg.get_payload())
+            newmsg, errors = emsg.communicate(msg.get_payload().encode("utf-8"))
             if errors is None or len(errors) == 0:
                 msg.set_payload(newmsg)
         try:
@@ -268,7 +293,7 @@ class ResultCollector(object):
 class CertificateExpiryTimes(object):
     def __init__(self, inifile):
         self.__inifile = inifile
-        cfg = ConfigParser.RawConfigParser()
+        cfg = RawConfigParser()
         cfg.read(inifile)
         self.__cfg = cfg
 
@@ -280,7 +305,7 @@ class CertificateExpiryTimes(object):
         ms = res.verify_email_settings()
         soondays = ms.soondays or 7
         certs = OrderedDict()
-        soonest = ("9" * 14, "localhost",)
+        soonest = ("99991231235959", "localhost",)
         for hostname in cfg.options("hosts"):
             try:
                 ports = tuple([cfg.getint("hosts", hostname)])
@@ -291,7 +316,7 @@ class CertificateExpiryTimes(object):
                     cert = SslCertificate(hostname, port)
                     if not cert.hasMatchingSAN():
                         res.add_warning(hostname, port, "No matching Subject Alternative Name, but also not the Common Name for {hostname}:{port}.")
-                    validto = dateutil.parser.parse(cert.getValidTo()).replace(tzinfo=None)
+                    validto = datetime.datetime.strptime(cert.getValidTo()[:-1], "%Y%m%d%H%M%S").replace(tzinfo=None)
                     if soonest[0] > cert.getValidTo()[:14]:
                         soonest = (cert.getValidTo()[:14], hostname,)
                     now = datetime.datetime.utcnow()
