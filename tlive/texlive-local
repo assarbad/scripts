@@ -1,0 +1,97 @@
+# 1. Install vanilla TeX Live as root, system-wide.
+# 2. Ensure that the only Debian TeX Live packages installed are tex-common, texinfo, and perhaps lmodern
+# 3. Add TeX Live's bin directory to ENV_PATH in /etc/login.defs. (can be skipped if symlinks created in /usr/local/bin during installation)
+# 4. Tell APT about your TeX Live installation by building a dummy package using equivs:
+#   - apt install equivs
+#   - wget https://www.tug.org/texlive/files/debian-equivs-2020-ex.txt
+#   - equivs-control texlive-local
+#   - merge the two files
+#   - equivs-build texlive-local
+#   - sudo dpkg -i texlive-local_*_all.deb
+# paperconfig -p a4
+
+Section: misc
+Priority: optional
+Homepage: https://www.tug.org/texlive/debian.html
+Standards-Version: 3.9.2
+
+Package: texlive-local
+Version: 2020-2
+Maintainer: Not Relevant <you@example.com>
+Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context, 
+ dvidvi, dvipng, feynmf, fragmaster, jadetex, lacheck, latex-beamer, 
+ latex-cjk-all, latex-cjk-chinese, latex-cjk-chinese-arphic-bkai00mp, 
+ latex-cjk-chinese-arphic-bsmi00lp, latex-cjk-chinese-arphic-gbsn00lp, 
+ latex-cjk-chinese-arphic-gkai00mp, latex-cjk-common, latex-cjk-japanese, 
+ latex-cjk-japanese-wadalab, latex-cjk-korean, latex-cjk-thai, latexdiff, 
+ latexmk, latex-sanskrit, latex-xcolor, lcdf-typetools, lmodern, luatex, 
+ musixtex, passivetex, pgf, preview-latex-style, prosper, ps2eps, psutils, 
+ purifyeps, t1utils, tex4ht, tex4ht-common, tex-gyre, texlive, texlive-base, 
+ texlive-bibtex-extra, texlive-binaries, texlive-common, texlive-extra-utils,
+ texlive-fonts-extra, texlive-fonts-extra-doc, texlive-fonts-recommended,
+ texlive-fonts-recommended-doc, texlive-font-utils, texlive-formats-extra,
+ texlive-games, texlive-generic-extra, texlive-generic-recommended,
+ texlive-humanities, texlive-humanities-doc, texlive-lang-african,
+ texlive-lang-all, texlive-lang-arabic, texlive-lang-cjk, texlive-lang-cyrillic,
+ texlive-lang-czechslovak, texlive-lang-english, texlive-lang-european,
+ texlive-lang-japanese, texlive-lang-chinese, texlive-lang-korean,
+ texlive-lang-french, texlive-lang-german, texlive-lang-greek, 
+ texlive-lang-indic, texlive-lang-italian, texlive-lang-other, 
+ texlive-lang-polish, texlive-lang-portuguese, texlive-lang-spanish,
+ texlive-latex-base, texlive-latex-base-doc, texlive-latex-extra, 
+ texlive-latex-extra-doc, texlive-latex-recommended, 
+ texlive-latex-recommended-doc, texlive-luatex, texlive-math-extra, 
+ texlive-metapost, texlive-metapost-doc, texlive-music,
+ texlive-omega, texlive-pictures, texlive-pictures-doc, texlive-plain-extra,
+ texlive-plain-generic,
+ texlive-pstricks, texlive-pstricks-doc, texlive-publishers,
+ texlive-publishers-doc, texlive-science, texlive-science-doc, texlive-xetex,
+ thailatex, tipa, tipa-doc, xindy, xindy-rules, xmltex, asymptote, texinfo
+Depends: freeglut3, lmodern
+Recommends: fonts-noto, fonts-linuxlibertine, fonts-texgyre, fonts-junicode, fonts-croscore, fonts-ebgaramond, fonts-courier-prime, fonts-cmu, fonts-vollkorn, fonts-mononoki
+Architecture: all
+Description: My local installation of TeX Live 2020.
+ A full "vanilla" TeX Live 2020
+ http://tug.org/texlive/debian#vanilla
+
+# fonts-dejavu - metapackage to pull in fonts-dejavu-core and fonts-dejavu-extra
+# fonts-font-awesome - iconic font designed for use with Twitter Bootstrap
+# fonts-lato - sans-serif typeface family font
+# fonts-liberation2 - Fonts with the same metrics as Times, Arial and Courier (v2)
+# fonts-ubuntu - sans-serif font set from Ubuntu
+# fonts-ubuntu-console - console version of the Ubuntu Mono font
+# fonts-ancient-scripts - Unicode Fonts for Ancient Scripts
+# fonts-blankenburg - Modern blackletter font
+# fonts-breip - informal handwriting font
+# fonts-bwht - Six handwritten fonts created for the Because We Had To project
+# fonts-cabin - humanist sans serif font
+# fonts-cabinsketch - playful sister of the Cabin font family
+# fonts-cantarell - sans serif font family designed for on-screen readability
+# fonts-cardo - font for scholarly use in classical and medieval languages
+# fonts-cascadia-code - monospaced font designed to enhance appearance of Windows Terminal
+# fonts-century-catalogue - century-style font revival
+# fonts-cmu - sets the computer modern unicode fonts
+# fonts-courier-prime - redesign of the Courier font
+# fonts-ebgaramond - EB Garamond OpenType fonts
+# fonts-ebgaramond-extra - EB Garamond Initials and TrueType fonts
+# fonts-firacode - Monospaced font with programming ligatures
+# fonts-gamaliel - black letter face
+# fonts-gnutypewriter - Multilingual font imitating a real typewriter
+# fonts-gotico-antiqua - 15th century types between gothic and roman
+# fonts-goudybookletter - Old style roman font
+# fonts-hack - Typeface designed for source code
+# fonts-havana - Old communism style script font from Poland
+
+
+# fonts-hermit - Monospace Hermit Font for programming
+# fonts-inconsolata - monospace font for pretty code listings and for the terminal
+# fonts-junicode - Unicode font for medievalists (Latin, IPA and Runic)
+# fonts-leckerli-one - Leckerli One font
+# fonts-linuxlibertine - Linux Libertine family of fonts
+# fonts-lmodern - OpenType fonts based on Computer Modern
+
+# fonts-recommended - set of recommended fonts
+
+# fonts-texgyre - OpenType fonts based on URW Fonts
+# fonts-vollkorn - serif body text type
+# fonts-mononoki - font for programming and code review
