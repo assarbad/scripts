@@ -7,6 +7,8 @@ set IMGLABEL=%~1
 if "%IMGLABEL%" == "" echo You need to give a label for the image to be created&exit /b 1
 set VSDIR=%~2
 if not exist "%VSDIR%" echo The folder supposed to contain the offline installation components ^(%VSDIR%^) does not exist&exit /b 1
+set ISOIMAGE=%VSDIR%.iso
+if "%~3" NEQ "" set ISOIMAGE=%~3
 set METADIR=%VSDIR%\.meta
 md "%METADIR%\"
 xcopy /y "%~dpnx0" "%METADIR%\"
@@ -30,5 +32,5 @@ if not exist "%METADIR%\oscdimg.exe" echo Could not copy oscdimg.exe into %METAD
 ::      allocation descriptors.
 ::  Writes UDF revision 2.00  (Supported: Windows XP and later)
 @echo on
-"%~dp0oscdimg.exe" -oc -g -h -l%IMGLABEL% -u2 -yl -udfver200 "%VSDIR%" "%VSDIR%.iso"
+"%~dp0oscdimg.exe" -oc -g -h -l%IMGLABEL% -u2 -yl -udfver200 "%VSDIR%" "%ISOIMAGE%"
 @echo off
