@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in readlink rm rmdir grep git date make cp date gcc find sha256sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in readlink rm rmdir grep git date make cp date gcc find sha256sum tr; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-9.0.1}"
+LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-10.0.0}"
 BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_34}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS=all
-PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp
+PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp,lld,lldb
 BUILD_TYPE=MinSizeRel
 CMAKE_GENERATOR="Unix Makefiles"
 let NOOPTIONAL=0
+#PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp,lld,lldb,polly
+# libedit-dev swig
+# https://salsa.debian.org/pkg-llvm-team/llvm-toolchain/
+#-- Symbols (liblldb): exporting all symbols from the lldb namespace
+#-- Could NOT find Doxygen (missing: DOXYGEN_EXECUTABLE) 
+#-- Could NOT find epydoc
+
 
 function show_help
 {
@@ -43,10 +50,15 @@ function show_help
 	echo -e "\t${cW}-n${cZ}"
 	echo -e "\t  Generate ${cW}Ninja${cZ} files (instead of ${cW}$CMAKE_GENERATOR${cZ})."
 	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ninja${cZ}."
+	if [[ -e "/etc/debian_version" ]]; then
+		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ninja-build${cZ}."
+	fi
 	echo -e "\t${cW}-o${cZ}"
 	echo -e "\t  Only build 'optional' components (i.e. binutils). Skips building Clang/LLVM."
 	echo -e "\t  ${cY}NB:${cZ} requires ${cW}bison flex makeinfo${cZ}."
-	echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires packages ${cW}bison flex texinfo${cZ}."
+	if [[ -e "/etc/debian_version" ]]; then
+		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires packages ${cW}bison flex texinfo${cZ}."
+	fi
 	echo -e "\t${cW}-O${cZ}"
 	echo -e "\t  Do not build 'optional' components (i.e. binutils)."
 	echo -e "\t${cW}-p${cZ}"
@@ -66,7 +78,9 @@ function show_help
 	echo -e "\t${cW}-x${cZ}"
 	echo -e "\t  Use ${cW}ccache${cZ} to speed up subsequent builds."
 	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ccache${cZ}."
-	echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ccache${cZ}."
+	if [[ -e "/etc/debian_version" ]]; then
+		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ccache${cZ}."
+	fi
 	echo -e "\t${cW}-X${cZ}"
 	echo -e "\t  Use ${cW}clang${cZ} to build LLVM and clang (you need a recent clang!)."
 	echo -e "\t  ${cY}NB:${cZ} requires ${cW}clang clang++${cZ} (override with CLANG/CLANGPPLUS)."

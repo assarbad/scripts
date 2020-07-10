@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-CC_TO_USE=${CROSS_COMPILE}gcc
+CC_TO_USE=${CROSS_COMPILE}${CC:-gcc}
 ORIG_CC="$CC_TO_USE"
-for tool in rm rmdir dirname readlink file tempfile grep tee git date make "${CC_TO_USE}" gpg tar wc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in rm rmdir dirname readlink file tempfile grep tee tr git date make "${CC_TO_USE}" gpg tar wc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
-( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 CROSS_COMPILE_PATH=${CROSS_COMPILE%/*}
 CROSS_COMPILE=${CROSS_COMPILE##*/}
 if [[ -n "$CROSS_COMPILE_PATH" ]]; then
@@ -35,6 +35,12 @@ function show_help
 	echo -e "\t  comma-separated list of architectures (default is to build both)."
 	echo -e "\t  ${cW}NOTE:${cZ} this can be useful on x86_64 to force only to build x86_64 or x86_32 instead of"
 	echo -e "\t  both."
+	echo -e "\t${cW}-x${cZ}"
+	echo -e "\t  Use ${cW}ccache${cZ} to speed up subsequent builds (${cY}NOT IMPLEMENTED!${cZ})."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ccache${cZ}."
+	if [[ -e "/etc/debian_version" ]]; then
+		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ccache${cZ}."
+	fi
 	echo ""
 }
 
@@ -88,8 +94,20 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
+function assert_tools
+{
+	local opt=$1
+	shift
+	for tool in "$@"; do
+		if ! type $tool > /dev/null 2>&1; then
+			echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires ${cW}$tool${cZ} which was not found!"
+			exit 1
+		fi
+	done
+}
+
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?t:i:vV:" opt; do
+while getopts "h?t:i:vV:x" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -107,6 +125,10 @@ while getopts "h?t:i:vV:" opt; do
 		;;
 	V)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		MUSLLIBC_RELEASE="$OPTARG"
+		;;
+	x)  USE_CCACHE=1
+		assert_tools "$opt" ccache
+		echo -e "${cY}Using ${cW}ccache${cY} to speed up subsequent builds${cZ}"
 		;;
 	*)
 		echo -e "${cY}WARNING:${cZ} unknown option '$opt'"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-CC_TO_USE=${CROSS_COMPILE}gcc
+CC_TO_USE=${CROSS_COMPILE}${CC:-gcc}
 ORIG_CC="$CC_TO_USE"
-for tool in rm rmdir dirname readlink file tempfile grep cut tee git date make "${CC_TO_USE}" wget tar sha256sum autoconf autoheader sed; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in rm rmdir dirname readlink file tempfile grep tee tr git date make "${CC_TO_USE}" wget tar sha256sum autoconf autoheader sed cut; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 CROSS_COMPILE_PATH=${CROSS_COMPILE%/*}
@@ -14,7 +14,7 @@ LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
-DROPBEAR_RELEASE="DROPBEAR_2019.78"
+DROPBEAR_RELEASE="DROPBEAR_2020.80"
 DROPBEAR_GITREPO="https://github.com/mkj/dropbear.git"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/dropbear}
 BASEDIR="${BASEDIR:-$(pwd)}"
@@ -31,6 +31,12 @@ function show_help
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
 	echo -e "\t${cW}-V${cZ} <dropbear-release-tag> ${cY}(if not given defaults to: $DROPBEAR_RELEASE)${cZ}"
 	echo -e "\t  Tag to build instead of hardcoded default."
+	echo -e "\t${cW}-x${cZ}"
+	echo -e "\t  Use ${cW}ccache${cZ} to speed up subsequent builds (${cY}NOT IMPLEMENTED!${cZ})."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}ccache${cZ}."
+	if [[ -e "/etc/debian_version" ]]; then
+		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires package ${cW}ccache${cZ}."
+	fi
 	echo ""
 }
 
@@ -85,8 +91,20 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
+function assert_tools
+{
+	local opt=$1
+	shift
+	for tool in "$@"; do
+		if ! type $tool > /dev/null 2>&1; then
+			echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires ${cW}$tool${cZ} which was not found!"
+			exit 1
+		fi
+	done
+}
+
 [[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?i:vV:" opt; do
+while getopts "h?i:vV:x" opt; do
 	case "$opt" in
 	h|\?)
 		show_help
@@ -100,6 +118,10 @@ while getopts "h?i:vV:" opt; do
 		;;
 	V)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		DROPBEAR_RELEASE="$OPTARG"
+		;;
+	x)  USE_CCACHE=1
+		assert_tools "$opt" ccache
+		echo -e "${cY}Using ${cW}ccache${cY} to speed up subsequent builds${cZ}"
 		;;
 	*)
 		echo -e "${cY}WARNING:${cZ} unknown option '$opt'"
