@@ -150,7 +150,7 @@ trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directo
 echo -e "Configuring and building ${cW}$PRJ${cZ}"
 (
 	cd "$BUILDDIR" && \
-		env CXX="${USE_CCACHE:+ccache }${CXX_TO_USE}" $DBGCONFIGURE"$PRJSRCDIR/configure.py" --bootstrap --verbose --with-python=$PYTHON_EXE && \
+		env CXX="${USE_CCACHE:+ccache }${CXX_TO_USE}" $DBGCONFIGURE"$PRJSRCDIR/configure.py" --bootstrap ${VERBOSE:+--verbose }--with-python=$PYTHON_EXE && \
 		install -m 755 -vpsD $PRJNAME "$INSTALL_TO/bin/$PRJNAME"
 ) \
 	&& { trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } \
