@@ -14,8 +14,7 @@ PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp,l
 BUILD_TYPE=MinSizeRel
 CMAKE_GENERATOR="Unix Makefiles"
 let NOOPTIONAL=0
-MAKETOOL=${MAKETOOL:-make}
-# libedit-dev swig doxygen dot
+# libedit-dev swig doxygen graphviz
 # https://salsa.debian.org/pkg-llvm-team/llvm-toolchain/
 
 function show_help
@@ -197,8 +196,7 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 	I)  NOINSTALL=1
 		;;
 	n)  CMAKE_GENERATOR="Ninja"
-		MAKETOOL="ninja"
-		assert_tools "$opt" "$MAKETOOL"
+		assert_tools "$opt" ninja
 		;;
 	o)  ((NOOPTIONAL)) && { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} and ${cY}-O${cZ} are mutually exclusive."; exit 1; }
 		ONLYOPTIONAL=1
@@ -284,9 +282,6 @@ else
 	CC="gcc"
 	CXX="g++"
 fi
-if [[ "$MAKETOOL" == "ninja" ]]; then
-	MAKE_VERBOSE="${VERBOSE:+ --verbose}"
-fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 	((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Doing build for $TARGETS into $INSTALL_TO."
@@ -316,10 +311,10 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 				"$BASEDIR/llvm/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
 			let TIME_CONFIGURE=$(date +%s)
 			# FIXME/TODO: add _options_ to enable optimizations and disable assertions somehow?! (i.e. don't hardcode them)
-			( set -x; env ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} "${MAKETOOL}"${MAKE_VERBOSE} -j $PM )  || { echo -e "${cR}ERROR:${cZ}  ${cW}make${cZ} failed."; exit 1; }
+			( set -x; env ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} cmake --build . )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake --build .${cZ} failed."; exit 1; }
 			let TIME_MAKE=$(date +%s)
 			if ((RUN_TESTS)); then
-				( set -x; "${MAKETOOL}"${MAKE_VERBOSE} -j $PM test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}$MAKETOOL test${cZ} failed."; exit 1; }
+				( set -x; cmake --build . --target test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake --build . --target test${cZ} failed."; exit 1; }
 			fi
 			if ((NOINSTALL == 0)); then
 				if [[ -d "$INSTALL_TO" ]]; then
@@ -328,7 +323,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 					mv "$INSTALL_TO" "${INSTALL_TO%/*}/$OLD_INSTALL_TO" || { echo -e "${cR}ERROR:${cZ} failed to move $INSTALL_TO out of the way."; exit 1; }
 					trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Moving back your previous LLVM from '$OLD_INSTALL_TO' due to signal"; rm -rf "'$INSTALL_TO'"; mv "'${INSTALL_TO%/*}/$OLD_INSTALL_TO'" "'$INSTALL_TO'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 				fi
-				( set -x; env ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} "${MAKETOOL}"${MAKE_VERBOSE} -j $PM install )  || { echo -e "${cR}ERROR:${cZ}  ${cW}$MAKETOOL install${cZ} failed."; exit 1; }
+				( set -x; cmake -P cmake_install.cmake )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake -P cmake_install.cmake${cZ} failed."; exit 1; }
 				trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
 			fi
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
@@ -340,7 +335,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
 			( set -x; ${USE_CLANG:+env CC=${CLANG:-clang} CXX=${CLANGPPLUS:-clang++}} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
 			if ((NOINSTALL == 0)); then
-				( set -x; "${MAKETOOL}"${MAKE_VERBOSE} -j $PM && "${MAKETOOL}"${MAKE_VERBOSE} install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}$MAKETOOL install${cZ} failed."; exit 1; }
+				( set -x; make -j $PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} failed."; exit 1; }
 			fi
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cW}popd${cZ}."; exit 1; }
 		fi
