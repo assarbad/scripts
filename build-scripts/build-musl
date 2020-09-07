@@ -12,12 +12,13 @@ if [[ -n "$CROSS_COMPILE_PATH" ]]; then
 fi
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-MUSLLIBC_VERSION="1.2.0"
+MUSLLIBC_VERSION="1.2.1"
 MUSLLIBC_RELEASE="v$MUSLLIBC_VERSION"
 MUSLLIBC_GITREPO="git://git.musl-libc.org/musl"
+# Possible alternatives: https://repo.or.cz/musl.git git://repo.or.cz/musl.git
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/musl${CROSS_COMPILE:+.${CROSS_COMPILE%-}}}
 BASEDIR="$CURRABSPATH"
-CACHEDIR="$BASEDIR/cache"
+CACHEDIR="${CACHEDIR:-$BASEDIR/cache}"
 
 function show_help
 {
