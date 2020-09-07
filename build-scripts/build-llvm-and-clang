@@ -6,13 +6,17 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 LLVM_RELEASE="${LLVM_RELEASE:-llvmorg-10.0.1}"
-BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_34}"
+BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_35}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/LLVM}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS=all
 PROJECTS=clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp,lld,lldb
 BUILD_TYPE=MinSizeRel
 CMAKE_GENERATOR="Unix Makefiles"
+ORIG_CC=${CC:-gcc}
+ORIG_CXX=${CXX:-g++}
+CLANG=${CLANG:-clang}
+CLANGPPLUS=${CLANGPPLUS:-clang++}
 let NOOPTIONAL=0
 # libedit-dev swig doxygen graphviz
 # https://salsa.debian.org/pkg-llvm-team/llvm-toolchain/
@@ -50,7 +54,7 @@ function show_help
 	fi
 	echo -e "\t${cW}-o${cZ}"
 	echo -e "\t  Only build 'optional' components (i.e. binutils). Skips building Clang/LLVM."
-	echo -e "\t  ${cY}NB:${cZ} requires ${cW}bison flex makeinfo${cZ}."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}bison flex makeinfo${cZ}, uses CC=${ORIG_CC} and CXX=${ORIG_CXX}!"
 	if [[ -e "/etc/debian_version" ]]; then
 		echo -e "\t  ${cY}On Debian/Ubuntu:${cZ} requires packages ${cW}bison flex texinfo${cZ}."
 	fi
@@ -78,7 +82,7 @@ function show_help
 	fi
 	echo -e "\t${cW}-X${cZ}"
 	echo -e "\t  Use ${cW}clang${cZ} to build LLVM and clang (you need a recent clang!)."
-	echo -e "\t  ${cY}NB:${cZ} requires ${cW}clang clang++${cZ} (override with CLANG/CLANGPPLUS)."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}clang${cZ}/${cW}clang++${cZ} (override with CLANG/CLANGPPLUS)."
 	echo ""
 	echo -e "${cW}NOTE:${cZ} the main difference between ${cW}-c${cZ} and ${cW}-B${cZ} is that ${cW}-B${cZ} will remove an existing"
 	echo -e "      build directory and ${cW}-c${cZ} doesn't touch that at all."
@@ -115,7 +119,7 @@ function prepare_src
 		((REVIVEPKG)) && ( cd "$BASEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
 		# Scrub the working copy
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cleaning extraneous files from Git clone."
-		( cd "$BASEDIR/$PRJNAME" && git clean -d -f -x) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean -d -f -x' $PRJNAME."; exit 1; }
+		( cd "$BASEDIR/$PRJNAME" && git clean -dfx) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean -d -f -x' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fetching updates from upstream."
 		( cd "$BASEDIR/$PRJNAME" && git fetch; git fetch --tags ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
@@ -238,8 +242,8 @@ while getopts "h?b:BcCe:gGi:InoOPpr:t:TvxX" opt; do
 		;;
 	X)  ((ONLYOPTIONAL)) && { echo -e "${cW}INFO:${cZ} ignoring ${cY}-$opt${cZ} as we aren't going to build Clang/LLVM (${cY}-o${cZ} used)."; }
 		USE_CLANG=1
-		assert_tools "$opt" ${CLANG:-clang} ${CLANGPPLUS:-clang++}
-		echo -e "${cY}Using ${cW}clang${cY} to build Clang/LLVM${cZ}"
+		assert_tools "$opt" "${CLANG}" "${CLANGPPLUS}"
+		echo -e "${cY}Using ${cW}clang${cY} to build Clang/LLVM${cZ} (but _not_ Binutils!)"
 		;;
 	esac
 done
@@ -270,17 +274,17 @@ if ((NOOPTIONAL == 0)); then
 	fi
 fi
 if ((USE_CLANG)); then
-	if type ${CLANG:-clang} > /dev/null 2>&1 && type ${CLANGPPLUS:-clang++} > /dev/null 2>&1; then
-		CC="$(which ${CLANG:-clang})"
-		CXX="$(which ${CLANGPPLUS:-clang++})"
+	if type "${CLANG}" > /dev/null 2>&1 && type "${CLANGPPLUS}" > /dev/null 2>&1; then
+		CC="$(which "${CLANG}")"
+		CXX="$(which "${CLANGPPLUS}")"
 	fi
 	if [[ -z "$CC" ]] || [[ -z "$CXX" ]]; then
 		echo -e "${cR}ERROR:${cZ} couldn't find 'CC=$CC' or 'CXX=$CXX'."
 		exit 1
 	fi
 else
-	CC="gcc"
-	CXX="g++"
+	CC="${ORIG_CC}"
+	CXX="${ORIG_CXX}"
 fi
 let TIME_GIT=$(date +%s)
 if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
@@ -329,15 +333,17 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cY}popd${cZ}."; exit 1; }
 		fi
 		let TIME_INSTALL=$(date +%s)
-		unset CC
-		unset CXX
 		if ((NOOPTIONAL == 0)); then
-			pushd "$BASEDIR/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
-			( set -x; ${USE_CLANG:+env CC=${CLANG:-clang} CXX=${CLANGPPLUS:-clang++}} ./configure --disable-werror --disable-gold --enable-ld --program-suffix=.clang --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
+		(
+			pushd "$BASEDIR/build/3rdparty/binutils" || { echo -e "${cR}ERROR:${cZ} could not ${cW}pushd${cZ}."; exit 1; }
+			make -C "$BASEDIR/3rdparty/binutils" distclean || true
+			git -C "$BASEDIR/3rdparty/binutils" clean -dfx
+			( set -x; env CC="${USE_CCACHE:+ccache }${ORIG_CC}" CXX="${USE_CCACHE:+ccache }${ORIG_CXX}" "$BASEDIR/3rdparty/binutils/configure" --disable-werror --disable-gold --enable-ld --program-suffix=.$BINUTILS_RELEASE --prefix=$INSTALL_TO ) || { echo -e "${cR}ERROR:${cZ} ${cY}./configure${cZ} failed."; exit 1; }
 			if ((NOINSTALL == 0)); then
 				( set -x; make -j $PM && make install ) || { echo -e "${cR}ERROR:${cZ} ${cW}make${cZ} or ${cW}make install${cZ} failed."; exit 1; }
 			fi
 			popd || { echo -e "${cR}ERROR:${cZ} could not ${cW}popd${cZ}."; exit 1; }
+		)
 		fi
 		let TIME_BINUTILS=$(date +%s)
 	else
