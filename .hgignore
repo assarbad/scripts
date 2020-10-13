@@ -12,3 +12,5 @@ before.txt
 *.orig
 after.txt
 build-scripts/cache/**
+build-scripts/*_rust-cli-tools.txz
+tlive/*.deb
