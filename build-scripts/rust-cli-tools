@@ -70,8 +70,8 @@ function cargo_install
 	# Binaries go into subfolder named ./bin underneath --root
 	( set -x; cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
 	if [[ -x "$TGTDIR/bin/$BINNAME" ]]; then
-		if ! ldd rg|grep -q 'statically linked'; then
-			echo -e "${cY}WARNING:${cZ} ${cW}$BINNAME${cZ} did not come out statically linked!"
+		if ! ldd "$TGTDIR/bin/$BINNAME"|grep -q 'statically linked'; then
+			echo -e "${cY}WARNING:${cZ} ${cW}$BINNAME${cZ} (crate ${cW}$CRATENAME${cZ}) did not come out statically linked!"
 		fi
 	elif [[ ! -f "$TGTDIR/bin/$BINNAME" ]]; then
 		echo -e "${cY}WARNING:${cZ} did not find a file named ${cW}$BINNAME${cZ} for crate ${cW}$CRATENAME${cZ}. Do the crate name and binary name differ?"
@@ -102,15 +102,22 @@ function strip_and_store_binaries
 	# Strip binaries into different path
 	find "$TGTDIR" -type f -executable -printf '%P\n'|while read fname; do
 		( cd "$TGTDIR"; set -x; strip -o "${fname//unstripped/stripped}" --strip-unneeded "$fname" ) || { echo -e "${cR}ERROR:${cZ} failed to process ${cW}$fname${cZ}"; exit 1; }
+		if ! ldd "$TGTDIR/$fname"|grep -q 'statically linked'; then
+			echo "WARNING: $fname did not come out statically linked!"|tee -a "$TGTDIR/warnings.txt"
+		fi
 	done || { echo -e "${cR}ERROR:${cZ} failed to process unstripped files"; exit 1; }
 	# Now compute the hashes
 	find "$TGTDIR" -type f -executable -printf '%P\n'|sort|while read fname; do
 		( cd "$TGTDIR"; set -x; sha256sum $fname ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash for ${cW}$fname${cZ}"; exit 1; }
 	done | tee "$TGTDIR/SHA256SUMS"
+	cargo install --root "$SRCDIR" --list|tee "$TGTDIR/manifest.txt"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/${NOWDATE}_rust-cli-tools.txz" -C "$TGTDIR" . ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
+	#cargo install --root /home/oliver/scripts/build-scripts/cache/tmp.ISqLgK7rXq --list
 }
 
-TEMPDIR="$(mktemp -dp "$(pwd)/cache")"
+# Allow TEMPDIR to be overridden via the environment
+[[ -n "$TEMPDIR" ]] || TEMPDIR="$(mktemp -dp "$(pwd)/cache")"
+# Ensure we clean up after ourselves in any case
 trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
 for tool in $SIMPLE_INSTALLS; do
 	simple_install "$tool" "$TEMPDIR"
