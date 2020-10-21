@@ -2,9 +2,12 @@
 # Possible sources for interesting Rust-based stuff: https://lib.rs + crates.io + cli.rs
 TARGET=${TARGET:-x86_64-unknown-linux-musl}
 TEMPDIR=${TEMPDIR:-"$(mktemp -dp "$(pwd)/cache")"}
+OPENSSL_REFNAME=${OPENSSL_REFNAME:-OpenSSL_1_1_1h}
+OPENSSL_ARCH=${OPENSSL_ARCH:-x86}
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 for tool in cp date dirname mkdir readlink tee grep ldd rustup sort strip tar xz cargo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 if ! rustup target list --installed|grep -q "$TARGET"; then
 	echo -e "${cR}ERROR:${cZ} missing Rust target ${cW}${TARGET}${cZ}."
 	echo -e "\nUse: ${cW}rustup target install ${TARGET}${cZ} to install"
@@ -28,8 +31,11 @@ fd-find:fd:sharkdp/fd
 fddf:lib.rs/crates/fddf
 git-delta:delta:dandavison/delta
 git-global:peap/git-global
+git-project:kroger-technology/git-project
 gitall:mattmahn/gitall.rs
+gitout:jakewharton/gitout
 gitui:extrawurst/gitui
+grex:pemistahl/grex
 hexyl:sharkdp/hexyl
 hyperfine:sharkdp/hyperfine
 jql:yamafaktory/jql
@@ -37,10 +43,13 @@ kmon:orhun/kmon
 licensor:raftario/licensor
 lolcate-rs:lolcate:ngirard/lolcate-rs
 lsd:Peltoche/lsd
+mdcat:lunaryorn/mdcat
 oxipng:shssoichiro/oxipng
 pastel:sharkdp/pastel
 perftacho:qrider71/tacho
 procs:dalance/procs
+repo-cli:repo:edeneast/repo
+repofetch:spenserblack/repofetch
 ripgrep:rg:BurntSushi/ripgrep
 rnr:chuckdaniels87/rnr
 romodoro:michaelfletchercgy/romodoro
@@ -48,6 +57,7 @@ rustscan:rustscan/rustscan
 scout:jhbabon/scout
 sd:chmln/sd
 skim:sk:lotabout/skim
+starship:starship/starship
 tokei:lib.rs/crates/tokei
 treesum:anderejd/treesum
 vcprompt:sscherfke/rust-vcprompt
@@ -58,21 +68,58 @@ watchexec:watchexec/watchexec
 zoxide:lib.rs/crates/zoxide
 zrs:fauxfaux/zrs
 "
-# Candidates which require building a (static) OpenSSL via musl-gcc and using [ env OPENSSL_DIR=$(pwd)/openssl-dir ]
-# TAG=OpenSSL_1_1_1h
-# git clone --depth 1 --branch $TAG https://github.com/openssl/openssl.git
-# env CC=musl-gcc ./config
-# ... this appears to default to musl-gcc for some weird reason ...
-# https://github.com/sabotage-linux/kernel-headers.git (OpenSSL requires at least linux/mman.h)
-# git clean -dfx; PREFIX=$(realpath -L $(pwd)/../openssl-dir); env CC=musl-gcc CPPFLAGS="-I $(realpath -eL ../kernel-headers/x86/include) -I$(realpath -eL ../kernel-headers/generic/include)" bash -c "test -d '$PREFIX' && rm -rf '$PREFIX'; mkdir '$PREFIX'; ./config --prefix=$PREFIX no-engine no-shared no-threads no-ts && make -j 20"
-OPENSSL_FIX_INSTALLS="\
-git-project:kroger-technology/git-project
-gitout:jakewharton/gitout
-mdcat:lunaryorn/mdcat
-repo-cli:repo:edeneast/repo
-repofetch:spenserblack/repofetch
-starship:starship/starship
-"
+
+# Number of jobs
+let PM=$(grep -c processor /proc/cpuinfo || echo 2)
+
+function git_checkout
+{
+	local REPOURL="$1"
+	local SUBDIR="$2"
+	local GITREF="$3"
+	local TEMPDIR="$4"
+	test -d "$TEMPDIR/$SUBDIR" && rm -rf "$TEMPDIR/$SUBDIR"
+	( cd "$TEMPDIR"; set -x; git clone "$REPOURL" "$SUBDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to clone $REPOURL"; return 1; }
+	( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" config branch.master.rebase true ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config branch.master.rebase true' for $SUBDIR."; return 1; }
+	( cd "$TEMPDIR"; echo -en "branch.master.rebase = " && git -C "$SUBDIR" config --get branch.master.rebase )
+	( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" clean -dfx) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean -dfx' $SUBDIR."; return 1; }
+	( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" fetch; git -C "$SUBDIR" fetch --tags ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $SUBDIR."; }
+	( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" remote prune origin ) || { echo -e "${cY}WARNING:${cZ} failed to 'git remote prune origin' $SUBDIR."; }
+	( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" checkout -f $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $SUBDIR."; return 1; }
+	if git -C "$TEMPDIR" --git-dir="$SUBDIR/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
+		( cd "$TEMPDIR"; set -x; git -C "$SUBDIR" merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $SUBDIR."; exit 1; }
+	fi || return $?
+	return 0
+}
+
+function openssl_build
+{
+	local OSSLSUBDIR=openssl
+	local KRNLSUBDIR=kernel-headers
+	git_checkout "https://github.com/openssl/openssl.git" "$OSSLSUBDIR" "$OPENSSL_REFNAME" "$TEMPDIR" || return $?
+	git_checkout "https://github.com/sabotage-linux/kernel-headers.git" "$KRNLSUBDIR" master "$TEMPDIR" || return $?
+	( cd "$TEMPDIR/openssl"; set -x; ln -s "$TEMPDIR/$KRNLSUBDIR" "$KRNLSUBDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to symlink kernel headers into OpenSSL source directory"; return 1; }
+	PREFIX="$TEMPDIR/openssl-dir"
+	( set -x; test -d "$PREFIX" && { rm -rf "$PREFIX"; exit 1; } || true ) || { echo -e "${cR}ERROR:${cZ} failed to clean out the OpenSSL installation directory"; return 1; }
+	( set -x; mkdir "$PREFIX" ) || { echo -e "${cR}ERROR:${cZ} failed to create OpenSSL installation directory"; return 1; }
+	( cd "$TEMPDIR/openssl"; set -x; \
+		env CC=musl-gcc CPPFLAGS="-Ikernel-headers/$OPENSSL_ARCH/include" bash -c "./config --prefix=$PREFIX no-engine no-shared no-threads no-ts && make -j $PM" \
+	) || { echo -e "${cR}ERROR:${cZ} failed to failed to create OpenSSL installation directory"; return 1; }
+	( set -x; make -C "$TEMPDIR/openssl" install_sw ) || { echo -e "${cR}ERROR:${cZ} failed to install OpenSSL"; return 1; }
+	return 0
+}
+
+function show_time_diff
+{
+	local START=$1
+	local END=$2
+	local MSG=$3
+	[[ -n "$MSG" ]] || MSG="Runtime: %s"
+	local DIFF=$((END-START))
+	local DIFF_MIN=$((DIFF/60))
+	local DIFF_SEC=$((DIFF%60))
+	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
+}
 
 function cargo_install
 {
@@ -81,8 +128,9 @@ function cargo_install
 	local HTTPS_URL="$3"
 	local TARGET="$4"
 	local TGTDIR="$5"
+	local OPENSSL_DIR="$TEMPDIR/openssl-dir"
 	# Binaries go into subfolder named ./bin underneath --root
-	( set -x; cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
+	( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC=musl-gcc cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
 	if [[ -x "$TGTDIR/bin/$BINNAME" ]]; then
 		if ! ldd "$TGTDIR/bin/$BINNAME"|grep -q 'statically linked'; then
 			echo -e "${cY}WARNING:${cZ} ${cW}$BINNAME${cZ} (crate ${cW}$CRATENAME${cZ}) did not come out statically linked!"
@@ -104,7 +152,7 @@ function simple_install
 	if [[ -n "$BINNAME" ]] && [[ "$BINNAME" != "$CRATENAME" ]]; then
 		CRATENAME=${CRATENAME%:*}
 	fi
-	cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" || exit 1
+	cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" "$OPENSSL_DIR" || exit 1
 }
 
 function strip_and_store_binaries
@@ -127,14 +175,18 @@ function strip_and_store_binaries
 	done | tee "$TGTDIR/SHA256SUMS"
 	cargo install --root "$SRCDIR" --list|tee "$TGTDIR/manifest.txt"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/${NOWDATE}_rust-cli-tools.txz" -C "$TGTDIR" . ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
-	#cargo install --root /home/oliver/scripts/build-scripts/cache/tmp.ISqLgK7rXq --list
 }
 
 # Ensure we clean up after ourselves in any case
+let TIME_START=$(date +%s)
 trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+echo -e "${cW}INFO:${cZ} building OpenSSL"
+openssl_build || exit 1
 for tool in $SIMPLE_INSTALLS; do
 	simple_install "$tool" "$TEMPDIR"
 done
 strip_and_store_binaries "$TEMPDIR"
 # Clean exit
 trap - INT TERM EXIT
+let TIME_END=$(date +%s)
+show_time_diff $TIME_START $TIME_END "Overall runtime: %s (m:ss) with $PM parallel job(s)"
