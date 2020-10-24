@@ -23,14 +23,19 @@ bat:sharkdp/bat
 bingrep:m4b/bingrep
 bottom:btm:ClementTsang/bottom
 broot:canop/broot
+ddh:darakian/ddh
 diffr:mookid/diffr
 dirstat-rs:dirstat:scullionw/dirstat-rs
+diskonaut:imsnif/diskonaut
 du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 dutree:nachoparker/dutree
+eureka:simeg/eureka
 exa:ogham/exa
+fastmod:facebookincubator/fastmod
 fd-find:fd:sharkdp/fd
 fddf:lib.rs/crates/fddf
+funzzy:cristianoliveira/funzzy
 git-delta:delta:dandavison/delta
 git-global:peap/git-global
 git-project:kroger-technology/git-project
@@ -42,24 +47,29 @@ hexyl:sharkdp/hexyl
 hyperfine:sharkdp/hyperfine
 jql:yamafaktory/jql
 kmon:orhun/kmon
+kondo:tbillington/kondo
 licensor:raftario/licensor
 lolcate-rs:lolcate:ngirard/lolcate-rs
 lsd:Peltoche/lsd
 mdcat:lunaryorn/mdcat
+nomino:yaa110/nomino
 oxipng:shssoichiro/oxipng
 pastel:sharkdp/pastel
 perftacho:qrider71/tacho
 procs:dalance/procs
 repo-cli:repo:edeneast/repo
+repoch:lucawen/repoch
 repofetch:spenserblack/repofetch
 ripgrep:rg:BurntSushi/ripgrep
 rnr:chuckdaniels87/rnr
 romodoro:michaelfletchercgy/romodoro
 rustscan:rustscan/rustscan
+sccache:mozilla/sccache
 scout:jhbabon/scout
 sd:chmln/sd
 skim:sk:lotabout/skim
 starship:starship/starship
+tealdeer:tldr:dbrgn/tealdeer
 tokei:lib.rs/crates/tokei
 treesum:anderejd/treesum
 vcprompt:sscherfke/rust-vcprompt
@@ -116,9 +126,11 @@ function openssl_build
 	PREFIX="$TEMPDIR/openssl-dir"
 	( set -x; test -d "$PREFIX" && { rm -rf "$PREFIX"; exit 1; } || true ) || { echo -e "${cR}ERROR:${cZ} failed to clean out the OpenSSL installation directory"; return 1; }
 	( set -x; mkdir "$PREFIX" ) || { echo -e "${cR}ERROR:${cZ} failed to create OpenSSL installation directory"; return 1; }
+	#type ccache > /dev/null 2>&1 && CC="ccache musl-gcc" || CC="musl-gcc"
+	CC="musl-gcc"
 	( cd "$TEMPDIR/openssl"; set -x; \
-		env CC=musl-gcc CPPFLAGS="-Ikernel-headers/$OPENSSL_ARCH/include" bash -c "./config --prefix=$PREFIX no-engine no-shared no-threads no-ts && make -j $PM" \
-	) || { echo -e "${cR}ERROR:${cZ} failed to failed to create OpenSSL installation directory"; return 1; }
+		env CC="$CC" CPPFLAGS="-Ikernel-headers/$OPENSSL_ARCH/include" bash -c "./config --prefix=$PREFIX no-engine no-shared no-threads no-ts && make -j $PM" \
+	) || { echo -e "${cR}ERROR:${cZ} failed to install OpenSSL"; return 1; }
 	( set -x; make -C "$TEMPDIR/openssl" install_sw ) || { echo -e "${cR}ERROR:${cZ} failed to install OpenSSL"; return 1; }
 	return 0
 }
@@ -143,11 +155,15 @@ function cargo_install
 	local TARGET="$4"
 	local TGTDIR="$5"
 	local OPENSSL_DIR="$TEMPDIR/openssl-dir"
+	#type ccache > /dev/null 2>&1 && CC="ccache musl-gcc" || CC="musl-gcc"
+	CC="musl-gcc"
 	# Binaries go into subfolder named ./bin underneath --root
 	if [[ "${CRATENAME:0:1}" == "@" ]]; then
-		( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC=musl-gcc cargo install --target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --branch "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
+		( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --branch "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
+	elif [[ "${CRATENAME:0:1}" == "~" ]]; then
+		( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --tag "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
 	else
-		( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC=musl-gcc cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
+		( set -x; env OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
 	fi
 	if [[ -x "$TGTDIR/bin/$BINNAME" ]]; then
 		if ! ldd "$TGTDIR/bin/$BINNAME"|grep -q 'statically linked'; then
