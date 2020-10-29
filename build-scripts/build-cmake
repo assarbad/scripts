@@ -1,26 +1,47 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in rm rmdir dirname readlink file tempfile grep tee git date make gcc; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+TOOLS_NEEDED="cat dirname readlink rm rmdir file tempfile grep tee git date make gcc"
+for tool in $TOOLS_NEEDED; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
-( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBGCONFIGURE="$SHELL -x "; set -x; }
+( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-CMAKE_RELEASE="v3.17.3"
-CMAKE_GITREPO="https://gitlab.kitware.com/cmake/cmake.git"
-INSTALL_TO=${INSTALL_TO:-$HOME/bin/cmake}
+RELEASE_TAG="${CMAKE_RELEASE:-v3.18.4}"
+GITREPO="https://gitlab.kitware.com/cmake/cmake.git"
+PRJNAME="${PRJNAME:-cmake}"
+TAR_TAG="${TAR_TAG:-$PRJNAME}"
+INSTALL_TO=${INSTALL_TO:-$HOME/bin/$TAR_TAG}
 BASEDIR="${BASEDIR:-$(pwd)}"
 CACHEDIR="$BASEDIR/cache"
+CMDLINE_OPTIONS="h?cCgGi:pr:vV:"
 
 function show_help
 {
-	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-i <install-dir>] [-v] [-V <cmake-release-tag>]"
+	local RELEASE_TAG="$1"
+	echo -e "Syntax: $MEANDMYSELF [-h|-?] [-C|-c|-p] [-r <version>] [-g|-G] [-i <install-dir>] [-v] [-V <release-tag>]"
 	echo -e "\t${cW}-h | -?${cZ}"
 	echo -e "\t  Show this help"
+	echo -e "\t${cW}-c${cZ}"
+	echo -e "\t  Only check out updates from upstream, then exit."
+	echo -e "\t${cW}-C${cZ}"
+	echo -e "\t  Do not check out from the upstream repository."
+	echo -e "\t${cW}-g${cZ}"
+	echo -e "\t  Garbage collect after checkout."
+	echo -e "\t${cW}-G${cZ}"
+	echo -e "\t  Garbage collect aggressively (${cW}git gc --aggressive${cZ}) after checkout."
 	echo -e "\t${cW}-i${cZ} <install-dir>"
 	echo -e "\t  Set the installation directory. Can also be done by setting ${cW}INSTALL_TO${cZ}."
+	echo -e "\t${cW}-p${cZ}"
+	echo -e "\t  Same as ${cW}-c${cZ} but also packages the Git repos in a .tar file after bundling them."
+	echo -e "\t  ${cY}NB:${cZ} requires ${cW}git tar xz${cZ}."
+	echo -e "\t${cW}-r${cZ} <moniker>"
+	echo -e "\t  Revives the repositories previously packaged with ${cW}-p${cZ}. Implies ${cW}-c${cZ}."
+	echo -e "\t  The moniker is typically a timestamp, e.g. packaged-${cW}\$TIMESTAMP${cZ}.tar."
+	echo -e "\t  ${cW}NB:${cZ} to be called from the directory which contains ${MEANDMYSELF}."
+	echo -e "\t  ${cY}NB:${cZ} requires a working ${cW}git${cZ}."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
-	echo -e "\t${cW}-V${cZ} <cmake-release-tag> ${cY}(if not given defaults to: $CMAKE_RELEASE)${cZ}"
+	echo -e "\t${cW}-V${cZ} <release-tag> ${cY}(if not given defaults to: $RELEASE_TAG)${cZ}"
 	echo -e "\t  Tag to build instead of hardcoded default."
 	echo ""
 }
@@ -30,38 +51,53 @@ function prepare_src
 	local PRJNAME=${1%%:*}
 	local GITCLONE=${1#*:}
 	local GITREF=$2
+	local GITBASEDIR=${3:-$BASEDIR}
 	local PRJ=$(echo "${PRJNAME##*/}"|tr 'a-z' 'A-Z')
 	if ((NOCHECKOUT==0)); then
-		[[ -d "$CACHEDIR" ]] || mkdir -p "$CACHEDIR"
+		[[ -d "$GITBASEDIR" ]] || mkdir -p "$GITBASEDIR"
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Working on project $PRJNAME ($GITCLONE), branch/tag = $GITREF."
-		# Clone the repository if we don't have it
-		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
-		[[ -d "$CACHEDIR/$PRJNAME" ]] || $GITCLONE "$CACHEDIR/$PRJNAME"
+		if ((REVIVEPKG)); then
+			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning Git bundle if no clone exists."
+			if [[ ! -d "$GITBASEDIR/$PRJNAME" ]]; then
+				( set -x; git clone ${PRJNAME##*/}-${REVIVETS}.gitbundle "$GITBASEDIR/$PRJNAME" )
+				( set -x; git -C "$GITBASEDIR/$PRJNAME" remote set-url origin "${GITCLONE#git clone }" )
+				( set -x; git -C "$GITBASEDIR/$PRJNAME" fetch --tags )
+			fi
+		else
+			# Clone the repository if we don't have it
+			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cloning repository if no clone exists."
+			[[ -d "$GITBASEDIR/$PRJNAME" ]] || $GITCLONE "$GITBASEDIR/$PRJNAME"
+		fi
 		# Sanity check the clone
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Verifying the clone exists now."
-		[[ -d "$CACHEDIR/$PRJNAME/.git" ]] || { echo -e "${cR}ERROR:${cZ} apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
+		[[ -d "$GITBASEDIR/$PRJNAME/.git" ]] || { echo -e "${cR}ERROR:${cZ} apparently we failed to clone $PRJNAME ($GITCLONE)."; exit 1; }
 		# Set the Git stuff according to the docs
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Setting branch.master.rebase to true."
-		( cd "$CACHEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
-		( cd "$CACHEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} branch.master.rebase = " && git config --get branch.master.rebase )
-		( cd "$CACHEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
-		((REVIVEPKG)) && ( cd "$CACHEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
+		( cd "$GITBASEDIR/$PRJNAME" && git config branch.master.rebase true ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config branch.master.rebase true' for $PRJNAME."; exit 1; }
+		( cd "$GITBASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} branch.master.rebase = " && git config --get branch.master.rebase )
+		( cd "$GITBASEDIR/$PRJNAME" && if [[ "xtrue" == "x$(git config --get core.bare)" ]]; then git config --bool core.bare false; fi ) || { echo -e "${cR}ERROR:${cZ} could not set 'git config --bool core.bare false' for $PRJNAME."; exit 1; }
+		((REVIVEPKG)) && ( cd "$GITBASEDIR/$PRJNAME" && echo -ne "\tHard-resetting ($(git config --get core.bare)) after thawing it.\n\t-> "; git reset --hard )
 		# Scrub the working copy
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Cleaning extraneous files from Git clone."
-		( cd "$CACHEDIR/$PRJNAME" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
+		( cd "$GITBASEDIR/$PRJNAME" && git clean -dfx) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean -dfx' $PRJNAME."; exit 1; }
 		# Get latest changes to the Git repo
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fetching updates from upstream."
-		( cd "$CACHEDIR/$PRJNAME" && git fetch ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
+		( cd "$GITBASEDIR/$PRJNAME" && ( git fetch && git fetch --tags ) ) || { echo -e "${cY}WARNING:${cZ} failed to 'git fetch' $PRJNAME."; }
+		# Prune branches
+		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Pruning remote branches."
+		( cd "$GITBASEDIR/$PRJNAME" && git remote prune origin ) || { echo -e "${cY}WARNING:${cZ} failed to 'git remote prune origin' $PRJNAME."; }
 		# Check out the release
 		((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Checking out the files on current branch."
-		( cd "$CACHEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git checkout $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
-		if git --git-dir="$CACHEDIR/$PRJNAME/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
+		( cd "$GITBASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git checkout -f $GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to check out $GITREF for $PRJNAME."; exit 1; }
+		if git --git-dir="$GITBASEDIR/$PRJNAME/.git" rev-parse --symbolic --branches|grep -q "$GITREF"; then
 			((VERBOSE)) && echo -e "${cB}[DBG:$PRJ]${cZ} Fast-forwarding, if possible."
-			( cd "$CACHEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
+			( cd "$GITBASEDIR/$PRJNAME" && echo -en "${cW}$PRJ:${cZ} " && git merge --ff-only origin/$GITREF ) || { echo -e "${cR}ERROR:${cZ} failed to fast-forward to origin/$GITREF for $PRJNAME."; exit 1; }
 		fi
-		((GARBAGECOLLECT)) && ( echo "Now garbage-collecting the repository${GCAGGRESSIVE:+ ($GCAGGRESSIVE)}"; cd "$CACHEDIR/$PRJNAME" && git gc $GCAGGRESSIVE --prune=all)
+		((GARBAGECOLLECT)) && ( echo "Now garbage-collecting the repository${GCAGGRESSIVE:+ ($GCAGGRESSIVE)}"; cd "$GITBASEDIR/$PRJNAME" && git gc $GCAGGRESSIVE --prune=all)
 	fi
 	((ONLYCHECKOUT)) && return
+	[[ -d "$GITBASEDIR/build/$PRJNAME" ]] && rm -rf "$GITBASEDIR/build/$PRJNAME"
+	mkdir -p "$GITBASEDIR/build/$PRJNAME" || { echo -e "${cR}ERROR:${cZ} could not create build/$PRJNAME directory."; exit 1; }
 }
 
 function show_time_diff
@@ -76,21 +112,108 @@ function show_time_diff
 	printf "$MSG\n" $(printf "%d:%02d" "$DIFF_MIN" "$DIFF_SEC")
 }
 
-[[ "$1" == "--help" ]] && { show_help; exit 0; }
-while getopts "h?i:vV:" opt; do
+function assert_tools
+{
+	local opt=$1
+	shift
+	for tool in "$@"; do
+		if ! type $tool > /dev/null 2>&1; then
+			echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires ${cW}$tool${cZ} which was not found!"
+			exit 1
+		fi
+	done
+}
+
+function freeze_repo
+{
+	local BASEDIR="$1"
+	local TARGETDIR="$2"
+	local HASHPROG="$3"
+	shift 3
+	echo -e "${cW}freeze_repo(${cY}'$BASEDIR', '$TARGETDIR', '$HASHPROG', ${cG}" "$@" "${cW})${cZ}"
+	local TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
+	local TARNAME="packaged-${TIMESTAMP}-${TAR_TAG}.tar"
+	local UNPACKER="unpack-$TIMESTAMP-${TAR_TAG}"
+	echo "Packaging the source into $TARNAME"
+	(
+		trap '( set -x; rm -f "'$BASEDIR/$reponame-$TIMESTAMP.gitbundle'"{,.'${HASHPROG^^}'} "'$BASEDIR/${HASHPROG^^}S'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+		cd "$BASEDIR"
+		echo "Now bundling repositories"
+		find "$@" -type d -name '.git'|while read dname; do
+			reponame=${dname%/.git}
+			reponame=${reponame##*/}
+			( set -x; git -C "$dname" bundle create "$BASEDIR/$reponame-$TIMESTAMP.gitbundle" --all )
+			( cd "$BASEDIR"; set -x; $HASHPROG "$reponame-$TIMESTAMP.gitbundle"|tee "$reponame-$TIMESTAMP.gitbundle.${HASHPROG^^}")
+		done
+		echo "Now packing the contents with tar"
+		if [[ "$CURRABSPATH/$MEANDMYSELF" != "$BASEDIR/$MEANDMYSELF" ]]; then
+			cp -f "$CURRABSPATH/$MEANDMYSELF" "$BASEDIR/$MEANDMYSELF" || true
+		fi
+		( cd "$BASEDIR"; ( cat *-$TIMESTAMP.gitbundle.${HASHPROG^^}; $HASHPROG $MEANDMYSELF ) | tee ${HASHPROG^^}S )
+		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S ) && \
+			echo "Find the package under the name $TARNAME"
+		if [[ "$CURRABSPATH/$MEANDMYSELF" != "$BASEDIR/$MEANDMYSELF" ]]; then
+			rm -f "$BASEDIR/$MEANDMYSELF"
+		fi
+		cat - >> "$TARGETDIR/$UNPACKER" <<-EOF
+			#!/usr/bin/env bash
+			TS="$TIMESTAMP"
+			T="${TARNAME//$TIMESTAMP/\$TS}"
+			D="\$TS-${TAR_TAG}"
+			R="./$MEANDMYSELF"
+			U="${UNPACKER//$TIMESTAMP/\$TS}"
+			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
+			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
+		EOF
+		chmod +x "$TARGETDIR/$UNPACKER"
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}}
+		trap - INT TERM EXIT
+	)
+}
+
+[[ "$1" == "--help" ]] && { show_help "$RELEASE_TAG"; exit 0; }
+while getopts "$CMDLINE_OPTIONS" opt; do
 	case "$opt" in
 	h|\?)
-		show_help
+		show_help "$RELEASE_TAG"
 		exit 0
+		;;
+	c)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-c${cZ}/${cY}-p${cZ} are mutually exclusive."; exit 1; }
+		ONLYCHECKOUT=1
+		assert_tools "$opt" git
+		echo "Doing only a checkout"
+		;;
+	C)  ((ONLYCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-c${cZ}/${cY}-p${cZ} are mutually exclusive."; exit 1; }
+		NOCHECKOUT=1
+		echo -e "${cY}Skipping checkout${cZ}"
+		;;
+	g)  GARBAGECOLLECT=1
+		;;
+	G)  GARBAGECOLLECT=1
+		GCAGGRESSIVE="--aggressive"
 		;;
 	i)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
 		INSTALL_TO="$OPTARG"
+		;;
+	p)  ((NOCHECKOUT)) && { echo -e "${cR}ERROR:${cZ} ${cY}-C${cZ} and ${cY}-p${cZ}/${cY}-c${cZ} are mutually exclusive."; exit 1; }
+		ONLYCHECKOUT=1
+		BUNDLEGIT=1
+		assert_tools "$opt" cp sha256sum tar tee xz
+		echo "Doing only a checkout and then packaging bundled clones into a .tar file."
+		;;
+	r)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		((NOCHECKOUT)) || ONLYCHECKOUT=1
+		REVIVEPKG=1
+		REVIVETS="$OPTARG"
+		assert_tools "$opt" git
+		echo "Reviving Git bundles, followed a checkout."
 		;;
 	v)  VERBOSE=1
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
 	V)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
-		MUSLLIBC_RELEASE="$OPTARG"
+		RELEASE_TAG="$OPTARG"
 		;;
 	*)
 		echo -e "${cY}WARNING:${cZ} unknown option '$opt'"
@@ -102,30 +225,40 @@ if ! (set -o noclobber; echo "$$" > "$LOCKFILE") 2> /dev/null; then
 	exit 1
 fi
 trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
-echo -e "Working directory: $BASEDIR"
-let PM=$(grep -c processor /proc/cpuinfo)
+echo -e "\tWorking directory: $BASEDIR"
+let PM=$(grep -c processor /proc/cpuinfo || echo 2)
 ((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Number of parallel jobs, based on processor count: $PM."
 let TIME_START=$(date +%s)
-PRJNAME="cmake"
 PRJSRCDIR="$CACHEDIR/$PRJNAME"
 BUILDDIR="${PRJSRCDIR}.build"
-((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Preparing $PRJNAME"
-prepare_src "$PRJNAME:git clone $CMAKE_GITREPO" "$CMAKE_RELEASE"
-
-trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
-( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR" )
-((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
-( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
-( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
-echo -e "Configuring and building ${cW}$PRJ${cZ}"
-(
-	cd "$BUILDDIR" && \
-		$DBGCONFIGURE"$PRJSRCDIR/bootstrap" --no-qt-gui --no-system-libs --prefix="$INSTALL_TO" --parallel=$PM && \
-		make --no-print-directory -C "$BUILDDIR" -j$PM && \
-		make --no-print-directory -C "$BUILDDIR" install
-) \
-	&& { trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } \
-	|| { echo -e "${cR}ERROR:${cZ} $PRJ failed to build."; exit 1; }
+for i in "$PRJNAME:git clone $GITREPO"; do
+	prepare_src "$i" "$RELEASE_TAG" "$CACHEDIR"
+done
+let TIME_GIT=$(date +%s)
+if ((ONLYCHECKOUT==0)); then
+	trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+	( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR" )
+	((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
+	( cd "$PRJSRCDIR" && git clean -d -f ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
+	( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
+	echo -e "Configuring and building ${cW}$PRJ${cZ}"
+	(
+		cd "$BUILDDIR" && \
+			$DBGCONFIGURE"$PRJSRCDIR/bootstrap" --no-qt-gui --no-system-libs --prefix="$INSTALL_TO" --parallel=$PM && \
+			make --no-print-directory -C "$BUILDDIR" -j$PM && \
+			make --no-print-directory -C "$BUILDDIR" install
+	) \
+		&& { trap 'rm -f "$LOCKFILE"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } \
+		|| { echo -e "${cR}ERROR:${cZ} $PRJ failed to build."; exit 1; }
+fi
+if ((ONLYCHECKOUT==1)); then
+	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
+fi
+if ((BUNDLEGIT==1)); then
+	freeze_repo "$CACHEDIR" "$BASEDIR" sha256sum cmake
+	let TIME_GITBUNDLE=$(date +%s)
+	show_time_diff $TIME_GIT $TIME_GITBUNDLE                "Packaging took:      %s"
+fi
 let TIME_END=$(date +%s)
 show_time_diff $TIME_START $TIME_END      "Overall runtime:     %s (m:ss) with $PM parallel job(s)"
 exit 0
