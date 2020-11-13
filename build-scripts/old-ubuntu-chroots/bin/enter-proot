@@ -17,6 +17,7 @@ if (($# < 1)); then
 		-b /dev/urandom:/dev/urandom \
 		-b /dev/random:/dev/random \
 		-b /dev/zero:/dev/zero \
+		-b /dev/pts:/dev/pts \
 		-b $(pwd)/src:/root/src \
 		-b $(pwd)/bin:/root/bin \
 		-r "$CURRABSPATH/../rootfs" \
@@ -30,6 +31,7 @@ else
 		-b /dev/urandom:/dev/urandom \
 		-b /dev/random:/dev/random \
 		-b /dev/zero:/dev/zero \
+		-b /dev/pts:/dev/pts \
 		-b $(pwd)/src:/root/src \
 		-b $(pwd)/bin:/root/bin \
 		-r "$CURRABSPATH/../rootfs" \

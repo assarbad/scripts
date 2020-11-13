@@ -5,6 +5,7 @@ source /etc/lsb-release
 UBUCODENAME=${UBUCODENAME:-$DISTRIB_CODENAME}
 DNSIP=${DNSIP:-"8.8.8.8"}
 RESOLVCONF=/etc/resolv.conf
+DEBSRC="" # could also be deb-src to enable source packages in APT
 [[ -L "$RESOLVCONF" ]] && rm "$RESOLVCONF"
 (set -x; echo "nameserver $DNSIP"|tee "$RESOLVCONF")
 (set -x; echo "Acquire::ForceIPv4 true;"|tee "/etc/apt/apt.conf.d/00preferIPv4")
@@ -30,13 +31,13 @@ cat > /etc/apt/sources.list <<EOF
 deb http://$SERVERNAME/ubuntu/ $UBUCODENAME main restricted universe multiverse
 deb http://$SERVERNAME/ubuntu/ $UBUCODENAME-updates main restricted universe multiverse
 deb http://$SERVERNAME/ubuntu/ $UBUCODENAME-security main restricted universe multiverse
-${DEBSRC:+"# "}deb-src http://$SERVERNAME/ubuntu/ $UBUCODENAME main restricted universe multiverse
-${DEBSRC:+"# "}deb-src http://$SERVERNAME/ubuntu/ $UBUCODENAME-updates main restricted universe multiverse
-${DEBSRC:+"# "}deb-src http://$SERVERNAME/ubuntu/ $UBUCODENAME-security main restricted universe multiverse
+${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME main restricted universe multiverse
+${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME-updates main restricted universe multiverse
+${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME-security main restricted universe multiverse
 
 # Optional
 #deb http://$SERVERNAME/ubuntu/ $UBUCODENAME-backports main restricted universe multiverse
-${DEBSRC:+"# "}deb-src http://$SERVERNAME/ubuntu/ $UBUCODENAME-backports main restricted universe multiverse
+${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME-backports main restricted universe multiverse
 EOF
 if [[ -z "$NOINSTALL" ]]; then
 	(set -x; apt-get -y update)
