@@ -13,8 +13,14 @@ TAR_TAG="${TAR_TAG:-LLVM}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/$TAR_TAG}
 BASEDIR="${BASEDIR:-$(pwd)}"
 TARGETS="${TARGETS:-all}"
-PROJECTS="${PROJECTS:-clang,clang-tools-extra,compiler-rt,libcxx,libcxxabi,libunwind,openmp,lld,lldb}"
-BUILD_TYPE="${BUILD_TYPE:-MinSizeRel}"
+# The full list is: clang;clang-tools-extra;compiler-rt;debuginfo-tests;libc;libclc;libcxx;libcxxabi;libunwind;lld;lldb;openmp;parallel-libs;polly;pstl
+PROJECTS="${PROJECTS:-clang,clang-tools-extra,lld}"
+RUNTIMES="${RUNTIMES:-compiler-rt,libcxx,libcxxabi,libunwind}"
+ALL_LDFLAGS=${ALL_LDFLAGS:- -l:libc++.a -l:libc++abi.a -l:libunwind.a -ldl}
+#				${USE_CLANG:+-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS:-$ALL_LDFLAGS}}
+#				${USE_CLANG:+-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS:-$ALL_LDFLAGS}}
+#				${USE_CLANG:+-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS:-$ALL_LDFLAGS}}
+BUILD_TYPE="${BUILD_TYPE:-Release}"
 CMAKE_GENERATOR="${CMAKE_GENERATOR:-Unix Makefiles}"
 ORIG_CC=${CC:-gcc}
 ORIG_CXX=${CXX:-g++}
@@ -23,7 +29,7 @@ CLANGPPLUS=${CLANGPPLUS:-clang++}
 let NOOPTIONAL=0
 # libedit-dev swig doxygen graphviz
 # https://salsa.debian.org/pkg-llvm-team/llvm-toolchain/
-CMDLINE_OPTIONS="h?b:BcCe:gGi:InoOPpr:t:TvxX"
+CMDLINE_OPTIONS="h?b:BcCe:gGi:InoOPpr:t:Tu:vxX"
 
 function show_help
 {
@@ -77,6 +83,8 @@ function show_help
 	echo -e "\t  Specify the target architectures (comma/semi-colon-separated list) for LLVM/Clang."
 	echo -e "\t${cW}-T${cZ}"
 	echo -e "\t  Run tests after building, but before installing LLVM and Clang."
+	echo -e "\t${cW}-u${cZ} <runtimes> (default=${cW}$RUNTIMES${cZ})"
+	echo -e "\t  Enable runtimes (comma/semi-colon-separated list) for LLVM/Clang build."
 	echo -e "\t${cW}-v${cZ}"
 	echo -e "\t  Be verbose about the actions (lines get leading '${cB}[DBG]${cZ}' string)."
 	echo -e "\t${cW}-V${cZ} <release-tag> ${cY}(if not given defaults to: $RELEASE_TAG)${cZ}"
@@ -212,11 +220,11 @@ function freeze_repo
 			R="./$MEANDMYSELF"
 			U="${UNPACKER//$TIMESTAMP/\$TS}"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
-			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D"; $HASHPROG -c ${HASHPROG^^}S || exit \$?; [[ -x \$R ]] && \$R -r "\$TS" )
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
 		EOF
 		chmod +x "$TARGETDIR/$UNPACKER"
-		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}}
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S
 		trap - INT TERM EXIT
 	)
 }
@@ -290,6 +298,9 @@ while getopts "$CMDLINE_OPTIONS" opt; do
 		;;
 	T)  RUN_TESTS=1
 		;;
+	u)  [[ -n "$OPTARG" ]] || { echo -e "${cR}ERROR:${cZ} ${cY}-$opt${cZ} requires an argument." >&2; exit 1; }
+		RUNTIMES="$OPTARG"
+		;;
 	v)  VERBOSE=1
 		((VERBOSE)) && echo -e "${cB}[DBG]${cZ} Enabling verbose run."
 		;;
@@ -362,12 +373,27 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 				${CMAKE_CXX_COMPILER_VERSION:+-DCMAKE_CXX_COMPILER_VERSION=$CMAKE_CXX_COMPILER_VERSION} \
 				${USE_CCACHE:+-DLLVM_CCACHE_BUILD=ccache} \
 				${VERBOSE:+-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON} \
-				${USE_CLANG:+-DLLVM_ENABLE_LIBCXX:BOOL=ON} \
-				${USE_CLANG:+-DLLVM_STATIC_LINK_CXX_STDLIB:BOOL=ON} \
-				${USE_CLANG:+-DLLVM_ENABLE_EH:BOOL=ON} \
-				${USE_CLANG:+-DLLVM_ENABLE_RTTI:BOOL=ON} \
-				${LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN:+-DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=1} \
+				${USE_CLANG:+-DLLVM_ENABLE_LIBCXX:BOOL=${LLVM_ENABLE_LIBCXX:-ON}} \
+				${USE_CLANG:+-DLIBCXX_USE_COMPILER_RT=${LIBCXX_USE_COMPILER_RT:-ON}} \
+				${USE_CLANG:+-DLIBCXXABI_USE_COMPILER_RT=${LIBCXXABI_USE_COMPILER_RT:-ON}} \
+				${USE_CLANG:+-DLLVM_STATIC_LINK_CXX_STDLIB:BOOL=${LLVM_STATIC_LINK_CXX_STDLIB:-ON}} \
+				${USE_CLANG:+-DLIBCXXABI_ENABLE_STATIC:BOOL=${LIBCXXABI_ENABLE_STATIC:-ON}} \
+				${USE_CLANG:+-DLIBUNWIND_ENABLE_STATIC:BOOL=${LIBUNWIND_ENABLE_STATIC:-ON}} \
+				${USE_CLANG:+-DLIBCXXABI_ENABLE_STATIC_UNWINDER:BOOL=${LIBCXXABI_ENABLE_STATIC_UNWINDER:-ON}} \
+				${USE_CLANG:+-DLIBCXX_ENABLE_STATIC_ABI_LIBRARY:BOOL=${LIBCXX_ENABLE_STATIC_ABI_LIBRARY:-ON}} \
+				${USE_CLANG:+-DLIBCXXABI_STATICALLY_LINK_UNWINDER_IN_STATIC_LIBRARY:BOOL=${LIBCXXABI_STATICALLY_LINK_UNWINDER_IN_STATIC_LIBRARY:-ON}} \
+				${USE_CLANG:+-DLLVM_ENABLE_EH:BOOL=${LLVM_ENABLE_EH:-ON}} \
+				${USE_CLANG:+-DLLVM_ENABLE_RTTI:BOOL=${LLVM_ENABLE_RTTI:-ON}} \
+				${USE_CLANG:+-DLLVM_ENABLE_LLD:BOOL=${LLVM_ENABLE_LLD:-ON}} \
+				${LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN:+-DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN:BOOL=$LLVM_FORCE_USE_OLD_TOOLCHAIN} \
+				${LLVM_FORCE_USE_OLD_TOOLCHAIN:+-DLLVM_FORCE_USE_OLD_TOOLCHAIN:BOOL=$LLVM_FORCE_USE_OLD_TOOLCHAIN} \
+				${LLVM_ENABLE_Z3_SOLVER:+-DLLVM_ENABLE_Z3_SOLVER:BOOL=$LLVM_ENABLE_Z3_SOLVER} \
+				-DLLVM_INCLUDE_EXAMPLES:BOOL=${LLVM_INCLUDE_EXAMPLES:-OFF} \
+				-DLLVM_INCLUDE_BENCHMARKS:BOOL=${LLVM_INCLUDE_BENCHMARKS:-OFF} \
+				-DLLVM_ENABLE_ZLIB:BOOL=${LLVM_ENABLE_ZLIB:-ON} \
+				-DLLVM_ENABLE_ASSERTIONS:BOOL=${LLVM_ENABLE_ASSERTIONS:-OFF} \
 				-DLLVM_ENABLE_PROJECTS="${PROJECTS//,/;}" \
+				-DLLVM_ENABLE_RUNTIMES="${RUNTIMES//,/;}" \
 				-DCMAKE_INSTALL_PREFIX="$INSTALL_TO" \
 				-DLLVM_BUILD_DOCS=OFF \
 				-DLLVM_ENABLE_DOXYGEN=OFF \
@@ -376,7 +402,7 @@ if ((ONLYCHECKOUT==0)) && ((NOBUILD==0)); then
 				"$BASEDIR/llvm/llvm" ) || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake${cZ} failed."; exit 1; }
 			let TIME_CONFIGURE=$(date +%s)
 			# FIXME/TODO: add _options_ to enable optimizations and disable assertions somehow?! (i.e. don't hardcode them)
-			( set -x; env ENABLE_OPTIMIZED=1 DISABLE_ASSERTIONS=1 ${DBG:+TOOL_VERBOSE=1} cmake --build . )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake --build .${cZ} failed."; exit 1; }
+			( set -x; env ENABLE_OPTIMIZED=1 ${DBG:+TOOL_VERBOSE=1} cmake --build . )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake --build .${cZ} failed."; exit 1; }
 			let TIME_MAKE=$(date +%s)
 			if ((RUN_TESTS)); then
 				( set -x; cmake --build . --target test )  || { echo -e "${cR}ERROR:${cZ}  ${cW}cmake --build . --target test${cZ} failed."; exit 1; }
