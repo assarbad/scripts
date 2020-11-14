@@ -5,35 +5,42 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 OVERRIDE_LANG=${OVERRIDE_LANG:-en_US.UTF-8}
 OVERRIDE_TERM=${OVERRIDE_TERM:-screen}
 
-test -d "$CURRABSPATH/../rootfs" || { echo -e "${cR}ERROR:${cZ} The rootfs for proot doesn't seem to exist ($CURRABSPATH/../rootfs)"; exit 1; }
+for i in rootfs src bin ccache; do
+	if [[ ! -d "$(readlink -nf "$CURRABSPATH/../$i")" ]]; then
+		echo -e "${cR}ERROR:${cZ} The ${cW}$i${cZ} for proot doesn't seem to exist ($(readlink -nf "$CURRABSPATH/../$i"))"
+		exit 1
+	fi
+done
 
 echo -e "${cW}INFO:${cZ} Entering proot environment. Use ${cW}^D${cZ} or ${cW}exit${cZ} to exit."
 if (($# < 1)); then
 	echo "Starting login shell"
 	proot -0 \
-		-b /proc/cpuinfo:/proc/cpuinfo \
 		-b /etc/hosts:/etc/hosts \
 		-b /etc/hostname:/etc/hostname \
-		-b /dev/urandom:/dev/urandom \
-		-b /dev/random:/dev/random \
-		-b /dev/zero:/dev/zero \
-		-b /dev/pts:/dev/pts \
-		-b $(pwd)/src:/root/src \
-		-b $(pwd)/bin:/root/bin \
-		-r "$CURRABSPATH/../rootfs" \
+		-b /dev:/dev \
+		-b /sys:/sys \
+		-b /proc:/proc \
+		-b /tmp:/tmp \
+		-b /run:/run \
+		-b "$(readlink -nf "$CURRABSPATH/../src"):/root/src" \
+		-b "$(readlink -nf "$CURRABSPATH/../ccache"):/root/.ccache" \
+		-b "$(readlink -nf "$CURRABSPATH/../bin"):/root/bin" \
+		-r "$(readlink -nf "$CURRABSPATH/../rootfs")" \
 		-w /root /usr/bin/env HOME=/root LANG=${OVERRIDE_LANG} TERM=${OVERRIDE_TERM} bash -l
 else
 	echo "Running command from arguments"
 	proot -0 \
-		-b /proc/cpuinfo:/proc/cpuinfo \
 		-b /etc/hosts:/etc/hosts \
 		-b /etc/hostname:/etc/hostname \
-		-b /dev/urandom:/dev/urandom \
-		-b /dev/random:/dev/random \
-		-b /dev/zero:/dev/zero \
-		-b /dev/pts:/dev/pts \
-		-b $(pwd)/src:/root/src \
-		-b $(pwd)/bin:/root/bin \
-		-r "$CURRABSPATH/../rootfs" \
+		-b /dev:/dev \
+		-b /sys:/sys \
+		-b /proc:/proc \
+		-b /tmp:/tmp \
+		-b /run:/run \
+		-b "$(readlink -nf "$CURRABSPATH/../src"):/root/src" \
+		-b "$(readlink -nf "$CURRABSPATH/../ccache"):/root/.ccache" \
+		-b "$(readlink -nf "$CURRABSPATH/../bin"):/root/bin" \
+		-r "$(readlink -nf "$CURRABSPATH/../rootfs")" \
 		-w /root /usr/bin/env HOME=/root LANG=${OVERRIDE_LANG} TERM=${OVERRIDE_TERM} "$@"
 fi

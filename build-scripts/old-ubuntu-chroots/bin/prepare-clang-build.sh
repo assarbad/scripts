@@ -42,8 +42,15 @@ EOF
 if [[ -z "$NOINSTALL" ]]; then
 	(set -x; apt-get -y update)
 	(set -x; apt-get -y dist-upgrade)
-	(set -x; apt-get -y install build-essential $GITPKG bison flex texinfo ccache language-pack-en)
+	(set -x; apt-get -y install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake)
+
+	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
+		if [[ ! -e "$(uname -m)-linux-gnu-${tool}" ]]; then
+			(set -x; cd /usr/bin && ln -s "$tool" "$(uname -m)-linux-gnu-${tool}")
+		fi
+	done
 fi
+chmod u+r /var/run/crond.reboot
 echo Cleaning a bit
 apt-get --purge autoremove
 rm -f /var/cache/apt/srcpkgcache.bin /var/cache/apt/pkgcache.bin

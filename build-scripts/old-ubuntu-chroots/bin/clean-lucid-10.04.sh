@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 apt-mark unmarkauto bc
-apt-get -f autoremove linux-virtual linux-image-ec2 linux-ec2 linux-image-2.6.32-73-virtual linux-image-2.6.32-376-ec2 memtest86+ grub-legacy-ec2 grub-pc grub-common
-apt-get -f autoremove command-not-found command-not-found-data cloud-init cloud-utils dosfstools euca2ools friendly-recovery laptop-detect ntfs-3g openssh-server parted pciutils unattended-upgrades update-motd wpasupplicant wireless-tools ureadahead tasksel tasksel-data ssh-import lshw iptables update-manager
-aptitude purge $(dpkg -l|awk '$1 ~ /^rc/ {print $2}')
+apt-get -y -f autoremove linux-virtual linux-image-ec2 linux-ec2 linux-image-2.6.32-73-virtual linux-image-2.6.32-376-ec2 memtest86+ grub-legacy-ec2 grub-pc grub-common
+apt-get -y -f autoremove command-not-found command-not-found-data cloud-init cloud-utils dosfstools euca2ools friendly-recovery laptop-detect ntfs-3g openssh-server parted pciutils unattended-upgrades update-motd wpasupplicant wireless-tools ureadahead tasksel tasksel-data ssh-import lshw iptables update-manager
+aptitude -y purge $(dpkg -l|awk '$1 ~ /^rc/ {print $2}')
 apt-get -y clean
 apt-get -y autoclean
 aptitude -y clean

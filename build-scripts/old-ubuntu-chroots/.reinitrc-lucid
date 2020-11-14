@@ -1,0 +1,2 @@
+PRISTINE_ROOTFS="ubuntu-10.04-server-cloudimg-amd64.rootfs.txz"
+PREPARED_ROOTFS="prepared-buildenv-ubuntu-10.04-server-cloudimg-amd64.rootfs-nokernel-noboot-insubdir.tar"
