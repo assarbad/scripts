@@ -6,7 +6,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-RELEASE_TAG="${CMAKE_RELEASE:-v3.18.4}"
+RELEASE_TAG="${CMAKE_RELEASE:-v3.19.0}"
 GITREPO="https://gitlab.kitware.com/cmake/cmake.git"
 PRJNAME="${PRJNAME:-cmake}"
 TAR_TAG="${TAR_TAG:-$PRJNAME}"
@@ -163,11 +163,11 @@ function freeze_repo
 			R="./$MEANDMYSELF"
 			U="${UNPACKER//$TIMESTAMP/\$TS}"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
-			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D"; $HASHPROG -c ${HASHPROG^^}S || exit \$?; [[ -x \$R ]] && \$R -r "\$TS" )
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
 		EOF
 		chmod +x "$TARGETDIR/$UNPACKER"
-		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}}
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S
 		trap - INT TERM EXIT
 	)
 }
