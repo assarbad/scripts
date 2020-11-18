@@ -2,7 +2,7 @@
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 CC_TO_USE=${CROSS_COMPILE}${CC:-gcc}
 ORIG_CC="$CC_TO_USE"
-TOOLS_NEEDED="cat rm rmdir dirname readlink file tempfile grep tee tr git date make '${CC_TO_USE}' wget tar sha256sum autoconf autoheader sed cut"
+TOOLS_NEEDED="touch cat rm rmdir dirname readlink file tempfile grep tee tr git date make ${CC_TO_USE} wget tar sha256sum autoconf autoheader sed cut"
 for tool in $TOOLS_NEEDED; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
@@ -15,13 +15,14 @@ LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
 ZLIBURL="http://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
-RELEASE_TAG="${DROPBEAR_RELEASE:-DROPBEAR_2020.81}"
+VERSION="${DROPBEAR_VERSION:-2020.81}"
+RELEASE_TAG="${DROPBEAR_RELEASE:-DROPBEAR_$VERSION}"
 GITREPO="${DROPBEAR_GITREPO:-https://github.com/mkj/dropbear.git}"
 PRJNAME="${PRJNAME:-dropbear}"
 TAR_TAG="${TAR_TAG:-$PRJNAME}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/$TAR_TAG}
 BASEDIR="${BASEDIR:-$(pwd)}"
-CACHEDIR="$BASEDIR/cache"
+CACHEDIR="${CACHEDIR:-$BASEDIR/cache}"
 CMDLINE_OPTIONS="h?cCgGi:pr:vV:"
 
 function show_help
@@ -123,7 +124,7 @@ function show_time_diff
 
 function assert_tools
 {
-	local opt=$1
+	local opt=${1:-this script}
 	shift
 	for tool in "$@"; do
 		if ! type $tool > /dev/null 2>&1; then
@@ -159,7 +160,20 @@ function freeze_repo
 			cp -f "$CURRABSPATH/$MEANDMYSELF" "$BASEDIR/$MEANDMYSELF" || true
 		fi
 		( cd "$BASEDIR"; ( cat *-$TIMESTAMP.gitbundle.${HASHPROG^^}; $HASHPROG $MEANDMYSELF ) | tee ${HASHPROG^^}S )
-		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S ) && \
+		echo -n "" > "$BASEDIR/$MEANDMYSELF.extrafiles"
+		for fname in "$@"; do
+			if [[ -f "$BASEDIR/$fname" ]]; then
+				( \
+					cd "$BASEDIR";
+					pname="${CACHEDIR##*/}/${fname}"; \
+					test -d "${pname%/*}" || mkdir -p "${pname%/*}"; \
+					cp -a "$fname" "${pname%/*}"/ ; \
+					$HASHPROG "$pname" | tee -a ${HASHPROG^^}S; \
+					echo "$pname" | tee -a "./$MEANDMYSELF.extrafiles" \
+				)
+			fi
+		done
+		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S $(cat $MEANDMYSELF.extrafiles) ) && \
 			echo "Find the package under the name $TARNAME"
 		if [[ "$CURRABSPATH/$MEANDMYSELF" != "$BASEDIR/$MEANDMYSELF" ]]; then
 			rm -f "$BASEDIR/$MEANDMYSELF"
@@ -172,11 +186,11 @@ function freeze_repo
 			R="./$MEANDMYSELF"
 			U="${UNPACKER//$TIMESTAMP/\$TS}"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
-			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D" && [[ -x \$R ]] && \$R -r "\$TS" )
+			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D"; $HASHPROG -c ${HASHPROG^^}S || exit \$?; [[ -x \$R ]] && \$R -r "\$TS" )
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
 		EOF
 		chmod +x "$TARGETDIR/$UNPACKER"
-		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}}
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S
 		trap - INT TERM EXIT
 	)
 }
@@ -243,100 +257,103 @@ BUILDDIR="${PRJSRCDIR}.build"
 for i in "$PRJNAME:git clone $GITREPO"; do
 	prepare_src "$i" "$RELEASE_TAG" "$CACHEDIR"
 done
-# Build musl-libc if not yet available
-MUSLGCC="musl-${ORIG_CC##*/}"
-MUSL_INSTALLDIR="$CACHEDIR/$MUSLGCC"
-if [[ -x "$MUSL_INSTALLDIR/$MUSLGCC" ]]; then
-	echo -e "${cW}INFO:${cZ} Skipping build of musl-libc (found cached copy at $MUSL_INSTALLDIR)."
-else
-	BUILDMUSL="$CURRABSPATH/build-musl"
-	( echo -e "${cW}Building ${MUSLGCC##*/} now${cZ}"; cd "${BUILDMUSL%/*}" && ./${BUILDMUSL##*/} -i "$MUSL_INSTALLDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to build musl-libc for ${ORIG_CC}."; exit 1; }
-fi
-if ((ONLYCHECKOUT==1)); then
-	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
-fi
-export PATH="$MUSL_INSTALLDIR:$PATH"
 SRCTARBALLDIR="$CACHEDIR/source-tarballs"
-[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
 ZLIBPKG="$SRCTARBALLDIR/${ZLIBURL##*/}"
+[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
 if [[ -f "$ZLIBPKG" ]]; then
 	echo -e "${cW}${ZLIBURL##*/} already downloaded, using cached copy${cZ}"
 else
 	wget -nc -O "$ZLIBPKG" "$ZLIBURL" || curl -o "$ZLIBPKG" "$ZLIBURL" || { echo -e "${cR}ERROR:${cZ} failed to download $ZLIBURL"; exit 1; }
 fi
 echo "$ZLIBSHA256  $ZLIBPKG"|sha256sum -c ||  { echo -e "${cR}ERROR:${cZ} SHA-2 (256-bit) hash does not match!"; exit 1; }
-((DBG)) || { trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; }
-( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR/zlib" )
-if echo -n "... unpacking zlib" && tar --strip-components=1 -C "$BUILDDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$BUILDDIR/zlib/tempinstall"; then
-	echo -e " ${cG}[OK]${cZ}"
-else
-	echo -e " ${cR}[failed]${cZ}"
-	exit 1
+let TIME_GIT=$(date +%s)
+if ((ONLYCHECKOUT==0)); then
+	# Build musl-libc if not yet available
+	MUSLGCC="musl-${ORIG_CC##*/}"
+	MUSL_INSTALLDIR="$BUILDDIR/$MUSLGCC"
+	if [[ -x "$MUSL_INSTALLDIR/$MUSLGCC" ]]; then
+		echo -e "${cW}INFO:${cZ} Skipping build of musl-libc (found cached copy at $MUSL_INSTALLDIR)."
+	else
+		BUILDMUSL="$CURRABSPATH/build-musl"
+		( echo -e "${cW}Building ${MUSLGCC##*/} now${cZ}"; cd "${BUILDMUSL%/*}" && ./${BUILDMUSL##*/} -i "$MUSL_INSTALLDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to build musl-libc for ${ORIG_CC}."; exit 1; }
+	fi
+	export PATH="$MUSL_INSTALLDIR:$PATH"
+	((DBG)) || { trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; }
+	( rm -rf "$BUILDDIR"; mkdir -p "$BUILDDIR/zlib" )
+	if echo -n "... unpacking zlib" && tar --strip-components=1 -C "$BUILDDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$BUILDDIR/zlib/tempinstall"; then
+		echo -e " ${cG}[OK]${cZ}"
+	else
+		echo -e " ${cR}[failed]${cZ}"
+		exit 1
+	fi
+	# Little C program to check which options work to prevent -fPIE -pie etc ...
+	HELLOC=$(tempfile -p musl-test -s .c)
+	cat > "$HELLOC" <<-'EOF'
+		#include <stdio.h>
+		void main(void)
+		{
+			printf("Hello world!\n");
+		}
+	EOF
+	# Configure GCC for our purpose
+	export CC="$MUSLGCC -static"
+	export LDFLAGS="-Wl,--gc-sections -Wl,--hash-style=both"
+	( set -x; $MUSLGCC -no-pie "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-no-pie"
+	( set -x; $MUSLGCC -fno-pic "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-fno-pic"
+	( set -x; $MUSLGCC -fno-PIC "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-fno-PIC"
+	( set -x; $MUSLGCC -fnostack-protector "$HELLOC" -o "${HELLOC%.c}" ) && NOSTACKPROT_FLAGS="${NOSTACKPROT_FLAGS+$NOSTACKPROT_FLAGS }-fnostack-protector"
+	export CFLAGS="-ffunction-sections -fdata-sections${NOPIC_FLAGS:+ $NOPIC_FLAGS}" # -fnostack-protector
+	# proceed ...
+	echo -e "Configuring and building ${cW}zlib${cZ}"
+	(
+		cd "$BUILDDIR/zlib" && \
+			$DBGCONFIGURE./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
+			make --no-print-directory -C "$BUILDDIR/zlib" -j $PM && \
+			make --no-print-directory -C "$BUILDDIR/zlib" install
+	) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
+	((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
+	( cd "$PRJSRCDIR" && git clean -dfx ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
+	( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
+	echo -e "Configuring and building ${cW}$PRJ${cZ}"
+	(
+		cd "$PRJSRCDIR" && \
+			autoconf && autoheader && \
+		cd "$BUILDDIR" && \
+			mkdir $BUILDDIR/linux && \
+			touch "$BUILDDIR/linux/types.h" && \
+			grep -E '(__LINUX_PKT_SCHED_H|#define TC_PRIO_)' /usr/include/linux/pkt_sched.h > $BUILDDIR/linux/pkt_sched.h && \
+				echo '#endif' >> "$BUILDDIR/linux/pkt_sched.h" && \
+			$DBGCONFIGURE $PRJSRCDIR/configure \
+				"--with-zlib=$BUILDDIR/zlib/tempinstall" \
+				--enable-static \
+				--disable-syslog \
+				--disable-lastlog \
+				--without-pam \
+				--enable-bundled-libtom \
+				--host=$(uname -m)-linux
+				CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
+				&& \
+			make --no-print-directory -C "$BUILDDIR" -j $PM \
+				PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" \
+				MULTI=1 \
+				STATIC=1 \
+				SCPPROGRESS=1 \
+				all strip \
+				&& \
+			TARFILE="$CURRABSPATH/dropbear-v${RELEASE_TAG##*_}-${CROSS_COMPILE}static.tgz" && \
+			{ ((DBG)) || { trap 'rm -f "$LOCKFILE" "$TARFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } }
+			tar -czvf "$TARFILE" $(find -maxdepth 1 -type l) dropbearmulti && \
+			{ ((DBG)) || { trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } }
+	) || { echo -e "${cR}ERROR:${cZ} $PRJ failed to build."; exit 1; }
+	# Cleanup took place by the traps in the subshell already by this time, so simply remove the traps in the parent shell
+	((DBG)) && rm -f "$LOCKFILE"
+	trap - INT TERM EXIT
 fi
-# Little C program to check which options work to prevent -fPIE -pie etc ...
-HELLOC=$(tempfile -p musl-test -s .c)
-cat > "$HELLOC" <<-'EOF'
-	#include <stdio.h>
-	void main(void)
-	{
-		printf("Hello world!\n");
-	}
-EOF
-# Configure GCC for our purpose
-export CC="$MUSLGCC -static"
-export LDFLAGS="-Wl,--gc-sections -Wl,--hash-style=both"
-( set -x; $MUSLGCC -no-pie "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-no-pie"
-( set -x; $MUSLGCC -fno-pic "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-fno-pic"
-( set -x; $MUSLGCC -fno-PIC "$HELLOC" -o "${HELLOC%.c}" ) && NOPIC_FLAGS="${NOPIC_FLAGS+$NOPIC_FLAGS }-fno-PIC"
-( set -x; $MUSLGCC -fnostack-protector "$HELLOC" -o "${HELLOC%.c}" ) && NOSTACKPROT_FLAGS="${NOSTACKPROT_FLAGS+$NOSTACKPROT_FLAGS }-fnostack-protector"
-export CFLAGS="-ffunction-sections -fdata-sections${NOPIC_FLAGS:+ $NOPIC_FLAGS}" # -fnostack-protector
-# proceed ...
-echo -e "Configuring and building ${cW}zlib${cZ}"
-(
-	cd "$BUILDDIR/zlib" && \
-		$DBGCONFIGURE./configure --static "--prefix=$BUILDDIR/zlib/tempinstall" && \
-		make --no-print-directory -C "$BUILDDIR/zlib" -j $PM && \
-		make --no-print-directory -C "$BUILDDIR/zlib" install
-) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
-((VERBOSE)) && echo -e "${cB}[DBG:$PRJNAME]${cZ} Cleaning extraneous files from Git clone."
-( cd "$PRJSRCDIR" && git clean -dfx ) || { echo -e "${cR}ERROR:${cZ} failed to 'git clean' $PRJNAME."; exit 1; }
-( cd "$PRJSRCDIR" && git reset --hard ) || { echo -e "${cR}ERROR:${cZ} failed to 'git reset --hard' $PRJNAME."; exit 1; }
-echo -e "Configuring and building ${cW}$PRJ${cZ}"
-(
-	cd "$PRJSRCDIR" && \
-		autoconf && autoheader && \
-	cd "$BUILDDIR" && \
-		mkdir $BUILDDIR/linux && \
-		touch "$BUILDDIR/linux/types.h" && \
-		grep -E '(__LINUX_PKT_SCHED_H|#define TC_PRIO_)' /usr/include/linux/pkt_sched.h > $BUILDDIR/linux/pkt_sched.h && \
-			echo '#endif' >> "$BUILDDIR/linux/pkt_sched.h" && \
-		$DBGCONFIGURE $PRJSRCDIR/configure \
-			"--with-zlib=$BUILDDIR/zlib/tempinstall" \
-			--enable-static \
-			--disable-syslog \
-			--disable-lastlog \
-			--without-pam \
-			--enable-bundled-libtom \
-			--host=$(uname -m)-linux
-			CPPFLAGS="-isystem '$BUILDDIR/zlib/tempinstall/include' -isystem '$PRJSRCDIR/libtommath' -I '$BUILDDIR'" \
-			&& \
-		make --no-print-directory -C "$BUILDDIR" -j $PM \
-			PROGRAMS="dropbear dbclient scp dropbearkey dropbearconvert" \
-			MULTI=1 \
-			STATIC=1 \
-			SCPPROGRESS=1 \
-			all strip \
-			&& \
-		TARFILE="$CURRABSPATH/dropbear-v${DROPBEAR_RELEASE##*_}-${CROSS_COMPILE}static.tgz" && \
-		{ ((DBG)) || { trap 'rm -f "$LOCKFILE" "$TARFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } }
-		tar -czvf "$TARFILE" $(find -maxdepth 1 -type l) dropbearmulti && \
-		{ ((DBG)) || { trap 'rm -f "$LOCKFILE"; echo -e "'"${cW}INFO:${cZ}"' Removing the build directories due to signal."; rm -rf "'$BUILDDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT; } }
-) || { echo -e "${cR}ERROR:${cZ} $PRJ failed to build."; exit 1; }
-# Cleanup took place by the traps in the subshell already by this time, so simply remove the traps in the parent shell
-((DBG)) && rm -f "$LOCKFILE"
-trap - INT TERM EXIT
+if ((ONLYCHECKOUT==1)); then
+	show_time_diff $TIME_START $TIME_GIT      "Git operations took: %s"
+fi
 if ((BUNDLEGIT==1)); then
-	freeze_repo "$CACHEDIR" "$BASEDIR" sha256sum dropbear
+	freeze_repo "$CACHEDIR" "$BASEDIR" sha256sum $PRJNAME ${ZLIBPKG#$CACHEDIR/}
 	let TIME_GITBUNDLE=$(date +%s)
 	show_time_diff $TIME_GIT $TIME_GITBUNDLE                "Packaging took:      %s"
 fi

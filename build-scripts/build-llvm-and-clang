@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-TOOLS_NEEDED="cat dirname readlink rm rmdir grep git date make cp date gcc find sha256sum tr"
+TOOLS_NEEDED="touch cat dirname readlink rm rmdir grep git date make cp date gcc find sha256sum tr"
 for tool in $TOOLS_NEEDED; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
@@ -16,7 +16,7 @@ TARGETS="${TARGETS:-all}"
 # The full list is: clang;clang-tools-extra;compiler-rt;debuginfo-tests;libc;libclc;libcxx;libcxxabi;libunwind;lld;lldb;openmp;parallel-libs;polly;pstl
 PROJECTS="${PROJECTS:-clang,clang-tools-extra,lld}"
 RUNTIMES="${RUNTIMES:-compiler-rt,libcxx,libcxxabi,libunwind}"
-ALL_LDFLAGS=${ALL_LDFLAGS:- -l:libc++.a -l:libc++abi.a -l:libunwind.a -ldl}
+#ALL_LDFLAGS=${ALL_LDFLAGS:- -l:libc++.a -l:libc++abi.a -l:libunwind.a -ldl}
 #				${USE_CLANG:+-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS:-$ALL_LDFLAGS}}
 #				${USE_CLANG:+-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS:-$ALL_LDFLAGS}}
 #				${USE_CLANG:+-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS:-$ALL_LDFLAGS}}
@@ -171,7 +171,7 @@ function show_time_diff
 
 function assert_tools
 {
-	local opt=$1
+	local opt=${1:-this script}
 	shift
 	for tool in "$@"; do
 		if ! type $tool > /dev/null 2>&1; then
@@ -207,7 +207,20 @@ function freeze_repo
 			cp -f "$CURRABSPATH/$MEANDMYSELF" "$BASEDIR/$MEANDMYSELF" || true
 		fi
 		( cd "$BASEDIR"; ( cat *-$TIMESTAMP.gitbundle.${HASHPROG^^}; $HASHPROG $MEANDMYSELF ) | tee ${HASHPROG^^}S )
-		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S ) && \
+		echo -n "" > "$BASEDIR/$MEANDMYSELF.extrafiles"
+		for fname in "$@"; do
+			if [[ -f "$BASEDIR/$fname" ]]; then
+				( \
+					cd "$BASEDIR";
+					pname="${CACHEDIR##*/}/${fname}"; \
+					test -d "${pname%/*}" || mkdir -p "${pname%/*}"; \
+					cp -a "$fname" "${pname%/*}"/ ; \
+					$HASHPROG "$pname" | tee -a ${HASHPROG^^}S; \
+					echo "$pname" | tee -a "./$MEANDMYSELF.extrafiles" \
+				)
+			fi
+		done
+		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S $(cat $MEANDMYSELF.extrafiles) ) && \
 			echo "Find the package under the name $TARNAME"
 		if [[ "$CURRABSPATH/$MEANDMYSELF" != "$BASEDIR/$MEANDMYSELF" ]]; then
 			rm -f "$BASEDIR/$MEANDMYSELF"
