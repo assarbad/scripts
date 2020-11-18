@@ -42,7 +42,7 @@ EOF
 if [[ -z "$NOINSTALL" ]]; then
 	(set -x; apt-get -y update)
 	(set -x; apt-get -y dist-upgrade)
-	(set -x; apt-get -y install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake)
+	(set -x; apt-get -y install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake texlive)
 
 	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
 		if [[ ! -e "$(uname -m)-linux-gnu-${tool}" ]]; then
