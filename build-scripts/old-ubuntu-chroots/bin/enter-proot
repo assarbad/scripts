@@ -12,6 +12,16 @@ for i in rootfs src bin ccache; do
 	fi
 done
 
+unset LC_PAPER
+unset LC_ADDRESS
+unset LC_MONETARY
+unset LC_NUMERIC
+unset LC_TELEPHONE
+unset LC_IDENTIFICATION
+unset LC_MEASUREMENT
+unset LC_TIME
+unset LC_NAME
+
 echo -e "${cW}INFO:${cZ} Entering proot environment. Use ${cW}^D${cZ} or ${cW}exit${cZ} to exit."
 if (($# < 1)); then
 	echo "Starting login shell"

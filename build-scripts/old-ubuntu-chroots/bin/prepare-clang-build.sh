@@ -42,7 +42,51 @@ EOF
 if [[ -z "$NOINSTALL" ]]; then
 	(set -x; apt-get -y update)
 	(set -x; apt-get -y dist-upgrade)
-	(set -x; apt-get -y install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake texlive)
+
+	cat > /etc/locale.nopurge <<-EOF
+	####################################################
+	# This is the configuration file for localepurge(8).
+	####################################################
+
+	####################################################
+	# Uncommenting this string enables removal of localized 
+	# man pages based on the configuration information for
+	# locale files defined below:
+
+	MANDELETE
+
+	####################################################
+	# Uncommenting this string causes localepurge to simply delete
+	# locales which have newly appeared on the system without
+	# bothering you about it:
+
+	DONTBOTHERNEWLOCALE
+
+	####################################################
+	# Uncommenting this string enables display of freed disk
+	# space if localepurge has purged any superfluous data:
+
+	SHOWFREEDSPACE
+
+	#####################################################
+	# Commenting out this string enables faster but less
+	# accurate calculation of freed disk space:
+
+	#QUICKNDIRTYCALC
+
+	#####################################################
+	# Commenting out this string disables verbose output:
+
+	#VERBOSE
+
+	#####################################################
+	# Following locales won't be deleted from this system
+	# after package installations done with apt-get(8):
+
+	en_US.UTF-8
+	EOF
+
+	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake texlive texlive-font-utils ghostscript texlive-generic-recommended gawk gettext)
 
 	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
 		if [[ ! -e "$(uname -m)-linux-gnu-${tool}" ]]; then
@@ -51,7 +95,17 @@ if [[ -z "$NOINSTALL" ]]; then
 	done
 fi
 chmod u+r /var/run/crond.reboot
+# Disable all other English locales
+sed -i -e 's|^|#|g' /var/lib/locales/supported.d/en
+cat > /var/lib/locales/supported.d/local <<-EOF
+	en_US ISO-8859-1
+	en_US.UTF-8 UTF-8
+	EOF
+locale-gen --purge
 echo Cleaning a bit
+if type localepurge > /dev/null 2>&1; then
+	localepurge
+fi
 apt-get --purge autoremove
 rm -f /var/cache/apt/srcpkgcache.bin /var/cache/apt/pkgcache.bin
 for i in /etc/.pwd.lock /var/log/*.{0..9} /var/log/*.{0..9}.gz /var/cache/apt/archives/partial/* /var/cache/debconf/*.dat-old; do

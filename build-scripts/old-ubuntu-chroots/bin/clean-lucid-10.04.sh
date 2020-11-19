@@ -7,6 +7,9 @@ apt-get -y clean
 apt-get -y autoclean
 aptitude -y clean
 aptitude -y autoclean
+if type localepurge > /dev/null 2>&1; then
+	localepurge
+fi
 rm -f /var/cache/apt/srcpkgcache.bin /var/cache/apt/pkgcache.bin
 for i in /etc/.pwd.lock /var/log/*.{0..9} /var/log/*.{0..9}.gz /var/cache/apt/archives/partial/* /var/cache/debconf/*.dat-old; do
 	[[ -e "$i" ]] && (set -x; rm -f "$i")
