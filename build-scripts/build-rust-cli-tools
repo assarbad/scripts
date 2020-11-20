@@ -27,6 +27,7 @@ ddh:darakian/ddh
 diffr:mookid/diffr
 dirstat-rs:dirstat:scullionw/dirstat-rs
 diskonaut:imsnif/diskonaut
+dtool:guoxbin/dtool
 du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 dutree:nachoparker/dutree
@@ -35,6 +36,7 @@ exa:ogham/exa
 fastmod:facebookincubator/fastmod
 fd-find:fd:sharkdp/fd
 fddf:lib.rs/crates/fddf
+find-files:ff:vishaltelangre/ff
 funzzy:cristianoliveira/funzzy
 git-delta:delta:dandavison/delta
 git-global:peap/git-global
