@@ -57,6 +57,7 @@ oxipng:shssoichiro/oxipng
 pastel:sharkdp/pastel
 perftacho:qrider71/tacho
 procs:dalance/procs
+project_init:pi:vmchale/project-init
 repo-cli:repo:edeneast/repo
 repoch:lucawen/repoch
 repofetch:spenserblack/repofetch
@@ -186,7 +187,16 @@ function simple_install
 	if [[ -n "$BINNAME" ]] && [[ "$BINNAME" != "$CRATENAME" ]]; then
 		CRATENAME=${CRATENAME%:*}
 	fi
-	cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" "$OPENSSL_DIR" || exit 1
+	shift 2
+	if (($# > 0)); then
+		for binname in "$@"; do # only build select projects
+			if [[ "$binname" == "$BINNAME" ]] ; then
+				cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" "$OPENSSL_DIR" || exit 1
+			fi
+		done
+	else
+		cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" "$OPENSSL_DIR" || exit 1
+	fi
 }
 
 function strip_and_store_binaries
@@ -217,7 +227,7 @@ trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap
 echo -e "${cW}INFO:${cZ} building OpenSSL"
 openssl_build || exit 1
 for tool in $SIMPLE_INSTALLS; do
-	simple_install "$tool" "$TEMPDIR"
+	simple_install "$tool" "$TEMPDIR" "$@"
 done
 strip_and_store_binaries "$TEMPDIR"
 # Clean exit
