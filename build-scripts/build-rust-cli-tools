@@ -276,7 +276,7 @@ function strip_and_store_binaries
 # Ensure we clean up after ourselves in any case
 let TIME_START=$(date +%s)
 trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
-if [[ -z "NOSSL" ]]; then
+if [[ -z "$NOSSL" ]]; then
 	echo -e "${cW}INFO:${cZ} building OpenSSL"
 	openssl_build || exit 1
 fi
