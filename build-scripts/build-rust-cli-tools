@@ -17,14 +17,20 @@ fi
 # These can be installed using 'cargo install' and statically linked against musl libc
 SIMPLE_INSTALLS="\
 @main:nat:willdoescode/nat
+@main:waitfor:aeshirey/waitfor
+@master:bookmark:Szymongib/bookmark
+amp:jmacdonald/amp
 b3sum:BLAKE3-team/BLAKE3
 bandwhich:imsnif/bandwhich
 bat:sharkdp/bat
+battop:svartalf/rust-battop
 bingrep:m4b/bingrep
 bottom:btm:ClementTsang/bottom
 broot:canop/broot
 ddh:darakian/ddh
+desed:SoptikHa2/desed
 diffr:mookid/diffr
+dijo:NerdyPepper/dijo
 dirstat-rs:dirstat:scullionw/dirstat-rs
 diskonaut:imsnif/diskonaut
 dtool:guoxbin/dtool
@@ -32,12 +38,16 @@ du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 dutree:nachoparker/dutree
 eureka:simeg/eureka
+eva:NerdyPepper/eva
 exa:ogham/exa
 fastmod:facebookincubator/fastmod
 fd-find:fd:sharkdp/fd
 fddf:lib.rs/crates/fddf
 find-files:ff:vishaltelangre/ff
 funzzy:cristianoliveira/funzzy
+gfold:nickgerace/gfold
+git-absorb:tummychow/git-absorb
+git-brws:rhysd/git-brws
 git-delta:delta:dandavison/delta
 git-global:peap/git-global
 git-project:kroger-technology/git-project
@@ -46,40 +56,58 @@ gitout:jakewharton/gitout
 gitui:extrawurst/gitui
 grex:pemistahl/grex
 hexyl:sharkdp/hexyl
+huniq:koraa/huniq
 hyperfine:sharkdp/hyperfine
 jql:yamafaktory/jql
 kmon:orhun/kmon
 kondo:tbillington/kondo
+lfs:Canop/lfs
 licensor:raftario/licensor
 lolcate-rs:lolcate:ngirard/lolcate-rs
 lsd:Peltoche/lsd
+mdbook:rust-lang/mdBook
 mdcat:lunaryorn/mdcat
 nomino:yaa110/nomino
 oxipng:shssoichiro/oxipng
 pastel:sharkdp/pastel
 perftacho:qrider71/tacho
+pipe-rename:renamer:marcusbuffett/pipe-rename
 procs:dalance/procs
 project_init:pi:vmchale/project-init
+ptail:orf/ptail
+pueue:Nukesor/pueue
 repo-cli:repo:edeneast/repo
 repoch:lucawen/repoch
 repofetch:spenserblack/repofetch
 ripgrep:rg:BurntSushi/ripgrep
 rnr:chuckdaniels87/rnr
 romodoro:michaelfletchercgy/romodoro
+rsign2:rsign:jedisct1/rsign2
 rustscan:rustscan/rustscan
 sccache:mozilla/sccache
 scout:jhbabon/scout
 sd:chmln/sd
+shy:xvxx/shy
 skim:sk:lotabout/skim
+so:samtay/so
 starship:starship/starship
+svgcleaner:RazrFalcon/svgcleaner
 tealdeer:tldr:dbrgn/tealdeer
+tiny:osa1/tiny
 tokei:lib.rs/crates/tokei
 treesum:anderejd/treesum
+typeracer:ttyperacer/terminal-typeracer
 vcprompt:sscherfke/rust-vcprompt
 verco:matheuslessarodrigues/verco
 viu:atanunq/viu
 vivid:sharkdp/vivid
+vopono:jamesmcm/vopono
 watchexec:watchexec/watchexec
+websocat:vi/websocat
+wool:grapegrip/wool
+xsv:BurntSushi/xsv
+yadf:jRimbault/yadf
+zenith:bvaisvil/zenith
 zoxide:lib.rs/crates/zoxide
 zrs:fauxfaux/zrs
 "
@@ -184,15 +212,16 @@ function simple_install
 	# Cut the shortest match from back
 	local CRATENAME="${1%:*}"
 	# ... longest match from start
-	local GITHUB_URL="https://github.com/${1##*:}"
+	local GITHUB_URI="${1##*:}"
+	local GITHUB_URL="https://github.com/$GITHUB_URI"
 	local BINNAME="${CRATENAME##*:}"
 	if [[ -n "$BINNAME" ]] && [[ "$BINNAME" != "$CRATENAME" ]]; then
 		CRATENAME=${CRATENAME%:*}
 	fi
 	shift 2
 	if (($# > 0)); then
-		for binname in "$@"; do # only build select projects
-			if [[ "$binname" == "$BINNAME" ]] ; then
+		for name in "$@"; do # only build select projects
+			if [[ "$name" == "$BINNAME" ]] || [[ "$name" == "$CRATENAME" ]] || [[ "$name" == "$GITHUB_URI" ]]; then
 				cargo_install "$BINNAME" "$CRATENAME" "$GITHUB_URL" "$TARGET" "$TGTDIR" "$OPENSSL_DIR" || exit 1
 			fi
 		done
@@ -221,6 +250,7 @@ function strip_and_store_binaries
 	done | tee "$TGTDIR/SHA256SUMS"
 	cargo install --root "$SRCDIR" --list|tee "$TGTDIR/manifest.txt"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/${NOWDATE}_rust-cli-tools.txz" -C "$TGTDIR" . ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
+	( CURRDIR="$(pwd)"; set -x; sha256sum "$CURRDIR/${NOWDATE}_rust-cli-tools.txz" | tee "$CURRDIR/${NOWDATE}_rust-cli-tools.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 }
 
 # Ensure we clean up after ourselves in any case
