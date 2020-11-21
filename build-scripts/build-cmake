@@ -180,7 +180,7 @@ function freeze_repo
 			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
 		EOF
 		chmod +x "$TARGETDIR/$UNPACKER"
-		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S
+		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S "$BASEDIR/$MEANDMYSELF.extrafiles"
 		trap - INT TERM EXIT
 	)
 }

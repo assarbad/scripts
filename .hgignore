@@ -12,7 +12,9 @@ before.txt
 *.orig
 after.txt
 build-scripts/cache/**
-build-scripts/*_rust-cli-tools.txz
+build-scripts/*_rust-cli-tools.txz*
+build-scripts/*_rust-cli-tools.stripped.txz*
+build-scripts/*_rust-cli-tools.stripped.txz*
 build-scripts/packaged-*.tar
 build-scripts/unpack-*
 tlive/*.deb
