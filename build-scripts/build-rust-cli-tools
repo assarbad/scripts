@@ -267,10 +267,10 @@ function strip_and_store_binaries
 	EOF
 	chmod +x "$TGTDIR/install.sh"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/$TARBALL.txz" -C "$SRCDIR" "$BASENAME" ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
-	( CURRDIR="$(pwd)"; set -x; sha256sum "$CURRDIR/$TARBALL.txz" | tee "$CURRDIR/$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
+	( CURRDIR="$(pwd)"; set -x; pushd "$CURRDIR"; sha256sum "$TARBALL.txz" | tee "$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 	TARBALL="$TARBALL.stripped"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/$TARBALL.txz" -C "$SRCDIR" "$BASENAME/stripped" "$BASENAME/install.sh" $(find "$SRCDIR" -type f \( -name 'manifest.txt' -o -name 'warnings.txt' \) -printf '%P\n') ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
-	( CURRDIR="$(pwd)"; set -x; sha256sum "$CURRDIR/$TARBALL.txz" | tee "$CURRDIR/$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
+	( CURRDIR="$(pwd)"; set -x; pushd "$CURRDIR"; sha256sum "$TARBALL.txz" | tee "$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 }
 
 # Ensure we clean up after ourselves in any case
