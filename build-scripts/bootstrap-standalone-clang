@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# NOTE: this is work-in-progress ... findings from this will go into the main Clang/LLVM build script and be made conveniently accessible
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+CC=${CC:-$(which clang)}
+CXX=${CXX:-$(which clang++)}
+TOOLS_NEEDED="dirname readlink cmake ninja ccache $CC $CXX"
+for tool in $TOOLS_NEEDED; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+STAGINGBASE="$CURRABSPATH/staging"
+STAGINGINST="$STAGINGBASE/installed"
+CCACHE_DIR="${CCACHE_DIR:-"$STAGINGBASE/ccache"}"
+USE_CCACHE=${USE_CCACHE:-ccache}
+LLVM_ENABLE_PROJECTS="${LLVM_ENABLE_PROJECTS:-"clang;compiler-rt;libunwind;libcxx;libcxxabi;lld"}"
+LLVM_TARGETS_TO_BUILD=${LLVM_TARGETS_TO_BUILD:-X86}
+LLVMSRCBASE="$CURRABSPATH/llvm"
+let SKIP=${SKIP:-0}
+
+STAGE=stage2
+if ((SKIP<1)); then
+	( \
+	CMAKE_INSTALL_PREFIX="$STAGINGINST/$STAGE"; \
+	for dirname in "$CMAKE_INSTALL_PREFIX" "$STAGINGBASE/$STAGE"; do \
+		[[ -d "$dirname" ]] && rm -rf "$dirname"; \
+		[[ -d "$dirname" ]] || mkdir -p "$dirname"; \
+	done; \
+	set -x; \
+	env \
+		CCACHE_DIR="$CCACHE_DIR" \
+		CC="$CC" CXX="$CXX" \
+	cmake \
+		-Wno-dev \
+		-G Ninja \
+		-DCMAKE_CROSSCOMPILING=ON \
+		-DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS_TO_BUILD} \
+		${USE_CCACHE:+"-DCMAKE_C_COMPILER_LAUNCHER=$USE_CCACHE"} ${USE_CCACHE:+"-DCMAKE_CXX_COMPILER_LAUNCHER=$USE_CCACHE"} \
+		-DCLANG_ENABLE_BOOTSTRAP=ON \
+		"-DLLVM_ENABLE_PROJECTS=${LLVM_ENABLE_PROJECTS}" \
+		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+		-DCLANG_DEFAULT_RTLIB=compiler-rt \
+		-DLIBUNWIND_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_USE_COMPILER_RT=ON \
+		"-DCLANG_DEFAULT_CXX_STDLIB=libc++" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DLLVM_ENABLE_BACKTRACES=OFF \
+		-DLLVM_ENABLE_TERMINFO=OFF \
+		-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON \
+		-DLLVM_ENABLE_UNWIND_TABLES=OFF \
+		-DLLVM_ENABLE_ZLIB=OFF \
+		-DLLVM_INCLUDE_DOCS=OFF \
+		-DLLVM_INCLUDE_EXAMPLES=OFF \
+		-DLLVM_INCLUDE_GO_TESTS=OFF \
+		-DCLANG_DEFAULT_LINKER=lld \
+		-DCLANG_DEFAULT_OBJCOPY=llvm-objcopy \
+		-DLIBUNWIND_ENABLE_SHARED=OFF \
+		-DLIBUNWIND_INSTALL_LIBRARY=OFF \
+		-DLIBUNWIND_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_ENABLE_SHARED=OFF \
+		-DLIBCXXABI_ENABLE_STATIC_UNWINDER=ON \
+		-DLIBCXXABI_INSTALL_LIBRARY=OFF \
+		-DLIBCXXABI_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
+		-DLIBCXX_ENABLE_SHARED=OFF \
+		${CMAKE_INSTALL_PREFIX:+"-DCMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX"} \
+		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE"
+	) || exit $?
+else
+	echo -e "${cY}WARNING:${cZ} skipped $STAGE"
+fi
+
+#LLVM_ENABLE_PROJECTS="${LLVM_ENABLE_PROJECTS:-"clang;compiler-rt;libunwind;libcxxabi;libcxx;lld"}"
+PREVSTAGE=$STAGE
+STAGE=stage3
+if ((SKIP<2)); then
+	( \
+	CMAKE_INSTALL_PREFIX="$STAGINGINST/$STAGE"; \
+	for dirname in "$CMAKE_INSTALL_PREFIX" "$STAGINGBASE/$STAGE"; do \
+		[[ -d "$dirname" ]] && rm -rf "$dirname"; \
+		[[ -d "$dirname" ]] || mkdir -p "$dirname"; \
+	done; \
+	set -x; \
+	env \
+		CCACHE_DIR="$CCACHE_DIR" \
+		CC="$CC" CXX="$CXX" ASM="$CC" \
+		LDFLAGS="--stdlib=libc++ -fuse-ld=lld --rtlib=compiler-rt -lc++abi -lunwind" \
+	cmake \
+		-Wno-dev \
+		-G Ninja \
+		-DBUILTINS_CMAKE_ARGS=-Wno-dev \
+		-DRUNTIMES_CMAKE_ARGS=-Wno-dev \
+		-DCMAKE_CROSSCOMPILING=ON \
+		-DLLVM_ENABLE_LIBCXX=ON \
+		-DLLVM_USE_HOST_TOOLS=ON \
+		-DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS_TO_BUILD} \
+		${LLVM_ENABLE_RUNTIMES:+-DLLVM_ENABLE_RUNTIMES="$LLVM_ENABLE_RUNTIMES"} \
+		${USE_CCACHE:+"-DCMAKE_C_COMPILER_LAUNCHER=$USE_CCACHE"} ${USE_CCACHE:+"-DCMAKE_CXX_COMPILER_LAUNCHER=$USE_CCACHE"} ${USE_CCACHE:+"-DCMAKE_ASM_COMPILER_LAUNCHER=$USE_CCACHE"} \
+		-DCLANG_ENABLE_BOOTSTRAP=ON \
+		"-DLLVM_ENABLE_PROJECTS=${LLVM_ENABLE_PROJECTS}" \
+		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
+		-DCLANG_DEFAULT_RTLIB=compiler-rt \
+		-DLIBUNWIND_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_USE_COMPILER_RT=ON \
+		"-DCLANG_DEFAULT_CXX_STDLIB=libc++" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DLLVM_ENABLE_BACKTRACES=OFF \
+		-DLLVM_ENABLE_TERMINFO=OFF \
+		-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON \
+		-DLLVM_ENABLE_UNWIND_TABLES=OFF \
+		-DLLVM_ENABLE_ZLIB=OFF \
+		-DLLVM_INCLUDE_DOCS=OFF \
+		-DLLVM_INCLUDE_EXAMPLES=OFF \
+		-DLLVM_INCLUDE_GO_TESTS=OFF \
+		-DCLANG_DEFAULT_LINKER=lld \
+		-DCLANG_DEFAULT_OBJCOPY=llvm-objcopy \
+		-DLIBUNWIND_ENABLE_SHARED=OFF \
+		-DLIBUNWIND_INSTALL_LIBRARY=OFF \
+		-DLIBUNWIND_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_ENABLE_SHARED=OFF \
+		-DLIBCXXABI_ENABLE_STATIC_UNWINDER=ON \
+		-DLIBCXXABI_INSTALL_LIBRARY=OFF \
+		-DLIBCXXABI_USE_COMPILER_RT=ON \
+		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
+		-DLIBCXX_ENABLE_SHARED=OFF \
+		${CMAKE_INSTALL_PREFIX:+"-DCMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX"} \
+		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE" || { echo -e "${cR}ERROR:${cZ} failed to configure build ($STAGE)"; exit 1; }
+	env \
+		CCACHE_DIR="$CCACHE_DIR" \
+		ninja -k 0 -C "$STAGINGBASE/$STAGE" install || { echo -e "${cR}ERROR:${cZ} failed to build install target ($STAGE)"; exit 1; }
+	) || exit $?
+else
+	echo -e "${cY}WARNING:${cZ} skipped $STAGE"
+fi
