@@ -19,6 +19,7 @@ SIMPLE_INSTALLS="\
 @main:nat:willdoescode/nat
 @main:waitfor:aeshirey/waitfor
 @master:bookmark:Szymongib/bookmark
+@master:dot-templater:kesslern/dot-templater
 amp:jmacdonald/amp
 b3sum:BLAKE3-team/BLAKE3
 bandwhich:imsnif/bandwhich
