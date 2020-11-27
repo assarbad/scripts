@@ -6,7 +6,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-RELEASE_TAG="${CMAKE_RELEASE:-v3.19.0}"
+RELEASE_TAG="${CMAKE_RELEASE:-v3.19.1}"
 GITREPO="https://gitlab.kitware.com/cmake/cmake.git"
 PRJNAME="${PRJNAME:-cmake}"
 TAR_TAG="${TAR_TAG:-$PRJNAME}"
