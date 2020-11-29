@@ -193,7 +193,7 @@ function freeze_repo
 				)
 			fi
 		done
-		( set -x; tar -C "$BASEDIR" -chf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S $(cat $MEANDMYSELF.extrafiles) ) && \
+		( set -x; tar -C "$BASEDIR" -chvf "$TARGETDIR/$TARNAME" $MEANDMYSELF *-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} ${HASHPROG^^}S $(cat $MEANDMYSELF.extrafiles) ) && \
 			echo "Find the package under the name $TARNAME"
 		if [[ "$CURRABSPATH/$MEANDMYSELF" != "$BASEDIR/$MEANDMYSELF" ]]; then
 			rm -f "$BASEDIR/$MEANDMYSELF"
