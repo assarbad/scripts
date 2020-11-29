@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vim: set autoindent smartindent ts=4 sw=4 sts=4 noet filetype=sh:
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 CC_TO_USE=${CROSS_COMPILE}${CC:-gcc}
 ORIG_CC="$CC_TO_USE"
@@ -58,6 +59,16 @@ function show_help
 	echo -e "\t  ${cW}NOTE:${cZ} this can be useful on x86_64 to force only to build x86_64 or x86_32 instead of"
 	echo -e "\t  both."
 	echo ""
+	echo ""
+	echo -e "By setting environment variable ${cW}CROSS_COMPILE${cZ} you can point this"
+	echo -e "script to an alternative toolchain. Please use it with an absolute path."
+	echo ""
+	echo -e "Suppose you have ${cW}arm-none-linux-gnueabi-${cY}gcc${cZ} inside /opt/arm/bin"
+	echo -e "you should invoke this script approximately as follows:"
+	echo ""
+	echo -e "  env ${cW}CROSS_COMPILE${cZ}=${cG}/opt/arm/bin/${cW}arm-none-linux-gnueabi-${cZ} $MEANDMYSELF ..."
+	echo ""
+
 }
 
 function prepare_src
@@ -145,7 +156,7 @@ function freeze_repo
 	local HASHPROG="$3"
 	shift 3
 	echo -e "${cW}freeze_repo(${cY}'$BASEDIR', '$TARGETDIR', '$HASHPROG', ${cG}" "$@" "${cW})${cZ}"
-	local TIMESTAMP=$(date +%Y-%m-%dT%H-%M-%S)
+	local TIMESTAMP=${TIMESTAMP:-$(date +%Y-%m-%dT%H-%M-%S)}
 	local TARNAME="packaged-${TIMESTAMP}-${TAR_TAG}.tar"
 	local UNPACKER="unpack-$TIMESTAMP-${TAR_TAG}"
 	echo "Packaging the source into $TARNAME"
@@ -168,12 +179,20 @@ function freeze_repo
 		for fname in "$@"; do
 			if [[ -f "$BASEDIR/$fname" ]]; then
 				( \
-					cd "$BASEDIR";
+					cd "$BASEDIR"; \
 					pname="${CACHEDIR##*/}/${fname}"; \
 					test -d "${pname%/*}" || mkdir -p "${pname%/*}"; \
 					cp -a "$fname" "${pname%/*}"/ ; \
 					$HASHPROG "$pname" | tee -a ${HASHPROG^^}S; \
 					echo "$pname" | tee -a "./$MEANDMYSELF.extrafiles" \
+				)
+			elif [[ -f "$fname" ]]; then
+				( \
+					bname="${fname##*/}"; \
+					cd "$BASEDIR" && \
+					cp -na "$fname" .; \
+					$HASHPROG "$bname" | tee -a ${HASHPROG^^}S; \
+					echo "$bname" | tee -a "./$MEANDMYSELF.extrafiles" \
 				)
 			fi
 		done
@@ -184,14 +203,22 @@ function freeze_repo
 		fi
 		cat - >> "$TARGETDIR/$UNPACKER" <<-EOF
 			#!/usr/bin/env bash
-			TS="$TIMESTAMP"
+			TS="\${TS:-$TIMESTAMP}"
 			T="${TARNAME//$TIMESTAMP/\$TS}"
-			D="\$TS-${TAR_TAG}"
+			D="\${TGTDIR:-\$TS-${TAR_TAG}}"
 			R="./$MEANDMYSELF"
 			U="${UNPACKER//$TIMESTAMP/\$TS}"
 			echo "Unpacking \$T into ./\$D \$( [[ "x\$1" == "x-c" ]] && echo "and removing archive plus unpacker upon success" )"
-			mkdir "./\$D" && tar -C "./\$D" -xf "./\$T" && ( cd "./\$D"; $HASHPROG -c ${HASHPROG^^}S || exit \$?; [[ -x \$R ]] && \$R -r "\$TS" )
-			[[ "x\$1" == "x-c" ]] && { echo "Also removing \$U and \$T"; rm -f "./\$U" "./\$T"; }
+			test -d "./\$D" || mkdir -p "./\$D" || { echo -e "ERROR: failed to create target directory (\$D)"; exit 1; }
+			tar -C "./\$D" -xf "./\$T" || { echo -e "ERROR: failed to unpack tarball (\$T)"; exit 1; }
+			( cd "./\$D"; $HASHPROG -c ${HASHPROG^^}S || exit \$?; ) || { echo -e "ERROR: failed to validate hashes in target directory (\$D)"; exit 1; }
+			if [[ -x "./\$D/\$R" ]]; then
+				( set -x; cd "\$D"; \$R -r "\$TS" ) || { echo -e "ERROR: failed to revive build package (\$D)"; exit 1; }
+			fi
+			if [[ "x\$1" == "x-c" ]]; then
+				echo "Also removing \$U and \$T"
+				rm -f "./\$U" "./\$T"
+			fi
 		EOF
 		chmod +x "$TARGETDIR/$UNPACKER"
 		rm -f "$BASEDIR"/*-$TIMESTAMP.gitbundle{,.${HASHPROG^^}} "$BASEDIR"/${HASHPROG^^}S "$BASEDIR/$MEANDMYSELF.extrafiles"
