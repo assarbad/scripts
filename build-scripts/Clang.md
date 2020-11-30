@@ -27,7 +27,7 @@ The goal would be to build a Clang/LLVM toolchain (>= 9.x) which does not depend
 | Unwinder       | `libunwind`               | `libgcc_s`               |
 | C++ runtime    | `libc++abi`, `libc++`     | `libsupc++`, `libstdc++` |
 | Utilities      | `llvm-ar`, `llvm-objdump` | `ar`, `objdump`          |
-| C runtime      | `libc`                    | `glibc`                  |
+| C runtime      | `libc` (???)              | `glibc`                  |
 
 ## Further reading
 
@@ -50,3 +50,5 @@ The goal would be to build a Clang/LLVM toolchain (>= 9.x) which does not depend
 * [Compiling Clang from Scratch](https://shaharmike.com/cpp/build-clang/)
 * [Cling-related forum topic](https://root-forum.cern.ch/t/building-root-with-clang-libc-on-ubuntu/32972/2) ... (yeah, [Cling is actually a thing](https://github.com/root-project/cling))
 * [Comparison of Clang/LLVM and GCC](https://alibabatech.medium.com/gcc-vs-clang-llvm-an-in-depth-comparison-of-c-c-compilers-899ede2be378)
+* [Clang C/C++ cross compiler and runtime for OpenEmbedded/Yocto Project](https://github.com/kraj/meta-clang)
+* [Discussion about configuration files](https://clang.llvm.org/docs/UsersManual.html#configuration-files)
