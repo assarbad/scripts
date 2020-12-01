@@ -14,6 +14,10 @@ if [[ ! -e "$PREPARED_ROOTFS" ]] || [[ ! -e "$PREPARED_ROOTFS.xz" ]]; then
         if ( cd "$CURRABSPATH"; sha256sum -c "$PREPARED_ROOTFS.SHA256SUM" ); then
             (cd "$CURRABSPATH"; set -x; tar -xf "$PREPARED_ROOTFS")# || { echo -e "${cR}ERROR:${cZ} failed to unpack existing tarball of rootfs."; exit 1; }
         fi
+    elif [[ -e "$PREPARED_ROOTFS.xz" ]]; then
+        if ( cd "$CURRABSPATH"; sha256sum -c "$PREPARED_ROOTFS.xz.SHA256SUM" ); then
+            (cd "$CURRABSPATH"; set -x; tar -xf "$PREPARED_ROOTFS.xz")# || { echo -e "${cR}ERROR:${cZ} failed to unpack existing tarball of rootfs."; exit 1; }
+        fi
     else
         if ( cd "$CURRABSPATH"; sha256sum -c "$PRISTINE_ROOTFS.SHA256SUM" ); then
             (cd "$CURRABSPATH"; set -x; tar -C rootfs -xf "$PRISTINE_ROOTFS" || true) # we expect errors when running unprivileged
