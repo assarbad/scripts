@@ -17,6 +17,27 @@ TARGETS="${TARGETS:-all}"
 # The full list is: clang;clang-tools-extra;compiler-rt;debuginfo-tests;libc;libclc;libcxx;libcxxabi;libunwind;lld;lldb;openmp;parallel-libs;polly;pstl
 PROJECTS="${PROJECTS:-clang,clang-tools-extra,lld}"
 RUNTIMES="${RUNTIMES:-compiler-rt,libcxx,libcxxabi,libunwind}"
+#ALL_LDFLAGS=${ALL_LDFLAGS:- -l:libc++.a -l:libc++abi.a -l:libunwind.a -ldl}
+#				${USE_CLANG:+-DCMAKE_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS:-$ALL_LDFLAGS}}
+#				${USE_CLANG:+-DCMAKE_MODULE_LINKER_FLAGS=${CMAKE_MODULE_LINKER_FLAGS:-$ALL_LDFLAGS}}
+#				${USE_CLANG:+-DCMAKE_SHARED_LINKER_FLAGS=${CMAKE_SHARED_LINKER_FLAGS:-$ALL_LDFLAGS}}
+# 
+# 	-DCMAKE_CROSSCOMPILING=True
+# 	-DCMAKE_INSTALL_PREFIX=<install-dir>
+# 	-DLLVM_TABLEGEN=<path-to-host-bin>/llvm-tblgen
+# 	-DCLANG_TABLEGEN=<path-to-host-bin>/clang-tblgen
+# 	-DLLVM_DEFAULT_TARGET_TRIPLE=arm-linux-gnueabihf
+# 	-DLLVM_TARGET_ARCH=ARM
+# 	-DLLVM_TARGETS_TO_BUILD=ARM
+# 
+# In addition to the ones above, you’ll also need:
+# 
+#         '-target arm-linux-gnueabihf' or whatever is the triple of your cross GCC.
+#         '--sysroot=/usr/arm-linux-gnueabihf', '--sysroot=/opt/gcc/arm-linux-gnueabihf' or whatever is the location of your GCC’s sysroot (where /lib, /bin etc are).
+#         Appropriate use of -I and -L, depending on how the cross GCC is installed, and where are the libraries and headers.
+# 
+# The TableGen options are required to compile it with the host compiler, so you’ll need to compile LLVM (or at least llvm-tblgen) to your host platform before you start. The CXX flags define the target, cpu (which in this case defaults to fpu=VFP3 with NEON), and forcing the hard-float ABI. If you’re using Clang as a cross-compiler, you will also have to set --sysroot to make sure it picks the correct linker.
+# 
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 CMAKE_GENERATOR="${CMAKE_GENERATOR:-Unix Makefiles}"
 ORIG_CC=${CC:-gcc}

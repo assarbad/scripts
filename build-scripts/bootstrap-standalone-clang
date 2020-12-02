@@ -3,6 +3,7 @@
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 CC=${CC:-$(which clang)}
 CXX=${CXX:-$(which clang++)}
+AS=${CC:-$(which clang) -x assembler}
 TOOLS_NEEDED="dirname readlink cmake ninja ccache $CC $CXX"
 for tool in $TOOLS_NEEDED; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
@@ -61,7 +62,10 @@ if ((SKIP<1)); then
 		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
 		-DLIBCXX_ENABLE_SHARED=OFF \
 		${CMAKE_INSTALL_PREFIX:+"-DCMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX"} \
-		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE"
+		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE" || { echo -e "${cR}ERROR:${cZ} failed to configure build ($STAGE)"; exit 1; };
+	env \
+		CCACHE_DIR="$CCACHE_DIR" \
+		ninja -k 0 -C "$STAGINGBASE/$STAGE" install || { echo -e "${cR}ERROR:${cZ} failed to build install target ($STAGE)"; exit 1; }
 	) || exit $?
 else
 	echo -e "${cY}WARNING:${cZ} skipped $STAGE"
@@ -79,9 +83,14 @@ if ((SKIP<2)); then
 	done; \
 	set -x; \
 	env \
+		PATH="$STAGINGINST/stage3/bin:$PATH" \
 		CCACHE_DIR="$CCACHE_DIR" \
-		CC="$CC" CXX="$CXX" ASM="$CC" \
+		CC="clang" CXX="clang++" ASM="clang -x assembler" \
 		LDFLAGS="--stdlib=libc++ -fuse-ld=lld --rtlib=compiler-rt -lc++abi -lunwind" \
+
+-unwindlib=libunwind
+-lm ...???
+
 	cmake \
 		-Wno-dev \
 		-G Ninja \
@@ -90,11 +99,9 @@ if ((SKIP<2)); then
 		-DCMAKE_CROSSCOMPILING=ON \
 		-DLLVM_ENABLE_LIBCXX=ON \
 		-DLLVM_ENABLE_LLD=ON \
-		-DLLVM_USE_HOST_TOOLS=ON \
 		-DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS_TO_BUILD} \
 		${LLVM_ENABLE_RUNTIMES:+-DLLVM_ENABLE_RUNTIMES="$LLVM_ENABLE_RUNTIMES"} \
 		${USE_CCACHE:+"-DCMAKE_C_COMPILER_LAUNCHER=$USE_CCACHE"} ${USE_CCACHE:+"-DCMAKE_CXX_COMPILER_LAUNCHER=$USE_CCACHE"} ${USE_CCACHE:+"-DCMAKE_ASM_COMPILER_LAUNCHER=$USE_CCACHE"} \
-		-DCMAKE_C_COMPILER= -DCMAKE_CXX_COMPILER= \
 		-DCLANG_ENABLE_BOOTSTRAP=ON \
 		"-DLLVM_ENABLE_PROJECTS=${LLVM_ENABLE_PROJECTS}" \
 		-DCOMPILER_RT_BUILD_SANITIZERS=OFF \
@@ -123,7 +130,7 @@ if ((SKIP<2)); then
 		-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
 		-DLIBCXX_ENABLE_SHARED=OFF \
 		${CMAKE_INSTALL_PREFIX:+"-DCMAKE_INSTALL_PREFIX=$CMAKE_INSTALL_PREFIX"} \
-		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE" || { echo -e "${cR}ERROR:${cZ} failed to configure build ($STAGE)"; exit 1; }
+		-S "$LLVMSRCBASE/llvm" -B "$STAGINGBASE/$STAGE" || { echo -e "${cR}ERROR:${cZ} failed to configure build ($STAGE)"; exit 1; };
 	env \
 		CCACHE_DIR="$CCACHE_DIR" \
 		ninja -k 0 -C "$STAGINGBASE/$STAGE" install || { echo -e "${cR}ERROR:${cZ} failed to build install target ($STAGE)"; exit 1; }
@@ -131,3 +138,73 @@ if ((SKIP<2)); then
 else
 	echo -e "${cY}WARNING:${cZ} skipped $STAGE"
 fi
+# CMake cache files ...
+# Verzeichnis runtimes vs projects
+# LLVM_BUILTIN_TARGETS
+# BUILTINS_<target>_<variable>
+# https://llvm.org/devmtg/2017-10/slides/Hosek-Compiling%20cross-toolchains%20with%20CMake%20and%20runtimes%20build.pdf
+# -DLLVM_PARALLEL_LINK_JOBS
+# https://www.llvm.org/devmtg/2017-10/
+
+# ASM<DIALECT>
+# ASM<DIALECT>FLAGS
+# CC
+# CFLAGS
+# CXX
+# CXXFLAGS
+# CMAKE_PREFIX_PATH
+# CMAKE_BUILD_PARALLEL_LEVEL
+# CMAKE_CONFIG_TYPE
+# CMAKE_EXPORT_COMPILE_COMMANDS
+# CMAKE_<LANG>_COMPILER_LAUNCHER
+# CMAKE_NO_VERBOSE
+# DESTDIR
+# LDFLAGS
+# VERBOSE
+
+# You can enable additional projects using the LLVM_ENABLE_PROJECTS variable. To enable all common projects, you would use:
+
+#   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;compiler-rt;libcxx;libcxxabi;libunwind"
+
+# Similarly, you can also enable some projects to be built as runtimes which means these projects will be built using the just-built rather than the host compiler:
+
+#   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld" \
+#   -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
+
+# Both LLVM_ENABLE_PROJECTS and LLVM_ENABLE_RUNTIMES are already set in the CMake cache files, so you normally don't need to set these unless you would like to explicitly add more projects or runtimes.
+
+# cd ${LLVM_BUILD_DIR}  # The directory your toolchain will be installed in
+
+# # Environment setup
+# FUCHSIA_SRCDIR=${HOME}/fuchsia/  # Replace with wherever Fuchsia lives
+# LLVM_SRCDIR=${HOME}/llvm/llvm-project  # Replace with wherever llvm-project lives
+# IDK_DIR=${HOME}/fuchsia-idk/
+# SYSROOT_DIR=${HOME}/fuchsia-sysroot/
+# CLANG_TOOLCHAIN_PREFIX=${FUCHSIA_SRCDIR}/prebuilt/third_party/clang/linux-x64/bin/
+# GOMA_DIR=${FUCHSIA_SRCDIR}/prebuilt/third_party/goma/linux-x64/
+
+# # Download necessary dependencies
+# cipd install fuchsia/sdk/core/linux-amd64 latest -root ${IDK_DIR}
+# cipd install fuchsia/sysroot/linux-arm64 latest -root ${SYSROOT_DIR}/linux-arm64
+# cipd install fuchsia/sysroot/linux-amd64 latest -root ${SYSROOT_DIR}/linux-x64
+
+# # CMake invocation
+# cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+#   -DCMAKE_C_COMPILER=${CLANG_TOOLCHAIN_PREFIX}clang \
+#   -DCMAKE_CXX_COMPILER=${CLANG_TOOLCHAIN_PREFIX}clang++ \
+#   -DCMAKE_C_COMPILER_LAUNCHER=${GOMA_DIR}/gomacc \
+#   -DCMAKE_CXX_COMPILER_LAUNCHER=${GOMA_DIR}/gomacc \
+#   -DLLVM_ENABLE_LTO=OFF \
+#   -DLINUX_x86_64-unknown-linux-gnu_SYSROOT=${SYSROOT_DIR}/linux-x64 \
+#   -DLINUX_aarch64-unknown-linux-gnu_SYSROOT=${SYSROOT_DIR}/linux-arm64 \
+#   -DFUCHSIA_SDK=${IDK_DIR} \
+#   -DCMAKE_INSTALL_PREFIX= \
+#   -C ${LLVM_SRCDIR}/clang/cmake/caches/Fuchsia-stage2.cmake \
+#   ${LLVM_SRCDIR}/llvm
+
+# # Build and strip binaries and place them in the install directory
+# ninja distribution -j1000
+# DESTDIR=${INSTALL_DIR} ninja install-distribution-stripped -j1000
+
+# # Get runtimes.json
+# cp ${FUCHSIA_SRCDIR}/prebuilt/third_party/clang/linux-x64/lib/runtime.json ${INSTALL_DIR}/lib/
