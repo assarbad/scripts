@@ -4,7 +4,7 @@ for tool in readlink proot; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ER
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 OVERRIDE_LANG=${OVERRIDE_LANG:-en_US.UTF-8}
 OVERRIDE_TERM=${OVERRIDE_TERM:-screen}
-OVERRIDE_PATH=${OVERRIDE_PATH:-"/usr/bin:/usr/sbin:/sbin:/bin"}
+OVERRIDE_PATH=${OVERRIDE_PATH:-"/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/sbin:/bin"}
 
 for i in rootfs src bin ccache; do
 	if [[ ! -d "$(readlink -nf "$CURRABSPATH/../$i")" ]]; then
@@ -24,7 +24,7 @@ unset LC_TIME
 unset LC_NAME
 
 ORIG_ARG1="$1"
-SU_USER="${ORIG_ARG1:-root}"
+[[ "$ORIG_ARG1" == "--" ]] && SU_USER=root || SU_USER="${ORIG_ARG1:-root}"
 if [[ "$SU_USER" == "root" ]]; then
 	SU_HOME="/$SU_USER"
 	SU_ASROOT="-0"
@@ -33,7 +33,7 @@ else
 	SU_ASROOT="-i 1000:1000"
 fi
 # Drop the first parameter, as we assume that this is the username
-[[ -n "$ORIG_ARG1" ]] && shift
+shift
 
 echo -e "${cW}INFO:${cZ} Entering proot environment. Use ${cW}^D${cZ} or ${cW}exit${cZ} to exit."
 if (($# < 1)); then

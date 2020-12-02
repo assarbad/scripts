@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vim: set autoindent smartindent ts=4 sw=4 sts=4 noet filetype=sh:
 source /etc/lsb-release
 [[ -n "$DISTRIB_CODENAME" ]] || { echo "ERROR: failed to retrieve info about distro I'm running on."; exit 1; }
 [[ -n "$DISTRIB_RELEASE" ]] || { echo "ERROR: failed to retrieve info about distro I'm running on."; exit 1; }
@@ -39,6 +40,7 @@ ${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME-security main res
 #deb http://$SERVERNAME/ubuntu/ $UBUCODENAME-backports main restricted universe multiverse
 ${DEBSRC:-"# deb-src"} http://$SERVERNAME/ubuntu/ $UBUCODENAME-backports main restricted universe multiverse
 EOF
+
 if [[ -z "$NOINSTALL" ]]; then
 	(set -x; apt-get -y update)
 	(set -x; apt-get -y dist-upgrade)
@@ -86,7 +88,7 @@ if [[ -z "$NOINSTALL" ]]; then
 	en_US.UTF-8
 	EOF
 
-	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file autoconf automake texlive texlive-font-utils ghostscript texlive-generic-recommended gawk gettext)
+	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file texlive texlive-font-utils ghostscript texlive-generic-recommended gawk gettext ncurses-dev deborphan debsums)
 
 	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
 		if [[ ! -e "$(uname -m)-linux-gnu-${tool}" ]]; then
@@ -103,11 +105,26 @@ cat > /var/lib/locales/supported.d/local <<-EOF
 	EOF
 locale-gen --purge
 echo Cleaning a bit
+if type deborphan > /dev/null 2>&1; then
+	ORPHANED=$(deborphan)
+	if [[ -n "$ORPHANED" ]]; then
+		apt-get -y -f autoremove $ORPHANED
+		ORPHANED=$(deborphan)
+		if [[ -n "$ORPHANED" ]]; then
+			apt-get -y -f autoremove $ORPHANED
+			ORPHANED=$(deborphan)
+			if [[ -n "$ORPHANED" ]]; then
+				apt-get -y -f autoremove $ORPHANED
+			fi
+		fi
+	fi
+fi
 if type localepurge > /dev/null 2>&1; then
 	localepurge
 fi
 apt-get --purge autoremove
-rm -f /var/cache/apt/srcpkgcache.bin /var/cache/apt/pkgcache.bin
+rm -f /var/cache/apt/srcpkgcache.bin /var/cache/apt/pkgcache.bin /var/log/vmbuilder-install.log /var/log/bootstrap.log /var/log/apt/history.log /var/log/apt/term.log /var/log/aptitude /var/log/boot /var/log/btmp /var/log/dmesg /var/log/dpkg.log /var/log/faillog /var/log/fsck/checkfs /var/log/fsck/checkroot /var/log/lastlog /var/log/pycentral.log /var/log/wtmp
+rmdir /lost+found /selinux
 for i in /etc/.pwd.lock /var/log/*.{0..9} /var/log/*.{0..9}.gz /var/cache/apt/archives/partial/* /var/cache/debconf/*.dat-old; do
 	[[ -e "$i" ]] && (set -x; rm -f "$i")
 done

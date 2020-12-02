@@ -25,8 +25,10 @@ In this case setting `NOINSTALL` to a non-empty value will skip updating the pac
 
 ## Ubuntu 10.04 (Lucid)
 
-Given the cloud image (which only really came as image, not as tarball) I mounted (`kpartx -a`) and extracted the whole rootfs. Extracting that into a subfolder `rootfs` I then used `bin/enter-proot`.
+Given the cloud image (which only really came as image, not as tarball) I mounted (`kpartx -a`) and extracted the whole rootfs. Extracting that into a subfolder `rootfs`. The outcome of which was a compressed tarball `ubuntu-10.04-server-cloudimg-amd64.rootfs.txz` and an accompanying `.SHA256SUM`. All subsequent work was based on that.
 
-On the root shell I executed a helper script (`bin/clean-lucid-10.04.sh`) which removes some non-essential stuff from the rootfs (after all we're running on hardware, but that doesn't matter inside an unprivileged chroot environment).
+The next step was to develop and use `reinit-lucid.sh` which would take that tarball, unpack it and then use `proot` via `bin/enter-proot` to prepare and clean that rootfs. In particular packages like `build-essential` get installed.
 
-**NB:** this will show some "scary" warnings which you should heed on real hardware, but for our purpose we can simply confirm we _really_ want to remove all that stuff. This saved me more than 150 MiB overall. With `xz -9e` I am getting down to ~80 MiB. Even after installing everything using the prepare script (`build-essential` and friends), I am getting to less than the pristine image and slightly under 100 MiB for the `xz`-compressed tarball (for comparison: an `xz`-compressed tarball of the pristine cloud image, kernel and all, clocked in at ~130 MiB).
+I then manually added `automake` 1.16 and `autoconf` 2.69. The latter was required when I attempted to rebuild CodeBench Lite 2012.03. The outcome is roughly 600 MiB uncompressed and 140 MiB when compressed with `xz` (a Git bundle comes in at approximately 200 MiB).
+
+**NB:** this will show some "scary" warnings which you should heed on real hardware, but for our purpose we can simply confirm we _really_ want to remove all that stuff. This saved me more than 150 MiB overall. With `xz -9e` I am getting down to ~80 MiB.
