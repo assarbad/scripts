@@ -88,7 +88,7 @@ if [[ -z "$NOINSTALL" ]]; then
 	en_US.UTF-8
 	EOF
 
-	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG bison flex texinfo ccache language-pack-en apt-file texlive texlive-font-utils ghostscript texlive-generic-recommended gawk gettext ncurses-dev deborphan debsums)
+	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG bison flex texinfo language-pack-en apt-file autoconf automake texlive texlive-font-utils ghostscript texlive-generic-recommended gawk ncurses-dev deborphan debsums gettext)
 
 	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
 		if [[ ! -e "$(uname -m)-linux-gnu-${tool}" ]]; then
