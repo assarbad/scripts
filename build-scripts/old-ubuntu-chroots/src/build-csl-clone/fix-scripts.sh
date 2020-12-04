@@ -13,7 +13,7 @@ for script in src/arm-20*-arm-none-linux-gnueabi.sh; do
 	RELNUM=${RELNAME#arm-}
 	RELDT=${RELNUM%-*}
 	[[ -f "$NEWNAME" ]] && rm -f "$NEWNAME"
-	(set -x; sed -E \
+	(set -x; sed --regexp-extended \
 		-e 's|^\t\t|                |g' \
 		-e 's|^\t|        |g' \
 		-e 's|/scratch/maciej/arm-linux-2014\.05-rel|\${SCRATCH}/\${TCRELEASE}|g' \
@@ -49,8 +49,11 @@ for script in src/arm-20*-arm-none-linux-gnueabi.sh; do
 		-e 's|^make -j4|make -j\$NUMCPUS|g' \
 		-e 's| --with-bugurl=https://support.codesourcery.com/GNUToolchain/||g' \
 		-e 's|/\./|/|g' \
+		-e 's|//usr/lib|/usr/lib|g' \
+		-e 's|/lib//bin|/lib/bin|g' \
 		-e 's|\s+$||g' \
 		-e "s|'(--with-pkgversion=[^']*)'|\"\\1\"|g" \
+		-e '/-objcopy.+true$/ { s|^(.+?-objcopy)|remove_debug|; s|(-R\s+\.\w+)+||g; s|\s+| |g; s/\s+\|\|\s+true$//g }' \
 		"$script" > "$NEWNAME.sed" )
 	AWKSCRIPT=$(cat << EOF
 BEGIN {
@@ -95,12 +98,13 @@ FNR==1 {
 	print "\techo \"\$TIMESTAMP = \$(pwd)\"|tee -a \"\$BLDLOG\""
 	print "\techo \"\$TIMESTAMP +\" \"\$@\"|tee -a \"\$BLDLOG\""
 	print "\tcase \"\$CONFPATH\" in"
+	print "\t\t# This fixes an issue where configure fails (addressed by re-running autogen.sh)"
+	print "\t\t*/cloog-*)"
+	print "\t\t\techo \"\$TIMESTAMP | ./autogen.sh [in \$CONFPATH]\"|tee -a \"\$BLDLOG\""
+	print "\t\t\t( set -x; cd \"\$CONFPATH\"; ./autogen.sh )"
+	print "\t\t\t;;"
 	print "\t\t# This fixes an issue where configure ends up in an infinite loop (addressed by re-running autoconf)"
 	print "\t\t*/obj/glibc-src-*)"
-	# print "\t\t\tif [[ \"\${CONFPATH##*/}\" == \"default\" ]]; then"
-	# print "\t\t\t\techo \"\$TIMESTAMP | autoconf [in \${CONFPATH%/*}]\"|tee -a \"\$BLDLOG\""
-	# print "\t\t\t\t( set -x; cd \"\${CONFPATH%/*}\"; autoconf )"
-	# print "\t\t\tfi"
 	print "\t\t\techo \"\$TIMESTAMP | autoconf [in \$CONFPATH]\"|tee -a \"\$BLDLOG\""
 	print "\t\t\t( set -x; cd \"\$CONFPATH\"; autoconf )"
 	print "\t\t\t;;"
@@ -117,6 +121,25 @@ FNR==1 {
 	print "\techo \"\$TIMESTAMP + make\" \"\$@\"|tee -a \"\$BLDLOG\""
 	print "\t( set -x; pwd; command make \"\$@\" )"
 	print "}"
+	print ""
+	print "function remove_debug"
+	print "{"
+	print "\tlocal FNAME=\"\$1\""
+	print "\tif [[ -e \"\$FNAME\" ]]; then"
+	print "\t\t\${TCTRIPLET}-objcopy -R .comment -R .note -R .debug_info -R .debug_aranges -R .debug_pubnames -R .debug_pubtypes -R .debug_abbrev -R .debug_line -R .debug_str -R .debug_ranges -R .debug_loc \"\$FNAME\" || true"
+	print "\tfi"
+	print "}"
+	print ""
+	print "# Source a shell fragment named like this file but with leading dot and trailing .bash"
+	print "( set -x; test -f \"\$CURRABSPATH/.\$TCRELEASE.bash\" && source \"\$CURRABSPATH/.\$TCRELEASE.bash\") && source \"\$CURRABSPATH/.\$TCRELEASE.bash\""
+	print ""
+	print "# Hook function. It takes two arguments: 1. number of task and 2. name of task and should return 0 or a non-zero positive integer"
+	print "# function hook"
+	print "# {"
+	print "#     local CURRTASK=\$1"
+	print "#     local TASKNAME=\"\$2\""
+	print "#     echo '0'"
+	print "# }"
 	print ""
 	next
 }
@@ -198,7 +221,7 @@ TASKS > 0 && \$1 ~ /^copy_dir_clean\$/ && \$2 ~ /^\\\${SCRATCH}\// {
 	gsub(/^.+$/, sprintf("REMOVED: %s", \$2), \$2)
 	gsub(/\\[/, "[was: ", \$3)
 	gsub(/^[ \t]+/, "", \$0) # trim leading blanks
-	printf "printf \"\${cR}-- \${cZ}%s\${cZ}%sn\"\n", \$0, "\\\\"
+	printf "# printf \"\${cR}-- \${cZ}%s\${cZ}%sn\"\n", \$0, "\\\\"
 	FALLTHROUGH=0
 	do {
 		getline
@@ -211,7 +234,7 @@ TASKS > 0 && \$1 ~ /^copy_dir_clean\$/ && \$2 ~ /^\\\${SCRATCH}\// {
 				gsub(/^.+$/, sprintf("REMOVED: %s", \$2), \$2)
 				gsub(/\\[/, "[was: ", \$3)
 				gsub(/^[ \t]+/, "", \$0) # trim leading blanks
-				printf "printf \"\${cR}-- \${cZ}%s\${cZ}%sn\"\n", \$0, "\\\\"
+				printf "# printf \"\${cR}-- \${cZ}%s\${cZ}%sn\"\n", \$0, "\\\\"
 			} else {
 				FALLTHROUGH=1
 				TASKS--
@@ -227,6 +250,9 @@ TASKS > 0 && \$1 ~ /^copy_dir_clean\$/ && \$2 ~ /^\\\${SCRATCH}\// {
 	if (TASKS) {
 		print "let CURRTIME=\$(date +%s)"
 		printf "echo \"\$(date +%%Y-%%m-%%dT%%H-%%M-%%S) Task took: \$((CURRTIME-TASK_START)) seconds (\$((CURRTIME-OVERALL_START)) seconds overall)\"|tee -a \"\$BLDLOG\"\n"
+		print  "else # if ((RUNTASK)); then ..."
+		print  "printf \"\${cY}SKIPPED\${cZ} Task \$TASKS_SO_FAR\\\\n\""
+		print  "fi # if ((RUNTASK)); then ..."
 		printf "fi\n\n"
 	} else {
 		printf "trap 'echo \"\$(date +%%Y-%%m-%%dT%%H-%%M-%%S) Last executing task: \$TASKS_SO_FAR (to continue from there: env START_TASK=\$TASKS_SO_FAR ...)\"|tee -a \"\$BLDLOG\"; trap - INT TERM EXIT; exit \$?' INT TERM EXIT\n"
@@ -239,6 +265,7 @@ TASKS > 0 && \$1 ~ /^copy_dir_clean\$/ && \$2 ~ /^\\\${SCRATCH}\// {
 	print
 	\$1 = ""
 	gsub(/^[ \t]+/, "", \$0) # trim leading blanks
+	print  "if ((\$(set +e; hook \$TASKS_SO_FAR \"%s\") > 0)); then"
 	printf "printf \"\${cW}%s\${cZ}%sn\"\n", \$0, "\\\\"
 	printf "echo \"\$(date +%%Y-%%m-%%dT%%H-%%M-%%S) %s\"|tee -a \"\$BLDLOG\"\n", \$0
 	next
@@ -308,10 +335,15 @@ TASKS > 0 && \$1 ~ /\/configure\$/ {
 }
 END {
 	printf "echo \"\$(date +%%Y-%%m-%%dT%%H-%%M-%%S) Task took: \$((\$(date +%%s)-TASK_START)) seconds\"|tee -a \"\$BLDLOG\"\n"
-	print("fi\n")
+	print  "else # if ((RUNTASK)); then ..."
+	print  "printf \"\${cY}SKIPPED\${cZ} Task \$TASKS_SO_FAR\\\\n\""
+	print  "fi # if ((RUNTASK)); then ..."
+	print  "fi"
+	print  ""
 	printf "REMOVED_TASKS=%i\n", REMOVED_TASKS
 	printf "OVERALL_TASKS=%i\n", TASKS-REMOVED_TASKS
 	printf "ORIGINAL_TASKS=%i\n", TASKS
+	print  "trap - INT TERM EXIT"
 }
 EOF
 )

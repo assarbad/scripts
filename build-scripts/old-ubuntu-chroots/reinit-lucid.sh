@@ -49,21 +49,6 @@ if ((PREPS>0)); then
 	tee "$CURRABSPATH/rootfs/etc/mtab" <<-EOF
 		/dev/nosuch / ext4 relatime 0 0
 	EOF
-	tee "$CURRABSPATH/rootfs/.gitignore" <<-EOF
-		var/cache/
-		var/lock/
-		var/log/
-		var/run/
-		tmp/
-		root/.bash_history
-		root/.viminfo
-		root/.ccache/
-		root/bin/
-		root/src/
-		src/
-		run/
-		home/ubuntu/.bash_history
-	EOF
 else
 	echo -e "${cY}INFO:${cZ} Skipping PREPS #1"
 fi
