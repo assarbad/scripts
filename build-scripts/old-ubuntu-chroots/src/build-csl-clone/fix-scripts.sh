@@ -53,6 +53,7 @@ for script in src/arm-20*-arm-none-linux-gnueabi.sh; do
 		-e 's|/lib//bin|/lib/bin|g' \
 		-e 's|\s+$||g' \
 		-e "s|'(--with-pkgversion=[^']*)'|\"\\1\"|g" \
+		-e '/-strip.+sprite$/d' \
 		-e '/-objcopy.+true$/ { s|^(.+?-objcopy)|remove_debug|; s|(-R\s+\.\w+)+||g; s|\s+| |g; s/\s+\|\|\s+true$//g }' \
 		"$script" > "$NEWNAME.sed" )
 	AWKSCRIPT=$(cat << EOF
@@ -107,6 +108,10 @@ FNR==1 {
 	print "\t\t*/obj/glibc-src-*)"
 	print "\t\t\techo \"\$TIMESTAMP | autoconf [in \$CONFPATH]\"|tee -a \"\$BLDLOG\""
 	print "\t\t\t( set -x; cd \"\$CONFPATH\"; autoconf )"
+	print "\t\t\t;;"
+	print "\t\t# This fixes an issue zlib isn't taken from what we have built previously (nor statically linked)"
+	print "\t\t*/obj/binutils-src-*)"
+	print "\t\t\tset -- \"\$@\" \"--with-zlib=\$(readlink -nf \$(find \"\${SCRATCH}/\${TCRELEASE}/obj\" -maxdepth 1 -name 'zlib-first*'))\""
 	print "\t\t\t;;"
 	print "\t\t*)"
 	print "\t\t\t;;"
