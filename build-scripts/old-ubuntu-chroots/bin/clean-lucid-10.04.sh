@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 apt-mark unmarkauto bc
 ( ln -s /bin/true /bin/update-grub )
-( set -x; apt-get -y -f autoremove linux-virtual linux-image-ec2 linux-ec2 linux-image-2.6.32-73-virtual linux-image-2.6.32-376-ec2 memtest86+ grub-legacy-ec2 grub-pc grub-common )
+( set -x; env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove linux-virtual linux-image-ec2 linux-ec2 linux-image-2.6.32-73-virtual linux-image-2.6.32-376-ec2 memtest86+ grub-legacy-ec2 grub-pc grub-common )
 ( rm -f /bin/update-grub )
-( set -x; apt-get -y -f autoremove command-not-found command-not-found-data cloud-init cloud-utils dosfstools euca2ools friendly-recovery laptop-detect ntfs-3g openssh-server parted pciutils unattended-upgrades update-motd wpasupplicant wireless-tools ureadahead tasksel tasksel-data ssh-import lshw iptables update-manager openssh-client )
+( set -x; env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove command-not-found command-not-found-data cloud-init cloud-utils dosfstools euca2ools friendly-recovery laptop-detect ntfs-3g openssh-server parted pciutils unattended-upgrades update-motd wpasupplicant wireless-tools ureadahead tasksel tasksel-data ssh-import lshw iptables update-manager openssh-client )
 if type deborphan > /dev/null 2>&1; then
 	ORPHANED=$(deborphan)
 	if [[ -n "$ORPHANED" ]]; then
-		apt-get -y -f autoremove $ORPHANED
+		env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 		ORPHANED=$(deborphan)
 		if [[ -n "$ORPHANED" ]]; then
-			apt-get -y -f autoremove $ORPHANED
+			env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 			ORPHANED=$(deborphan)
 			if [[ -n "$ORPHANED" ]]; then
-				apt-get -y -f autoremove $ORPHANED
+				env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 			fi
 		fi
 	fi
 fi
-aptitude -y purge $(dpkg -l|awk '$1 ~ /^rc/ {print $2}')
-apt-get -y clean
-apt-get -y autoclean
-aptitude -y clean
-aptitude -y autoclean
+env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true aptitude -y purge $(dpkg -l|awk '$1 ~ /^rc/ {print $2}')
+env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y clean
+env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y autoclean
+env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true aptitude -y clean
+env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true aptitude -y autoclean
 if type localepurge > /dev/null 2>&1; then
 	localepurge
 fi

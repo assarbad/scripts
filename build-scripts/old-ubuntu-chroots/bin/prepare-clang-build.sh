@@ -88,7 +88,7 @@ if [[ -z "$NOINSTALL" ]]; then
 	en_US.UTF-8
 	EOF
 
-	(set -x; apt-get -y --no-install-recommends install build-essential $GITPKG texinfo language-pack-en apt-file texlive texlive-font-utils ghostscript texlive-generic-recommended gawk ncurses-dev deborphan debsums gettext equivs)
+	(set -x; env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y --no-install-recommends install build-essential $GITPKG texinfo language-pack-en apt-file texlive texlive-font-utils ghostscript texlive-generic-recommended gawk ncurses-dev deborphan debsums gettext equivs)
 	# bison flex autoconf automake
 
 	for tool in addr2line ar nm objcopy objdump ranlib readelf strip; do
@@ -109,13 +109,13 @@ echo Cleaning a bit
 if type deborphan > /dev/null 2>&1; then
 	ORPHANED=$(deborphan)
 	if [[ -n "$ORPHANED" ]]; then
-		apt-get -y -f autoremove $ORPHANED
+		env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 		ORPHANED=$(deborphan)
 		if [[ -n "$ORPHANED" ]]; then
-			apt-get -y -f autoremove $ORPHANED
+			env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 			ORPHANED=$(deborphan)
 			if [[ -n "$ORPHANED" ]]; then
-				apt-get -y -f autoremove $ORPHANED
+				env DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true apt-get -y -f autoremove $ORPHANED
 			fi
 		fi
 	fi
