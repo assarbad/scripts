@@ -18,6 +18,10 @@ Its main benefit is that it allows to create statically linked binaries for util
 
 Dropbear is an SSH server and client and so on and this script builds a statically linked `dropbearmulti` binary. This can act as standin for all the programs that normally encompass `dropbear`, much like those symlinks do with `busybox`.
 
+* [Download](https://bitfab.org/dropbear-static-builds/)
+
 ## Rust CLI tools
 
 Rust is an up and coming language which I am in the process of acquiring and these are some CLI tools I found useful. They are linked against the musl libc (via Rust's own toolchain/target mechanism) and most stand for themselves. However, I have noticed that some have _minor_ dependencies on the system and these are the ones listed in `warnings.txt` once the script was successful.
+
+* [Download](https://bitfab.org/rust-cli-tools/)

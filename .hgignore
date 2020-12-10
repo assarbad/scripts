@@ -10,6 +10,8 @@ ipdeny.com/zones/**
 *.tgz
 before.txt
 *.orig
+*.asc
+*.deb
 after.txt
 build-scripts/cache/**
 build-scripts/*_rust-cli-tools-*.txz*
