@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from __future__ import print_function
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 __author__ = "Oliver Schneider"
 __copyright__ = "Placed in the Public Domain/CC0, or MIT/BSD license where PD is not applicable"
@@ -16,8 +15,8 @@ connecting to these hosts and verifying the expiry date of the SSL certificates.
 import os, sys
 
 # Checking for compatibility with Python version
-if (sys.version_info[0] != 3) or (sys.version_info < (3,6)):
-    sys.exit("This script requires Python version 3.6 or better from the 2.x branch of Python.")
+if (sys.version_info < (3,6)):
+    sys.exit("This script requires Python version 3.6 or better.")
 
 # Don't create .pyc or .pyo files
 sys.dont_write_bytecode = True
@@ -62,53 +61,77 @@ class SslCertificate:
         __hostname = None
         __port = None
         __peername = None
-        __connection = None
+        __cert = None
 
         def __init__(self, hostname, port):
             from OpenSSL.SSL import Context, Connection, OP_NO_SSLv2, OP_NO_SSLv3
             from OpenSSL.SSL import TLSv1_METHOD, TLSv1_1_METHOD, TLSv1_2_METHOD
+            from select import select
             try_methods = (TLSv1_2_METHOD, TLSv1_1_METHOD, TLSv1_METHOD,) # newest first
+            fallback_on_exceptions = {('SSL routines', 'ssl_choose_client_version', 'wrong ssl version',), ('SSL routines', 'state_machine', 'internal error',),}
+            methods = {TLSv1_2_METHOD: "TLSv1.2", TLSv1_1_METHOD: "TLSv1.1", TLSv1_METHOD: "TLSv1"}
 
             self.__hostname = hostname
             self.__port = port
 
-            for method in try_methods:
-                client_sock = socket.socket()
-                client_sock.connect((hostname, port, ))
-                tls_ctx = Context(method)
-                tls_ctx.set_options(OP_NO_SSLv2 | OP_NO_SSLv3)
-                with suppress(OpenSSL.SSL.Error):
-                    tls_client = Connection(tls_ctx, client_sock)
-                    # Establish connection
-                    tls_client.set_connect_state()
-                    # SNI (send hostname indication)
-                    shostname = hostname.encode("ascii")
-                    tls_client.set_tlsext_host_name(shostname)
-                    tls_client.do_handshake()
-                    assert tls_client.get_servername() == shostname, \
-                        "Hostname and servername don't match: %r vs. %r" % (tls_client.get_servername(), shostname)
-                    tls_client.set_connect_state()
+            run = 0
 
-                    self.__peername = tls_client.getpeername()
-                    self.__connection = tls_client
-                    break # successfully connected
+            for method in try_methods:
+                state = []
+                try:
+                    run += 1
+                    client_sock = socket.socket()
+                    client_sock.connect((hostname, port, ))
+                    # ssl_ctx.set_options(OP_NO_SSLv2 | OP_NO_SSLv3)
+                    with closing(Connection(Context(method), client_sock)) as tls_client:
+                        try:
+                            # Establish connection
+                            tls_client.set_connect_state()
+                            state.append("[{}:{}][{}] set_connect_state -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                            # SNI (send hostname indication)
+                            shostname = hostname.encode("ascii")
+                            tls_client.set_tlsext_host_name(shostname)
+                            state.append("[{}:{}][{}] set_tlsext_host_name -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                            tls_client.do_handshake()
+                            state.append("[{}:{}][{}] do_handshake -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                            assert tls_client.get_servername() == shostname, \
+                                "Hostname and servername don't match: %r vs. %r" % (tls_client.get_servername(), shostname)
+                            #if method in {TLSv1_2_METHOD, TLSv1_1_METHOD}:
+                            tls_client.set_connect_state()
+                            state.append("[{}:{}][{}] set_connect_state -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                            self.__peername = tls_client.getpeername()
+                            state.append("[{}:{}][{}] getpeername() -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                            self.__cert = tls_client.get_peer_certificate()
+                            state.append("[{}:{}][{}] get_peer_certificate() -> [{}, {}]".format(hostname, port, run, methods[method], tls_client.get_state_string()))
+                        finally:
+                            with suppress(OpenSSL.SSL.Error):
+                                tls_client.shutdown()
+                            with suppress(OSError): # e.g. bad file descriptor
+                                tls_client.sock_shutdown(socket.SHUT_RDWR)
+                            with suppress(OpenSSL.SSL.Error):
+                                tls_client.close()
+                            with suppress(OSError):
+                                client_sock.shutdown(socket.SHUT_RDWR)
+                except Exception as e:
+                    for line in state:
+                        print(line, file=sys.stderr)
+                    print("Uncaught in run {} [{}]: ".format(run, methods[method]), e, file=sys.stderr)
+                    with suppress(OSError):
+                        client_sock.shutdown(socket.SHUT_RDWR)
+                    continue
+                if self.__cert and self.__peername:
+                    break
 
         def close(self):
-            tls_client = self.__connection
-            if tls_client is not None:
-                with suppress(OpenSSL.SSL.Error):
-                    tls_client.shutdown()
-                with suppress(OSError): # e.g. bad file descriptor
-                    tls_client.sock_shutdown(socket.SHUT_RDWR)
-                with suppress(OpenSSL.SSL.Error):
-                    tls_client.close()
+            pass # dummy
 
         def get_peer_certificate(self):
-            return self.__connection.get_peer_certificate()
+            return self.__cert
 
     def __init__(self, hostname, port):
         with closing(SslCertificate.TLSConnection(hostname, port)) as connection:
             cert = connection.get_peer_certificate()
+            assert cert is not None, "Could not get valid peer certificate {}:{}".format(hostname, port)
             self.__validFrom = cert.get_notBefore().decode("ascii")
             self.__validTo = cert.get_notAfter().decode("ascii")
             sn = {x.decode("ascii"): y.decode("ascii") for x, y in cert.get_subject().get_components()}
@@ -133,15 +156,6 @@ class SslCertificate:
 
     def getValidTo(self):
         return self.__validTo
-
-    def getHostname(self):
-        return self.__hostname
-
-    def getPort(self):
-        return self.__port
-
-    def getPeername(self):
-        return self.__peername
 
     def hasMatchingSAN(self):
         return self.__hasMatchingSAN
@@ -274,21 +288,29 @@ class ResultCollector(object):
     def sendreport(self):
         ms = self.verify_email_settings()
         msg = self.report()
+        errors = None
         print(msg.as_string())
         if ms.gpgexe and ms.gpgrcpt:
-            from subprocess import Popen, PIPE
+            from subprocess import Popen, PIPE, STDOUT
             args = [ms.gpgexe.strip(), "--batch", "--no-tty", "--yes", "-ear", ms.gpgrcpt.strip(), "--", "-"]
-            emsg = Popen(args, stdin=PIPE, stdout=PIPE, bufsize=1)
-            newmsg, errors = emsg.communicate(msg.get_payload().encode("utf-8"))
-            if errors is None or len(errors) == 0:
-                msg.set_payload(newmsg)
+            with Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE, bufsize=0) as emsg:
+                newmsg, errors = emsg.communicate(msg.get_payload().encode("utf-8"))
+                if emsg.returncode in {0} and (errors is None or len(errors) == 0):
+                    msg.set_payload(newmsg)
+                else:
+                    msg.set_payload(errors)
         try:
             smtp = SMTP('localhost')
             smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+            if errors is not None:
+                print(errors.decode("ascii"), file=sys.stderr)
+                return 1
         except (SMTPRecipientsRefused, SMTPHeloError, SMTPSenderRefused, SMTPDataError) as e:
             print(repr(e), file=sys.stderr)
+            return 2
         finally:
             smtp.quit()
+        return 0
 
 class CertificateExpiryTimes(object):
     def __init__(self, inifile):
@@ -349,7 +371,7 @@ if __name__ == "__main__":
     try:
         inifile = os.path.splitext(os.path.realpath(__file__))[0] + ".ini"
         res = CertificateExpiryTimes(inifile).runcheck()
-        res.sendreport()
+        sys.exit(res.sendreport())
     except SystemExit:
         pass
     except ImportError:
