@@ -295,7 +295,7 @@ class ResultCollector(object):
             args = [ms.gpgexe.strip(), "--batch", "--no-tty", "--yes", "-ear", ms.gpgrcpt.strip(), "--", "-"]
             with Popen(args, stdin=PIPE, stdout=PIPE, stderr=PIPE, bufsize=0) as emsg:
                 newmsg, errors = emsg.communicate(msg.get_payload().encode("utf-8"))
-                if emsg.returncode in {0} and (errors is None or len(errors) == 0):
+                if emsg.returncode in {0}:
                     msg.set_payload(newmsg)
                 else:
                     msg.set_payload(errors)
