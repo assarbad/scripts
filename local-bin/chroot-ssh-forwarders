@@ -20,19 +20,21 @@ USERS=$(getent group ssh-forwarders)
 USERS=${USERS##*:}
 USERS=${2:-$USERS}
 
+echo "Preparing for users: $USERS"
+
 # Prepare the base chroot
 BASECHROOT="$CHROOTDIR/.basedir"
 # Prepare the base system
 test -d "$BASECHROOT" || mkdir -p "$BASECHROOT"
 if [[ -d "$BASECHROOT" ]]; then
 	if [[ ! -e "$BASECHROOT/.installed" ]]; then
-		env LANG=en_US.UTF-8 \
+		( set -x; env LANG=en_US.UTF-8 \
 			debootstrap \
 			--keep-debootstrap-dir \
 			--include=openssh-client,tmux,unzip,make \
 			--variant=$VARIANT \
 			--arch=$(dpkg --print-architecture) $(lsb_release -sc) \
-			"$BASECHROOT" "$DEBARCHIVE_URL" && \
+			"$BASECHROOT" "$DEBARCHIVE_URL" ) && \
 		touch "$BASECHROOT/.installed" || { echo -e "${cR}ERROR:${cZ} failed to debootstrap the new system"; exit 1; }
 	else
 		echo -e "${cW}INFO:${cZ} the base chroot ($BASECHROOT) appears to be installed already."
@@ -45,7 +47,7 @@ if [[ -d "$BASECHROOT" ]]; then
 		rm -rf "$BASECHROOT/debootstrap"
 	fi
 fi
-# For all members of the ssh-forwarders group ...
+# For all members of the ssh-forwarders group, or the passed user(s) ...
 for user in ${USERS//,/ }; do
 	echo $user
 	test -d "$CHROOTDIR/.upper/$user" || mkdir -p "$CHROOTDIR/.upper/$user"
