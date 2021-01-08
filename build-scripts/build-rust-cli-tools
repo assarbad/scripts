@@ -16,7 +16,6 @@ if ! rustup target list --installed|grep -q "$TARGET"; then
 fi
 # These can be installed using 'cargo install' and statically linked against musl libc
 SIMPLE_INSTALLS="\
-@main:nat:willdoescode/nat
 @main:waitfor:aeshirey/waitfor
 @master:bookmark:Szymongib/bookmark
 @master:dot-templater:kesslern/dot-templater
@@ -30,13 +29,13 @@ broot:canop/broot
 ddh:darakian/ddh
 desed:SoptikHa2/desed
 diffr:mookid/diffr
-dijo:NerdyPepper/dijo
 dirstat-rs:dirstat:scullionw/dirstat-rs
 diskonaut:imsnif/diskonaut
 dtool:guoxbin/dtool
 du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 dutree:nachoparker/dutree
+emplace:tversteeg/emplace
 eureka:simeg/eureka
 eva:NerdyPepper/eva
 exa:ogham/exa
@@ -67,6 +66,8 @@ lolcate-rs:lolcate:ngirard/lolcate-rs
 lsd:Peltoche/lsd
 mdbook:rust-lang/mdBook
 mdcat:lunaryorn/mdcat
+mgit:koozz/mgit
+natls:nat:willdoescode/nat
 nomino:yaa110/nomino
 oxipng:shssoichiro/oxipng
 pastel:sharkdp/pastel
@@ -89,12 +90,12 @@ scout:jhbabon/scout
 sd:chmln/sd
 shy:xvxx/shy
 skim:sk:lotabout/skim
-so:samtay/so
 starship:starship/starship
 svgcleaner:RazrFalcon/svgcleaner
 tealdeer:tldr:dbrgn/tealdeer
 tiny:osa1/tiny
 tokei://lib.rs/crates/tokei
+topgrade:r-darwish/topgrade
 treesum:anderejd/treesum
 vcprompt:sscherfke/rust-vcprompt
 verco:matheuslessarodrigues/verco
@@ -111,6 +112,9 @@ zoxide://lib.rs/crates/zoxide
 zrs:fauxfaux/zrs
 "
 
+# These are broken at this point in time:
+# dijo:NerdyPepper/dijo
+# so:samtay/so
 # typeracer:ttyperacer/terminal-typeracer
 
 # Number of jobs
