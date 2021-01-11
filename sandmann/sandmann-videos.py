@@ -57,7 +57,7 @@ def download_video(title, url):
     fname = title.replace(":", " -")
     extension = url.split("_")[-1]
     quality = extension.split(".")[0]
-    print("# Title: {}\nwget -O '{} [{}].mp4' '{}'".format(title, fname, quality, url))
+    print("# Title: {}\nwget --no-clobber -O '{} [{}].mp4' '{}'".format(title, fname, quality, url))
 
 if __name__ == "__main__":
     videos = get_videos("https://sandmann.de/videos/")
