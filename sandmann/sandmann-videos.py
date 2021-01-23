@@ -3,8 +3,8 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
-__copyright__ = "2020 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.1"
+__copyright__ = "2020/21 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__version__ = "0.2"
 import argparse
 import os
 import sys
@@ -57,11 +57,43 @@ def download_video(title, url):
     fname = title.replace(":", " -")
     extension = url.split("_")[-1]
     quality = extension.split(".")[0]
-    print("# Title: {}\nwget --no-clobber -O '{} [{}].mp4' '{}'".format(title, fname, quality, url))
+    print("""# Title: {title}
+download '{filename} [{quality}].mp4' '{url}'
+""".format(title=title, filename=fname, quality=quality, url=url))
 
 if __name__ == "__main__":
     videos = get_videos("https://sandmann.de/videos/")
+    print("#!/usr/bin/env bash")
     print("# Number of videos:", len(videos))
+    print("""
+DL="$HOME/.sandmann_downloaded.txt"
+DLPROG=wget
+if ! type $DLPROG > /dev/null 2>&1; then
+    DLPROG=curl
+    if ! type $DLPROG > /dev/null 2>&1; then
+        echo "Kein Programm zum gefunden mit dem man die Videos runterladen kann (weder wget noch curl)."
+    fi
+fi
+
+function curl_download() {
+    ( set -x; curl --output "$1" "$2" )
+}
+
+function wget_download() {
+    ( set -x; wget -O "$1" "$2" )
+}
+
+function download() {
+    local FILE="$1"
+    local URL="$2"
+    local TITLE="$3"
+    if [[ -e "$DL" ]] && grep -q "$URL" "$DL"; then
+        echo "Der Titel '$TITLE' wurde bereits runtergeladen (vermutlicher Dateiname: $FILE)"
+    else
+        ${DLPROG}_download "$FILE" "$URL" && echo "$URL"|tee -a "$DL"
+    fi
+}
+""")
     for (title, handle), urls in videos.items():
         for url in urls:
             download_video(title, url)
