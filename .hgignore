@@ -20,3 +20,5 @@ build-scripts/*_rust-cli-tools-*.manifest.txt*
 build-scripts/packaged-*.tar
 build-scripts/unpack-*
 tlive/*.deb
+sandmann/*.mp4
+sandmann/geckodriver.log

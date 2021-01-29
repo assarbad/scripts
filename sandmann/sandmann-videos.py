@@ -58,7 +58,7 @@ def download_video(title, url):
     extension = url.split("_")[-1]
     quality = extension.split(".")[0]
     print("""# Title: {title}
-download '{filename} [{quality}].mp4' '{url}'
+download '{filename} [{quality}].mp4' '{url}' '{title}'
 """.format(title=title, filename=fname, quality=quality, url=url))
 
 if __name__ == "__main__":
