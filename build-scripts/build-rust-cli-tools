@@ -266,11 +266,14 @@ function strip_and_store_binaries
 	( cd "\$SRCDIR"; set -x; sha256sum -c SHA256SUMS ) || { echo -e "\${cR}ERROR:\${cZ} failed to validate integrity of the binaries in \$(pwd)."; exit 1; }
 	( set -x; sudo install -g root -o root -m 0755 -p -v -t /usr/local/bin \$(find "\$CURRABSPATH/\$SRCDIR" -type f -executable -printf "\$SRCDIR/%P\n") )
 	EOF
+	if [[ -f "$SRCDIR/failed.txt" ]]; then
+		cp -a "$SRCDIR/failed.txt" "$TGTDIR/failed.txt"
+	fi
 	chmod +x "$TGTDIR/install.sh"
 	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/$TARBALL.txz" -C "$SRCDIR" "$BASENAME" ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
 	( CURRDIR="$(pwd)"; set -x; pushd "$CURRDIR"; sha256sum "$TARBALL.txz" | tee "$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 	TARBALL="$TARBALL.stripped"
-	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/$TARBALL.txz" -C "$SRCDIR" "$BASENAME/stripped" "$BASENAME/install.sh" $(find "$SRCDIR" -type f \( -name 'manifest.txt' -o -name 'warnings.txt' \) -printf '%P\n') ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
+	( CURRDIR="$(pwd)"; set -x; tar -cJvf "$CURRDIR/$TARBALL.txz" -C "$SRCDIR" "$BASENAME/stripped" "$BASENAME/install.sh" $(find "$SRCDIR" -type f \( -name 'manifest.txt' -o -name 'warnings.txt' -o -name 'failed.txt' \) -printf '%P\n') ) || { echo -e "${cR}ERROR:${cZ} failed to package built binaries"; exit 1; }
 	( CURRDIR="$(pwd)"; set -x; pushd "$CURRDIR"; sha256sum "$TARBALL.txz" | tee "$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 }
 
@@ -280,9 +283,14 @@ trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap
 if [[ -z "$NOSSL" ]]; then
 	echo -e "${cW}INFO:${cZ} building OpenSSL"
 	openssl_build || exit 1
+	echo -e "${cG}SUCCESS:${cZ} built OpenSSL"
 fi
 for tool in $SIMPLE_INSTALLS; do
-	simple_install "$tool" "$TEMPDIR" "$@"
+	if ( simple_install "$tool" "$TEMPDIR" "$@" ); then
+		echo -e "${cG}SUCCESS:${cZ} built ${cW}${tool%%:*}${cZ}"
+	else
+		echo "${tool%%:*}"|tee -a "$TEMPDIR/failed.txt"
+	fi
 done
 strip_and_store_binaries "$TEMPDIR"
 # Clean exit, or leave everything in place if NOCLEAN environment variable was set

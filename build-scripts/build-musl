@@ -14,7 +14,7 @@ if [[ -n "$CROSS_COMPILE_PATH" ]]; then
 fi
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-VERSION="${MUSLLIBC_VERSION:-1.2.1}"
+VERSION="${MUSLLIBC_VERSION:-1.2.2}"
 RELEASE_TAG="${MUSLLIBC_RELEASE:-v$VERSION}"
 GITREPO="${MUSLLIBC_GITREPO:-git://git.musl-libc.org/musl}"
 # Possible alternatives: https://repo.or.cz/musl.git git://repo.or.cz/musl.git
