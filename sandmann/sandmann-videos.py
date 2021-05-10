@@ -47,7 +47,7 @@ def get_videos(baseurl):
             assert len(mdarray) == 1, "Unerwartete Länge für _mediaArray"
             assert "_mediaStreamArray" in mdarray[0], "Fehlendes _mediaStreamArray in _mediaArray"
             stmarray = mdarray[0]["_mediaStreamArray"]
-            streams = [x["_stream"] for x in stmarray if x["_stream"].endswith(".mp4") and ("hd-1800k" in x["_stream"] or "hd-3584k" in x["_stream"])]
+            streams = [x["_stream"] for x in stmarray if x["_stream"].endswith(".mp4") and ("hd-1800k" in x["_stream"] or "hd-3584k" in x["_stream"] or "hd1080-1800k" in x["_stream"] or "hd1080-3500k" in x["_stream"])]
             videos[(rbbtitle, rbbhandle)] = streams
     finally:
         driver.quit()
