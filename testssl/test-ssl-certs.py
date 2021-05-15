@@ -239,7 +239,7 @@ class ResultCollector(object):
         now = datetime.datetime.utcnow()
         delta = soonestDT - now
         msg["To"] = ms.msg_to or "<unknown@localhost>"
-        msg["From"] = ms.msg_from or "<unknown@localhost>"
+        msg["From"] = ms.msg_from.format(fqdn=socket.getfqdn()) or "<unknown@localhost>"
         msg["Subject"] = ms.subject.format(errcnt=len(err), wrncnt=len(wrn), soonexpiry=len(soon), expired=len(exp), soonest=prettydate(soonest[0]), soonest_delta=delta)
         lines = []
         lines.append("[%s] Checked %d hosts for their SSL certificates. %d warning(s) and %d error(s). Soonest to expire is %s at %s (%s).\n" % (now, len(certs), len(wrn), len(err), soonest[1], prettydate(soonest[0]), delta))
