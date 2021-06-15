@@ -7,7 +7,7 @@ pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /d
 ( [[ -n "$DEBUG" ]] || [[ -n "$DBG" ]] ) && { DBG=1; DEBUG=1; DBGCONFIGURE="$SHELL -x "; set -x; }
 LOCKFILE="${TMPDIR=/tmp}/${CURRABSPATH//\//_}${0##*/}.lock"
 MEANDMYSELF=${0##*/}
-RELEASE_TAG="${LLVM_RELEASE:-llvmorg-11.1.0}"
+RELEASE_TAG="${LLVM_RELEASE:-llvmorg-12.0.1}"
 GITREPO="https://github.com/llvm/llvm-project.git"
 BINUTILS_RELEASE="${BINUTILS_RELEASE:-binutils-2_35_1}"
 TAR_TAG="${TAR_TAG:-LLVM}"
