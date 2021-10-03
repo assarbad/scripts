@@ -13,10 +13,10 @@
 Section: misc
 Priority: optional
 Homepage: https://www.tug.org/texlive/debian.html
-Standards-Version: 3.9.2
+Standards-Version: 4.1.4
 
 Package: texlive-local
-Version: 2020-2
+Version: 2021.99999999-1
 Maintainer: Not Relevant <you@example.com>
 Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context, 
  dvidvi, dvipng, feynmf, fragmaster, jadetex, lacheck, latex-beamer, 
@@ -50,8 +50,8 @@ Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context,
 Depends: freeglut3, lmodern
 Recommends: fonts-noto, fonts-linuxlibertine, fonts-texgyre, fonts-junicode, fonts-croscore, fonts-ebgaramond, fonts-courier-prime, fonts-cmu, fonts-vollkorn, fonts-mononoki
 Architecture: all
-Description: My local installation of TeX Live 2020.
- A full "vanilla" TeX Live 2020
+Description: My local installation of TeX Live 2021.
+ A full "vanilla" TeX Live 2021
  http://tug.org/texlive/debian#vanilla
 
 # fonts-dejavu - metapackage to pull in fonts-dejavu-core and fonts-dejavu-extra
