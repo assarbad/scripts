@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: ascii -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
-from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 import fnmatch
 import io
 import os
@@ -25,6 +24,8 @@ def keytype(s):
          "STA" : "sta",
          "OEM Key" : "oem",
          "OEM" : "oem",
+         "Azure Dev Tools for Teaching KMS" : "kms",
+         "VA 1.0": "vol",
          }
     if s in types:
         return types[s]
@@ -97,7 +98,7 @@ def correct_name(n):
 
 def dumpkeys(keys):
     prodkeys = {}
-    for k,v in keys.iteritems():
+    for k,v in keys.items():
         nml = v["Name"]
         if isinstance(nml, list):
             nm = "|".join(set(nml))
@@ -118,24 +119,30 @@ def dumpkeys(keys):
         else:
             print("%s" % (productnames))
         lastdate = None
-        for key in sorted(keys, key=lambda v: v[1]):
+        # List keys without date
+        # for issues in [k for k in keys if k[1] is None]:
+        #     print("WARNING: %s %s" % (pd, repr(issues)), file=sys.stderr)
+        # Sort by date entries (primary) and key (secondary)
+        if len(keys) > 1:
+            print(repr(keys[1]), file=sys.stderr)
+        for key in sorted(keys, key=lambda v: (v[1][0:2] if v[1] is not None else (0,0,), v[0])):
             ktype = " {%s}" % key[2] # if (ktypes > 1) else ""
             if len(key) > 1 and not key[1] is None:
                 if lastdate is None: # first iteration, so append the date
                     lastdate = key[1][0:2]
-                    print("\t%s%s [%04d/%02d]" % (key[0], ktype, key[1][0], key[1][1]))
+                    print("\t%s%s [%04d/%02d]" % (key[0], ktype, lastdate[0], lastdate[1]))
                 else: # subsequent iterations
                     if lastdate[0:2] == key[1][0:2]:
                         print("\t%s%s" % (key[0], ktype))
                     else:
                         lastdate = key[1][0:2]
-                        print("\t%s%s [%04d/%02d]" % (key[0], ktype, key[1][0], key[1][1]))
+                        print("\t%s%s [%04d/%02d]" % (key[0], ktype, lastdate[0], lastdate[1]))
 
             else:
                 print("\t%s%s" % (key[0], ktype))
 
 def main():
-    from StringIO import StringIO
+    from io import StringIO
     if len(sys.argv) < 2:
         sys.exit("Usage: %s <directory with XML files>" % sys.argv[0])
     p = sys.argv[1]
@@ -185,14 +192,24 @@ def main():
                 v["Name"] = [correct_name(v["Name"])] # make list
                 keys[k] = v
     keycount = 0
+    previous_unique = set()
+    nonew = []
     for fn in sorted(fkeys.keys()):
         ks = fkeys[fn]
-        print("File: %s -> %d keys" % (fn, len(ks)), file=sys.stderr)
         keycount = keycount + len(ks)
         fsets[fn] = set(fkeys[fn].keys())
+        previous_count = len(previous_unique)
+        previous_unique |= fsets[fn]
+        if  len(previous_unique) - previous_count == 0:
+            nonew.append(fn)
+        print("File: %s -> %d keys [+ %d -> unique: %d]" % (fn, len(ks), len(previous_unique) - previous_count, len(previous_unique)), file=sys.stderr)
     print("%d unique keys found" % (len(keys)), file=sys.stderr)
     print("%d keys found (with duplicates)" % (keycount), file=sys.stderr)
     dumpkeys(keys)
+    if len(nonew):
+        print("\nNo new keys in the following files:\n", file=sys.stderr)
+        for fn in sorted(nonew):
+            print(fn, file=sys.stderr)
 
 if __name__ == "__main__":
     main()
