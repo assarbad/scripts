@@ -1,0 +1,7 @@
+export PIPENV_VENV_IN_PROJECT=1
+hash -r
+python -m pip install -U --user pip pipx
+hash -r
+pipx install pipenv
+hash -r
+pipenv shell

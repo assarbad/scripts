@@ -13,6 +13,7 @@ good_keychars = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-")
 
 def keytype(s):
     types = {
+         "kms" : "kms",
          "MultipleActivation" : "mak",
          "MAK" : "mak",
          "mak" : "mak",
@@ -25,6 +26,7 @@ def keytype(s):
          "OEM Key" : "oem",
          "OEM" : "oem",
          "Azure Dev Tools for Teaching KMS" : "kms",
+         "vol": "vol",
          "VA 1.0": "vol",
          }
     if s in types:
@@ -156,7 +158,7 @@ def main():
     keys = {}
     fkeys = {}
     fsets = {}
-    for fn in sorted(f.keys()):
+    for fn in sorted(f.keys()): #, reverse=True):
         if not f[fn] in fkeys:
             fkeys[f[fn]] = {}
         xmldata = ""
