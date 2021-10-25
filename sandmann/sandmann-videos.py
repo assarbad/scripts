@@ -62,7 +62,8 @@ download '{filename} [{quality}].mp4' '{url}' '{title}'
 """.format(title=title, filename=fname, quality=quality, url=url))
 
 if __name__ == "__main__":
-    videos = get_videos("https://sandmann.de/videos/")
+    baseurl = sys.argv[1] if len(sys.argv) > 1 else "https://sandmann.de/videos/"
+    videos = get_videos(baseurl)
     print("#!/usr/bin/env bash")
     print("# Number of videos:", len(videos))
     print("""
