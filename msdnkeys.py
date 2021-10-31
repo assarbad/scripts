@@ -103,7 +103,7 @@ def dumpkeys(keys):
     for k,v in keys.items():
         nml = v["Name"]
         if isinstance(nml, list):
-            nm = "|".join(set(nml))
+            nm = "|".join(sorted([x for x in set(nml)]))
             if not nm in prodkeys:
                 prodkeys[nm] = []
             prodkeys[nm].append((k,v["Date"],v["Type"]))
@@ -114,12 +114,12 @@ def dumpkeys(keys):
         (productnames, keys) = (pd, prodkeys[pd])
         if re.search("Preview|RC[0-9]|Beta|No key is required for this product", productnames):
             continue
-        productnames = correct_name(productnames)
+        # productnames = correct_name(productnames)
         ktypes = len(set([x[2] for x in keys]))
-        if len(keys) > 1:
-            print("%s: %d keys" % (productnames, len(keys)))
-        else:
-            print("%s" % (productnames))
+        # if len(keys) > 1:
+        #     print("%s: %d keys" % (productnames, len(keys)))
+        # else:
+        print("%s" % ("\n".join(sorted(productnames.split("|")))))
         lastdate = None
         # List keys without date
         # for issues in [k for k in keys if k[1] is None]:
