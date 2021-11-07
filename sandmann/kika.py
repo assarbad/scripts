@@ -8,14 +8,15 @@ __version__ = "0.1"
 import argparse
 import os
 import sys
-import json
 import re
 import urllib.request
-from urllib.parse import urlparse, urlunparse, urljoin
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from io import StringIO
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
+import xml.etree.ElementTree as ET
+
+Asset = namedtuple('Asset', ['title', 'width', 'height', 'url', 'alturl'])
 
 def nav_single_page(url, driver):
     driver.get(url)
@@ -55,27 +56,57 @@ def get_videos(baseurl):
         driver.quit()
     return videos
 
-def download_video(title, url):
-    fname = title.replace(":", " -")
-    extension = url.split("_")[-1]
-    quality = extension.split(".")[0]
+def decode_asset(name, node):
+    assert node.tag == "asset", "Kann nur <asset /> Elemente parsen"
+    height = int(node.find("./frameHeight").text, 10)
+    width = int(node.find("./frameWidth").text, 10)
+    assert height > 0, "Height is {}".format(height)
+    assert width > 0, "Width is {}".format(width)
+    url = node.find("./progressiveDownloadUrl").text
+    alturl = node.find("./rtspStreamingUrl").text if node.find("./rtspStreamingUrl") else None
+    if url == alturl:
+        alturl = None
+    return Asset(name, width, height, url, alturl)
+
+def decode_xml(name, xmlurl):
+    print("Name: {}\n\tURL: {}".format(name, xmlurl), file=sys.stderr)
+    with urllib.request.urlopen(xmlurl) as xmlf:
+        tree = ET.parse(xmlf)
+        root = tree.getroot()
+        assert root.tag == "avDocument"
+        for asset in root.findall("./assets/asset"):
+            yield decode_asset(name, asset)
+
+def sanitize_name(inp):
+    return inp.replace(":", " -").replace("?", "")
+
+def download_video(title, video):
+    assert video.url is not None, "No download URL for '{}'".format(video.title)
+    if title.lower().endswith(" - kika"):
+        title = title[:-7]
+    extension = video.url.split(".")[-1].strip()
+    fname = "{}/{} [{}p].{}".format(sanitize_name(title), sanitize_name(video.title), video.height, extension)
     print("""# Titel: {title}
-download '{filename} [{quality}].mp4' '{url}' '{title}'
-""".format(title=title, filename=fname, quality=quality, url=url))
+download '{filename}' '{url}' '{title}'
+""".format(title=video.title, filename=fname, url=video.url))
 
 if __name__ == "__main__":
     if len(sys.argv) <= 1:
         raise RuntimeError("Die URL oder URLs müssen angegeben werden")
     baseurls = sys.argv[1:]
     videos = OrderedDict()
+    num_vids = 0
     for baseurl in baseurls:
         for title, name, xmlurl in get_videos(baseurl):
             if title not in videos:
                 videos[title] = []
-            print(title, name, xmlurl)
-    sys.exit()
+            for video in decode_xml(name, xmlurl):
+                if video.height >= 576:
+                    # print(video, file=sys.stderr)
+                    videos[title].append(video)
+                    num_vids += 1
     print("#!/usr/bin/env bash")
-    print("# Anzahl Videos:", len(videos))
+    print("# Anzahl Videos:", num_vids)
     print("""
 DL="$HOME/.kika_downloaded.txt"
 DLPROG=wget
@@ -96,15 +127,19 @@ function wget_download() {
 
 function download() {
     local FILE="$1"
+    local DIRNAME="${FILE%/*}"
     local URL="$2"
     local TITLE="$3"
     if [[ -e "$DL" ]] && grep -q "$URL" "$DL"; then
         echo "Der Titel '$TITLE' wurde bereits runtergeladen (vermutlicher Dateiname: $FILE)"
     else
+        if [[ "$FILE" != "$DIRNAME" ]] && [[ -n "$DIRNAME" ]] && [[ ! -d "$DIRNAME" ]]; then
+            mkdir "$DIRNAME"
+        fi
         ${DLPROG}_download "$FILE" "$URL" && echo "$URL"|tee -a "$DL"
     fi
 }
 """)
-    for (title, handle), urls in videos.items():
-        for url in urls:
-            download_video(title, url)
+    for title, per_title_videos in videos.items():
+        for video in per_title_videos:
+            download_video(title, video)

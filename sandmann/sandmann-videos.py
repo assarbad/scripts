@@ -54,7 +54,7 @@ def get_videos(baseurl):
     return videos
 
 def download_video(title, url):
-    fname = title.replace(":", " -")
+    fname = title.replace(":", " -").replace("?", "")
     extension = url.split("_")[-1]
     quality = extension.split(".")[0]
     print("""# Titel: {title}
