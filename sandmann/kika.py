@@ -4,11 +4,12 @@
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
 __copyright__ = "2020/21 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.3"
+__version__ = "0.1"
 import argparse
 import os
 import sys
 import json
+import re
 import urllib.request
 from urllib.parse import urlparse, urlunparse, urljoin
 from collections import OrderedDict
@@ -16,39 +17,40 @@ from io import StringIO
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 
+def nav_single_page(url, driver):
+    driver.get(url)
+    video_list = driver.find_elements_by_xpath("//a[contains(@class, 'js-broadcast-link') and @id[starts-with(., 'avplayer')]]")
+    assert video_list, "Keine Videos auf {} gefunden".format(url)
+    for video in video_list:
+        name = video.get_attribute("title")
+        onclick = video.get_attribute("onclick")
+        # Die URL zu der XML mit den Download-Details rausklauben
+        m = re.search(r"return BRavFramework\.register\(BRavFramework\(.+?\)\.setup\(\{dataURL:'([^']+)'\}\)\);", onclick)
+        if m:
+            xmlurl = m.group(1)
+            yield (name, xmlurl,)
+
 def get_videos(baseurl):
-    videos = OrderedDict()
+    videos = []
     try:
         options = webdriver.FirefoxOptions()
         options.add_argument('--headless')
         driver = webdriver.Firefox(options=options)
         driver.set_window_size(1920, 1080)
         driver.get(baseurl)
-        video_list = driver.find_elements_by_xpath("//div[contains(@class, 'manualteaserpicture') and contains(@class, 'player') and contains(@class, 'video')]")
-        for video in video_list:
-            mtinfo = video.get_attribute("data-jsb")
-            metainfo = json.loads(mtinfo)
-            for key in {"config", "media", "analytics"}:
-                assert key in metainfo, "Der '{}'-Schlüssel fehlt in data-jsb".format(key)
-            analytics = metainfo["analytics"]
-            for key in {"rbbtitle", "rbbhandle", "chapter", "isTrailer", "duration", "termids"}:
-                assert key in analytics, "Der '{}'-Schlüssel fehlt in data-jsb[analytics]".format(key)
-            rbbtitle, rbbhandle = analytics["rbbtitle"], analytics["rbbhandle"]
-            if "sendung_gebaerde" in rbbhandle:
-                continue
-            if "mit Gebärdensprache" in rbbtitle:
-                continue
-            media_info_url = urljoin(driver.current_url, metainfo["media"])
-            response = urllib.request.urlopen(media_info_url)
-            media_details = json.loads(response.read())
-            for key in {"rbbtitle", "rbbhandle", "_type", "_isLive", "_duration", "_mediaArray"}:
-                assert key in media_details, "Der '{}'-Schlüssel fehlt im JSON aus {}: {}".format(key, analytics["rbbtitle"], media_info_url)
-            mdarray = media_details["_mediaArray"]
-            assert len(mdarray) == 1, "Unerwartete Länge für _mediaArray"
-            assert "_mediaStreamArray" in mdarray[0], "Fehlendes _mediaStreamArray in _mediaArray"
-            stmarray = mdarray[0]["_mediaStreamArray"]
-            streams = [x["_stream"] for x in stmarray if x["_stream"].endswith(".mp4") and ("hd-1800k" in x["_stream"] or "hd-3584k" in x["_stream"] or "hd1080-1800k" in x["_stream"] or "hd1080-3500k" in x["_stream"])]
-            videos[(rbbtitle, rbbhandle)] = streams
+        title = driver.title
+        # Navigation mit den Einzeilseiten für je x Videos
+        pages = driver.find_elements_by_xpath("//a[contains(@class, 'pageItem')]")
+        if pages:
+            urls = set(page.get_attribute("href") for page in pages)
+            assert urls, "Konnte die URLs zu den Unterseiten der Navigation nicht ermitteln"
+            for url in sorted(urls):
+                for name, xmlurl in nav_single_page(url, driver):
+                    videos.append((title, name, xmlurl,))
+        else: # ... manchmal gibt es aber bei wenigen Videos auch keine Navigation
+            url = baseurl
+            for name, xmlurl in nav_single_page(url, driver):
+                videos.append((title, name, xmlurl,))
     finally:
         driver.quit()
     return videos
@@ -62,12 +64,20 @@ download '{filename} [{quality}].mp4' '{url}' '{title}'
 """.format(title=title, filename=fname, quality=quality, url=url))
 
 if __name__ == "__main__":
-    baseurl = sys.argv[1] if len(sys.argv) > 1 else "https://sandmann.de/videos/"
-    videos = get_videos(baseurl)
+    if len(sys.argv) <= 1:
+        raise RuntimeError("Die URL oder URLs müssen angegeben werden")
+    baseurls = sys.argv[1:]
+    videos = OrderedDict()
+    for baseurl in baseurls:
+        for title, name, xmlurl in get_videos(baseurl):
+            if title not in videos:
+                videos[title] = []
+            print(title, name, xmlurl)
+    sys.exit()
     print("#!/usr/bin/env bash")
     print("# Anzahl Videos:", len(videos))
     print("""
-DL="$HOME/.sandmann_downloaded.txt"
+DL="$HOME/.kika_downloaded.txt"
 DLPROG=wget
 if ! type $DLPROG > /dev/null 2>&1; then
     DLPROG=curl
