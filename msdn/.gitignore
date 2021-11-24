@@ -1,0 +1,10 @@
+keys/
+MSDN-keys-xml.tar.xz
+MSDN-keys-xml.7z
+*.bak
+*.orig
+*.credentials
+geckodriver.log
+KeysExport.xml
+.venv/
+.hg/
