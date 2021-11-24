@@ -22,8 +22,9 @@ PRJNAME="${PRJNAME:-musl}"
 TAR_TAG="${TAR_TAG:-$PRJNAME}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/$TAR_TAG${CROSS_COMPILE:+.${CROSS_COMPILE%-}}}
 BASEDIR="${BASEDIR:-$(pwd)}"
-CACHEDIR="${CACHEDIR:-$BASEDIR/cache}"
 CMDLINE_OPTIONS="h?cCgGi:pr:vV:t:"
+[[ -f "$BASEDIR/.cacherc" ]] && . .cacherc
+CACHEDIR="${CACHEDIR:-$BASEDIR/${CACHEBASENAME:-cache}}"
 
 function show_help
 {

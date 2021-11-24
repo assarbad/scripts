@@ -25,3 +25,6 @@ tlive/*.deb
 **.zim
 **/geckodriver.log
 **/.venv/
+**/.git/
+**.bak
+msdn/**

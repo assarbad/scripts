@@ -15,9 +15,10 @@ MEANDMYSELF=${0##*/}
 NINJA_RELEASE="v1.10.2"
 INSTALL_TO=${INSTALL_TO:-$HOME}
 BASEDIR="${BASEDIR:-$(pwd)}"
-CACHEDIR="$BASEDIR/cache"
 PYTHON_EXE=${PYTHON_EXE:-python}
 type "$PYTHON_EXE" > /dev/null 2>&1 || PYTHON_EXE=python3
+[[ -f "$BASEDIR/.cacherc" ]] && . .cacherc
+CACHEDIR="${CACHEDIR:-$BASEDIR/${CACHEBASENAME:-cache}}"
 
 function show_help
 {

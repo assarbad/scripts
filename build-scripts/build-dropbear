@@ -23,9 +23,10 @@ PRJNAME="${PRJNAME:-dropbear}"
 TAR_TAG="${TAR_TAG:-$PRJNAME}"
 INSTALL_TO=${INSTALL_TO:-$HOME/bin/$TAR_TAG}
 BASEDIR="${BASEDIR:-$(pwd)}"
-CACHEDIR="${CACHEDIR:-$BASEDIR/cache}"
 CMDLINE_OPTIONS="h?cCgGi:pr:vV:"
 BUILDMUSL="$CURRABSPATH/build-musl"
+[[ -f "$BASEDIR/.cacherc" ]] && . .cacherc
+CACHEDIR="${CACHEDIR:-$BASEDIR/${CACHEBASENAME:-cache}}"
 
 function show_help
 {
