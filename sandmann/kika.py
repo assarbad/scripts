@@ -97,14 +97,17 @@ if __name__ == "__main__":
     videos = OrderedDict()
     num_vids = 0
     for baseurl in baseurls:
-        for title, name, xmlurl in get_videos(baseurl):
-            if title not in videos:
-                videos[title] = []
-            for video in decode_xml(name, xmlurl):
-                if video.height >= 576:
-                    # print(video, file=sys.stderr)
-                    videos[title].append(video)
-                    num_vids += 1
+        try:
+            for title, name, xmlurl in get_videos(baseurl):
+                if title not in videos:
+                    videos[title] = []
+                for video in decode_xml(name, xmlurl):
+                    if video.height >= 576:
+                        # print(video, file=sys.stderr)
+                        videos[title].append(video)
+                        num_vids += 1
+        except AssertionError as e:
+            print(e, file=sys.stderr)
     print("#!/usr/bin/env bash")
     print("# Anzahl Videos:", num_vids)
     print("""
