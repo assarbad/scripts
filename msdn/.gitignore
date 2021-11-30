@@ -4,7 +4,8 @@ MSDN-keys-xml.7z
 *.bak
 *.orig
 *.credentials
-geckodriver.log
+geckodriver.*
 KeysExport.xml
+*_KeysExport.xml
 .venv/
 .hg/

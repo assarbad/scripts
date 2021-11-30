@@ -23,7 +23,7 @@ build-scripts/unpack-*
 tlive/*.deb
 **.mp4
 **.zim
-**/geckodriver.log
+**/geckodriver.*
 **/.venv/
 **/.git/
 **.bak

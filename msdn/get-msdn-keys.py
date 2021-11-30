@@ -4,12 +4,14 @@
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
 __copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.1"
+__version__ = "0.2"
 import os
 import sys
 import functools
+import tempfile
 from configparser import ConfigParser
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 try:
     from selenium import webdriver
@@ -18,8 +20,8 @@ try:
     from selenium.webdriver.support.ui import WebDriverWait  # see: https://stackoverflow.com/a/46881813/
     from selenium.webdriver.common.by import By
 except ModuleNotFoundError:
-    print("ERROR: please install 'selenium' (and a geckodriver) via 'pip' or try 'pipenv sync'!", file=sys.stderr)
-    sys.exit(1)
+    print("ERROR: please install 'selenium' (and a geckodriver) via 'pip' or try 'pipenv sync'!\n", file=sys.stderr)
+    raise
 
 DEFAULT_CONFIG = """\
 [DEFAULT]
@@ -46,11 +48,12 @@ password = yourverysecretpassword
 
 
 @contextmanager
-def firefox_driver(headless, *args, **kwargs):
+def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
     """\
     This little context manager preconfigures Firefox the way we want it
     and yields a webdriver.Firefox instance\
     """
+    utcnow = datetime.utcnow()
     downloadable = [
         "application/octet-stream",
         "application/pdf",
@@ -63,35 +66,51 @@ def firefox_driver(headless, *args, **kwargs):
         "text/plain",
         "text/xml",
     ]
-    dl_path = str(Path(__file__).resolve().parent)
-    print("Download location: {}".format(dl_path))
-    options = webdriver.FirefoxOptions()
-    if headless:
-        options.add_argument('--headless')
-    options.ensure_clean_session = True
-    options.set_preference('browser.cache.disk.enable', False)
-    options.set_preference('browser.cache.memory.enable', True)
-    options.set_preference('browser.cache.offline.enable', False)
-    options.set_preference("browser.download.folderList", 2)
-    options.set_preference("browser.download.manager.showWhenStarting", False)
-    options.set_preference("browser.download.manager.alertOnEXEOpen", False)
-    options.set_preference("browser.download.manager.focusWhenStarting", False)
-    options.set_preference("browser.download.manager.useWindow", False)
-    options.set_preference("browser.download.manager.showAlertOnComplete", False)
-    options.set_preference("browser.download.manager.closeWhenDone", False)
-    options.set_preference("browser.download.dir", dl_path)
-    options.set_preference("browser.download.useDownloadDir", True)
-    options.set_preference("browser.download.viewableInternally.enabledTypes", "")
-    options.set_preference("browser.download.viewableInternally.typeWasRegistered.xml", False)
-    options.set_preference("browser.helperApps.neverAsk.saveToDisk", ", ".join(downloadable))
-    options.set_preference("browser.helperApps.alwaysAsk.force", False)
-    options.set_preference("pdfjs.disabled", True)
-    driver = webdriver.Firefox(options=options)
-    try:
-        driver.set_window_size(1920, 1080)
-        yield driver
-    finally:
-        driver.quit()
+    parent_dir = Path(__file__).resolve().parent
+    with tempfile.TemporaryDirectory(prefix="download.", dir=str(parent_dir)) as dl_path:
+        print("Download location: {}".format(dl_path))
+        options = webdriver.FirefoxOptions()
+        if headless:
+            print("Not showing (marionette) browser UI")
+            options.headless = True
+        # if profile_path:
+        #     options.set_preference('profile', profile_path)
+        options.ensure_clean_session = True
+        options.set_preference('browser.cache.disk.enable', False)
+        options.set_preference('browser.cache.memory.enable', True)
+        options.set_preference('browser.cache.offline.enable', False)
+        options.set_preference("browser.download.folderList", 2)
+        options.set_preference("browser.download.manager.showWhenStarting", False)
+        options.set_preference("browser.download.manager.alertOnEXEOpen", False)
+        options.set_preference("browser.download.manager.focusWhenStarting", False)
+        options.set_preference("browser.download.manager.useWindow", False)
+        options.set_preference("browser.download.manager.showAlertOnComplete", False)
+        options.set_preference("browser.download.manager.closeWhenDone", False)
+        options.set_preference("browser.download.dir", dl_path)
+        options.set_preference("browser.download.useDownloadDir", True)
+        options.set_preference("browser.download.viewableInternally.enabledTypes", "")
+        options.set_preference("browser.download.viewableInternally.typeWasRegistered.xml", False)
+        options.set_preference("browser.helperApps.neverAsk.saveToDisk", ", ".join(downloadable))
+        options.set_preference("browser.helperApps.alwaysAsk.force", False)
+        options.set_preference("intl.accept_languages", "en-US")
+        options.set_preference("pdfjs.disabled", True)
+        options.set_preference("places.history.enabled", False)
+        driver = webdriver.Firefox(options=options)  # service_log_path=os.path.devnull
+        # service = selenium.webdriver.common.service.Service(executable)
+        # driver = Firefox(service=service, options=options)
+        try:
+            driver.set_window_size(1920, 1080)
+            yield driver
+        finally:
+            dlkeys = Path(os.path.join(dl_path, "KeysExport.xml"))
+            if dlkeys.is_file:
+                print("Keys were downloaded as: {}".format(str(dlkeys)))
+                newname = os.path.join(str(parent_dir), "{:04d}-{:02d}-{:02d}_{:s}".format(utcnow.year, utcnow.month, utcnow.day, str(dlkeys.name)))
+                if no_rename:
+                    newname = os.path.join(str(parent_dir), str(dlkeys.name))
+                print("\t... renaming to: {:s}".format(newname))
+                dlkeys.rename(newname)
+            driver.quit()
 
 
 def do_step(driver, stepname, clickable, send=None, assert_urls=(), wait_duration=10):
@@ -127,7 +146,7 @@ def do_step(driver, stepname, clickable, send=None, assert_urls=(), wait_duratio
         raise
 
 
-def get_exported_keys_xml(driver, url_prodkey, id_exportbtn, no_rename):
+def get_exported_keys_xml(driver, url_prodkey, id_exportbtn):
     """\
     This function attempts to export the keys from active subscriptions, by
     initiating a download of the XML file.
@@ -155,22 +174,27 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
     assert all(isinstance(x, str) and x for x in {id_email, id_password, id_nextbtn, id_exportbtn, EMAIL, PASSWORD}), "Expected non-empty strings"
     url = url_prodkey[0]
 
-    print("Visiting: {}".format(url))
-    with firefox_driver(not cmdline.get("show_browser", False)) as driver:
-        driver.get(url)
-        no_rename = cmdline.get("no_rename", False)
+    headless = not cmdline.get("show_browser", False)
+    profile_dir = cmdline.get("profile", None)
+    no_rename = cmdline.get("no_rename", False)
 
-        if cmdline.get("download_only", False):
-            get_exported_keys_xml(driver, url_prodkey, id_exportbtn, no_rename)
-            return
+    print("Visiting: {}".format(url))
+    with firefox_driver(headless, profile_dir, no_rename) as driver:
+        driver.get(url)
 
         nextbtn = (By.ID, id_nextbtn)
 
-        do_step(driver, "entering email", (By.ID, id_email), send=EMAIL, assert_urls=url_login)
-        do_step(driver, "clicking Next after entering email", nextbtn, send=True, assert_urls=url_login)
-        do_step(driver, "entering password", (By.ID, id_password), send=PASSWORD, assert_urls=url_login)
-        do_step(driver, "clicking Login/Next button after entering password", nextbtn, send=True, assert_urls=url_login)
-        do_step(driver, "clicking Yes/Next button (stay signed in)", nextbtn, send=True, assert_urls=url_login)
+        if not cmdline.get("no_auth", False):
+            do_step(driver, "entering email", (By.ID, id_email), send=EMAIL, assert_urls=url_login)
+            do_step(driver, "clicking Next after entering email", nextbtn, send=True, assert_urls=url_login)
+            do_step(driver, "entering password", (By.ID, id_password), send=PASSWORD, assert_urls=url_login)
+            do_step(driver, "clicking Login/Next button after entering password", nextbtn, send=True, assert_urls=url_login)
+            do_step(driver, "clicking Yes/Next button (stay signed in)", nextbtn, send=True, assert_urls=url_login)
+
+        if cmdline.get("download_only", False):
+            get_exported_keys_xml(driver, url_prodkey, id_exportbtn)
+            return
+
         do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
 
         # Merely report a count
@@ -199,7 +223,7 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
                 if download_keys:
                     print("\t... let's try to download the XML with the keys", file=sys.stderr)
                     driver.get(url)
-                    get_exported_keys_xml(driver, url_prodkey, id_exportbtn, no_rename)
+                    get_exported_keys_xml(driver, url_prodkey, id_exportbtn)
                 return
         print("[{}] {}".format(driver.current_url, driver.title))
 
@@ -252,6 +276,8 @@ def get_config():
 def parse_args():
     from argparse import ArgumentParser
     parser = ArgumentParser(description="This script attempts to claim keys from the my.visualstudio.com portal and downloads the KeysExport.xml")
+    parser.add_argument("-A", "--no-auth", action="store_true",
+                        help="Assume the user is already authenticated (best used with -p).")
     parser.add_argument("-c", "--write-credentials", action="store_true",
                         help="Writes a .credential with default values next to the script for customization,"
                         "_unless_ such a file already exists (i.e. it won't overwrite anything!).")
@@ -265,6 +291,8 @@ def parse_args():
                         help="Will skip renaming the KeysExport.xml to YYYY-MM-DD_KeysExport.xml")
     parser.add_argument("-s", "--show-browser", action="store_true",
                         help="Will show the browser window of the marionette geckodriver. The effect of this is _not_ to pass '--headless' to geckodriver.")
+    parser.add_argument("-p", "--profile", action="store_true",
+                        help="Allows to set the browser profile path to use.")
     return parser.parse_args()
 
 

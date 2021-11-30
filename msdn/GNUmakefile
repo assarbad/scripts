@@ -14,13 +14,13 @@ allkeys.txt: $(KEYS)
 %.SHA256SUM: %
 	sha256sum $<|tee $@
 
-MSDN-keys-xml.7z: $(KEYS)
+MSDN-keys-xml.7z: $(KEYS) SHA256SUMS
 	test -d "keys" && 7z a -bt -r -t7z -m0=lzma2 -mx9 -mfb=273 -ms -md=31 -myx=9 -mtm=- -mmt -mmtf -md=1536m -mmf=bt3 -mmc=10000 -mpb=0 $@ $^ || true
 
 %.tar.xz: %.tar
 	test -f "$<" && xz -f9eT 10 $< || true
 
-MSDN-keys-xml.tar: $(KEYS)
+MSDN-keys-xml.tar: $(KEYS) SHA256SUMS
 	test -d "keys" && tar -cf $@ $^ || true
 
 clean:
@@ -31,4 +31,6 @@ CLEAN: clean
 
 rebuild: clean all
 
-.PHONY: all clean CLEAN rebuild
+keys: allkeys.txt
+
+.PHONY: all clean CLEAN rebuild keys
