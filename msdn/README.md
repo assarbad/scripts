@@ -57,13 +57,15 @@ At this point in time, aside from the two switches mentioned in the Preparation 
 ### Syntax
 
 ```
-usage: get-msdn-keys.py [-h] [-c] [-d] [-i] [-R] [-s]
+usage: get-msdn-keys.py [-h] [-A] [-c] [-d] [-i] [-R] [-s] [-p]
 
 This script attempts to claim keys from the my.visualstudio.com portal and
 downloads the KeysExport.xml
 
 options:
   -h, --help            show this help message and exit
+  -A, --no-auth         Assume the user is already authenticated (best used
+                        with -p).
   -c, --write-credentials
                         Writes a .credential with default values next to the
                         script for customization,_unless_ such a file already
@@ -81,6 +83,7 @@ options:
   -s, --show-browser    Will show the browser window of the marionette
                         geckodriver. The effect of this is _not_ to pass '--
                         headless' to geckodriver.
+  -p, --profile         Allows to set the browser profile path to use.
 ```
 
 ### Security note

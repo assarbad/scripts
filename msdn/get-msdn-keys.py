@@ -109,7 +109,10 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
                 if no_rename:
                     newname = os.path.join(str(parent_dir), str(dlkeys.name))
                 print("\t... renaming to: {:s}".format(newname))
-                dlkeys.rename(newname)
+                try:
+                    dlkeys.rename(newname)
+                except FileNotFoundError as exc:
+                    print(str(exc), file=sys.stderr)
             driver.quit()
 
 
