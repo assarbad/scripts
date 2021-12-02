@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+[[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
+for tool in git make sha256sum; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
+MAINBRANCH=main
+TAGNAME="${TAGNAME:-$1}"
+DIRNAME=gitea
+test -f "$CURRABSPATH/.${0##*/}.conf" && source "$CURRABSPATH/.${0##*/}.conf" || true
+[[ -n "$TAGNAME" ]] || { echo -e "${cR}ERROR:${cZ} ${cW}TAGNAME${cZ} not set."; exit 1; }
+[[ -x "$CURRABSPATH/goroot/bin/go" ]] || { echo -e "${cR}ERROR:${cZ} could not find ${cW}go${cZ}."; exit 1; }
+[[ -d "$CURRABSPATH/$DIRNAME/.git" ]] || { echo -e "${cR}ERROR:${cZ} could not find ${cW}gitea${cZ} repo."; exit 1; }
+export PATH="$CURRABSPATH/goroot/bin:$PATH"
+set -x
+set -e
+git -C "$CURRABSPATH/$DIRNAME" clean -dfx
+git -C "$CURRABSPATH/$DIRNAME" reset --hard
+git -C "$CURRABSPATH/$DIRNAME" checkout $MAINBRANCH
+git -C "$CURRABSPATH/$DIRNAME" pull --all
+git -C "$CURRABSPATH/$DIRNAME" checkout -b "local/$TAGNAME" "$TAGNAME" || git -C "$CURRABSPATH/$DIRNAME" switch "local/$TAGNAME"
+make -C "$CURRABSPATH/$DIRNAME" TAGS="bindata sqlite sqlite_unlock_notify" build
+( cd "$CURRABSPATH/$DIRNAME" && sha256sum gitea|tee gitea.SHA256SUM )
+# Should be in the overrides
+if [[ -n "$TGTPATH" && -d "$TGTPATH" ]]; then
+        cp -a "$CURRABSPATH/$DIRNAME/gitea" "$TGTPATH"/
+fi
+set +e
