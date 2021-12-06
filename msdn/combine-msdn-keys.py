@@ -4,18 +4,21 @@
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
 __copyright__ = "2017-2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.1.1"
+__version__ = "0.1.3"
 import fnmatch
 import io
 import os
 import re
 import sys
 import xml.etree.ElementTree as ET
+from collections import OrderedDict
+from functools import cache
 # A script to parse the XML from exported key lists (MSDN)
 
 good_keychars = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-")
 
 
+@cache
 def keytype(s):
     types = {
          "kms": "kms",
@@ -80,22 +83,8 @@ def genkey(tree):
     return
 
 
-def correct_name(n):
-    if re.search(r"10-digit", n):
-        return "All legacy products requiring a 10-digit product key"
-    if re.match(r"Windows Embedded Compact 2013 \(MSDN\)|Windows Embedded Compact 2013", n):
-        return "Windows Embedded Compact 2013"
-    if re.match(r"Windows 8.1 Enterprise and Enterprise N|Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL", n):
-        return "Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL"
-    if re.match(r"Windows Web Server 2008|Windows HPC Server 2008 and Windows Web Server 2008", n):
-        return "Windows HPC Server 2008 and Windows Web Server 2008"
-    if re.match(r"Windows Server 2008 Enterprise and Windows Server 2008 Standard|Windows Server 2008 Standard", n):
-        return "Windows Server 2008 Enterprise and Windows Server 2008 Standard"
-    m = re.match(r"(?:Windows Server 2012 Storage Server|Windows Storage Server 2012) (Standard|Workgroup)", n)
-    if m:
-        return "Windows Storage Server 2012 %s" % (m.group(1))
+def cal_items(o, m):
     # CALs
-    m = re.match(r"Windows Server (2003|2008|2008 R2|2012) (?:Terminal Server|Terminal Services|Remote Desktop Services) ((?:User CAL|user connections)|(?:Device CAL|device connections)) \((\d+)\)", n)  # noqa: E501
     if m:
         caltype = "unknown-CAL-type"
         if m.group(2) in ["User CAL", "user connections"]:
@@ -103,7 +92,89 @@ def correct_name(n):
         elif m.group(2) in ["Device CAL", "device connections"]:
             caltype = "devices"
         return "Windows Server %s Terminal Server CAL [%s %s]" % (m.group(1), m.group(3), caltype)
-    return n
+
+
+CORRECTION_REGEXES = [
+        (r"^(Visual Basic 2010 Express Registration Key|Visual Studio Express 2010 for Visual Basic Registration Key)",
+            "Visual Studio Express 2010 (Visual Basic)"),
+        (r"(Visual C# 2010 Express Registration Key|Visual Studio Express 2010 for Visual C# Registration Key)",
+            "Visual Studio Express 2010 (Visual C#)"),
+        (r"(Visual C\+\+ 2010 Express Registration Key|Visual Studio Express 2010 for Visual C\+\+ Registration Key)",
+            "Visual Studio Express 2010 (Visual C++)"),
+        (r"(Visual Studio \.NET|Visual Studio \.NET Professional)",
+            "Visual Studio .NET Professional"),
+        (r"(Visual Studio 2010 Professional|Visual Studio Professional 2010)",
+            "Visual Studio Professional 2010"),
+        (r"(Visual Studio Express 2012 for Web|Visual Studio Express 2012 for Windows 8)",
+            "Visual Studio Express 2012 for Web (+Windows 8)"),
+        (r"Windows Server (2003|2008|2008 R2|2012) (?:Terminal Server|Terminal Services|Remote Desktop Services) ((?:User CAL|user connections)|(?:Device CAL|device connections)) \((\d+)\)",  # noqa: E501
+            cal_items),
+        (r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?Remote Desktop Services (user|device) connections\s\((\d+)\)",
+            lambda o, m: "Windows Server (incl. 2004, 20H2, 2019) Remote Desktop Services {} connections ({})".format(m.group(1), m.group(2))),
+        (r"Windows Web Server 2008|Windows HPC Server 2008 and Windows Web Server 2008",
+            "Windows HPC (+Web) Server 2008"),
+        (r"Windows Server 2008 Enterprise and Windows Server 2008 Standard|Windows Server 2008 Standard",
+            "Windows Server 2008 Enterprise & Standard"),
+        (r"(10-digit|Visual SourceSafe 6\.0|All products requiring a 10-digit product key|Legacy 10-digit product key)",
+            "All legacy products requiring a 10-digit product key"),
+        (r"Windows Embedded Compact 2013 \(MSDN\)|Windows Embedded Compact 2013",
+            "Windows Embedded Compact 2013"),
+        (r"Windows 8.1 Enterprise and Enterprise N|Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL",
+            "Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL"),
+        (r"(?:Windows Server 2012 Storage Server|Windows Storage Server 2012) (Standard|Workgroup)",
+            lambda o, m: "Windows Storage Server 2012 {}".format(m.group(1))),
+        (r"^Windows 10 (?:for )?Education N(?: and KN)?$",
+            "Windows 10 for Education N (+KN)"),
+        (r"^Windows (10|11) (?:for )?Education( N)?$",
+            lambda o, m: "Windows {} for Education{}".format(m.group(1), m.group(2) or "")),
+        (r"^Windows (10|11) Pro(?:fessional)? for Workstations( N)?$",
+            lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
+        (r"^Windows (10|11) Pro(?:fessional)?( N)? for Workstations$",
+            lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
+        (r"^Windows (10|11) Pro(fessional)?(?: \(BizSpark\))?$",
+            lambda o, m: "Windows {} Pro".format(m.group(1))),
+        (r"^Windows 10 Pro(?:fessional)? N(?: and KN)?$",
+            "Windows 10 Pro N (+KN)"),
+        (r"^Windows 11 Pro(?:fessional)? N$",
+            "Windows 11 Pro N"),
+        (r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?(Standard|Datacenter)$",
+            lambda o, m: "Windows Server {} (incl. 2004, 20H2, 2019)".format(m.group(1))),
+        (r"^Windows 10 Enterprise 2015 LTSB N and KN$",
+            "Windows 10 Enterprise 2015 LTSB N (+KN)"),
+        (r"^Windows 10 Enterprise N(?: and KN)?$",
+            "Windows 10 Enterprise N (+KN)"),
+        (r"^Windows 11 Enterprise N(?: \(BizSpark\))?$",
+            "Windows 11 Enterprise N"),
+        (r"^Windows 10 Home N(?: and KN)?$",
+            "Windows 10 Home N (+KN)"),
+        (r"^Windows 11 Home N$",
+            "Windows 11 Home N"),
+        ]
+
+
+CACHED_REGEXES = OrderedDict()
+
+
+@cache
+def correct_name(n):
+    # Pre-populate the cache
+    if not CACHED_REGEXES:
+        for item in CORRECTION_REGEXES:
+            if item not in CACHED_REGEXES:
+                # Create cached compiled regex
+                CACHED_REGEXES[item] = re.compile(item[0])
+
+    subject = n.strip()
+    for item, regex in CACHED_REGEXES.items():
+        regex_string, replacement = item
+        m = regex.match(subject)
+        if m:
+            if callable(replacement):
+                return replacement(subject, m)
+            return replacement
+
+    # Return "unchanged" (only surrounding whitespace goes off)
+    return subject
 
 
 def dumpkeys(keys):
@@ -120,6 +191,7 @@ def dumpkeys(keys):
     print("Number of products: %d" % (len(prodkeys)), file=sys.stderr)
     for pd in sorted(prodkeys.keys(), key=lambda v: v.lower()):
         (productnames, keys) = (pd, prodkeys[pd])
+        # Skip these, no need as they aren't available longterm anyway ...
         if re.search(r"Preview|RC[0-9]|Beta|No key is required for this product", productnames):
             continue
         # productnames = correct_name(productnames)
@@ -157,15 +229,22 @@ def main():
         sys.exit("ERROR: %s not found." % p)
     # Get names of all XML files
     f = {}
-    for r, _, fnames in os.walk(p):
-        for fn in fnmatch.filter(fnames, '*.xml'):
-            f[os.path.join(r, fn)] = fn
+    # Either take a single .xml file
+    if (len(sys.argv) == 2) and fnmatch.fnmatch(sys.argv[1], '*.xml'):
+        xmlfname = os.path.realpath(sys.argv[1])
+        print("Single XML file: {}".format(xmlfname), file=sys.stderr)
+        f[xmlfname] = {}
+    # ... or a directory full of them
+    else:
+        for r, _, fnames in os.walk(p):
+            for fn in fnmatch.filter(fnames, '*.xml'):
+                f[os.path.join(r, fn)] = fn
     keys = {}
     fkeys = {}
     fsets = {}
     for fn in sorted(f.keys()):
-        if not f[fn] in fkeys:
-            fkeys[f[fn]] = {}
+        if fn not in fkeys:
+            fkeys[fn] = {}
         xmldata = ""
         with io.open(fn, "r", encoding="utf-8") as xmlfile:
             # \u2019 (thin space) is contained in some exported XML files
@@ -180,7 +259,7 @@ def main():
             print("Error: with file %s: %s. Ignoring that file." % (fn, e), file=sys.stderr)
             continue
         for k, v in genkey(tree):
-            fkeys[f[fn]][k] = v
+            fkeys[fn][k] = v
             if k in keys:
                 if keys[k] != v:
                     if keys[k]["Name"] != correct_name(v["Name"]):  # is it the same?

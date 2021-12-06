@@ -9,3 +9,5 @@ KeysExport.xml
 *_KeysExport.xml
 .venv/
 .hg/
+likely-unneeded/
+superfluous/

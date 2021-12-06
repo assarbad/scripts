@@ -1,5 +1,6 @@
 KEYS:=$(sort $(wildcard keys/*.xml))
-TGTS:=$(addsuffix .SHA256SUM,MSDN-keys-xml.7z MSDN-keys-xml.tar.xz)
+TGTS.raw:=MSDN-keys-xml.7z MSDN-keys-xml.tar.xz
+TGTS:=$(addsuffix .SHA256SUM,$(TGTS.raw))
 
 all: $(TGTS) allkeys.txt SHA256SUMS
 
@@ -24,13 +25,19 @@ MSDN-keys-xml.tar: $(KEYS) SHA256SUMS
 	test -d "keys" && tar -cf $@ $^ || true
 
 clean:
-	rm -f $(TGTS) *.bak
+	rm -f $(TGTS) $(TGTS.raw) *.bak
 
 CLEAN: clean
 	rm -f allkeys.txt SHA256SUM
 
-rebuild: clean all
+rmkeys:
+	rm -f allkeys.txt
 
+rebuild: clean all
+REBUILD: CLEAN all
+
+renew-keys: rmkeys allkeys.txt
 keys: allkeys.txt
 
-.PHONY: all clean CLEAN rebuild keys
+.PHONY: all clean CLEAN rebuild REBUILD keys rmkeys renew-keys
+.PRECIOUS: $(TGTS.raw)

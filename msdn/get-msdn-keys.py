@@ -113,6 +113,7 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
                     dlkeys.rename(newname)
                 except FileNotFoundError as exc:
                     print(str(exc), file=sys.stderr)
+            print("Quitting marionette browser", file=sys.stderr)
             driver.quit()
 
 
