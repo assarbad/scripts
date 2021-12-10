@@ -202,8 +202,8 @@ def dumpkeys(keys):
         # for issues in [k for k in keys if k[1] is None]:
         #     print("WARNING: %s %s" % (pd, repr(issues)), file=sys.stderr)
         # Sort by date entries (primary) and key (secondary)
-        if len(keys) > 1:
-            print(repr(keys[1]), file=sys.stderr)
+        # if len(keys) > 1:
+        #     print(repr(keys[1]), file=sys.stderr)
         for key in sorted(keys, key=lambda v: (v[1][0:2] if v[1] is not None else (0, 0,), v[0])):
             ktype = " {%s}" % key[2]
             if len(key) > 1 and not key[1] is None:
@@ -223,7 +223,7 @@ def dumpkeys(keys):
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit("Usage: %s <directory with XML files>" % sys.argv[0])
+        sys.exit("Usage: %s <directory with XML files|single XML file>" % sys.argv[0])
     p = sys.argv[1]
     if not os.path.exists(p):
         sys.exit("ERROR: %s not found." % p)
