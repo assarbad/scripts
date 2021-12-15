@@ -12,7 +12,10 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
-from functools import cache
+try:
+    from functools import cache
+except ImportError:
+    from functools import lru_cache as cache
 # A script to parse the XML from exported key lists (MSDN)
 
 good_keychars = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-")
