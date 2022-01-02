@@ -21,6 +21,6 @@ make -C "$CURRABSPATH/$DIRNAME" TAGS="bindata sqlite sqlite_unlock_notify" build
 ( cd "$CURRABSPATH/$DIRNAME" && sha256sum gitea|tee gitea.SHA256SUM )
 # Should be in the overrides
 if [[ -n "$TGTPATH" && -d "$TGTPATH" ]]; then
-        cp -a "$CURRABSPATH/$DIRNAME/gitea" "$TGTPATH"/
+        cp -a "$CURRABSPATH/$DIRNAME"/gitea{,.SHA256SUM} "$TGTPATH"/
 fi
 set +e

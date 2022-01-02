@@ -73,11 +73,13 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
         if headless:
             print("Not showing (marionette) browser UI")
             options.headless = True
-        # if profile_path:
-        #     options.set_preference('profile', profile_path)
-        options.ensure_clean_session = True
-        options.set_preference('browser.cache.disk.enable', False)
-        options.set_preference('browser.cache.memory.enable', True)
+        if profile_path and os.path.isdir(profile_path):
+            print("Using profile path: '{}'".format(profile_path))
+            options.set_preference('profile', profile_path)
+        else:
+            options.ensure_clean_session = True
+            options.set_preference('browser.cache.disk.enable', False)
+            options.set_preference('browser.cache.memory.enable', True)
         options.set_preference('browser.cache.offline.enable', False)
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.manager.showWhenStarting", False)
@@ -205,6 +207,9 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
         claims = driver.find_elements(By.CSS_SELECTOR, "a.claim-key-link")
         num_claims = len(claims)
         print("\t{} links with 'Claim Key'".format(num_claims), file=sys.stderr)
+        if not num_claims:
+            print("\tNothing to do!", file=sys.stderr)
+            return
 
         driver.implicitly_wait(10)
 
@@ -295,8 +300,8 @@ def parse_args():
                         help="Will skip renaming the KeysExport.xml to YYYY-MM-DD_KeysExport.xml")
     parser.add_argument("-s", "--show-browser", action="store_true",
                         help="Will show the browser window of the marionette geckodriver. The effect of this is _not_ to pass '--headless' to geckodriver.")
-    parser.add_argument("-p", "--profile", action="store_true",
-                        help="Allows to set the browser profile path to use.")
+    parser.add_argument("-p", "--profile", action="store",
+                        help="Allows to set the browser profile path to use (WORK IN PROGRESS).")
     return parser.parse_args()
 
 

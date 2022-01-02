@@ -4,4 +4,6 @@ python -m pip install -U --user pip pipx
 hash -r
 pipx install pipenv
 hash -r
+pipenv sync
+hash -r
 pipenv shell
