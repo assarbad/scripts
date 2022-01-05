@@ -45,7 +45,6 @@ du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 durt:cauebs/durt
 dutree:nachoparker/dutree
-emplace:tversteeg/emplace
 eureka:simeg/eureka
 eva:NerdyPepper/eva
 exa:ogham/exa
@@ -115,7 +114,6 @@ vivid:sharkdp/vivid
 vopono:jamesmcm/vopono
 watchexec-cli:watchexec:watchexec/watchexec
 websocat:vi/websocat
-xplr:sayanarijit/xplr
 xsv:BurntSushi/xsv
 yadf:jRimbault/yadf
 zenith:bvaisvil/zenith
@@ -124,6 +122,7 @@ zrs:fauxfaux/zrs
 "
 
 # Issues:
+# emplace:tversteeg/emplace (needs investigating)
 # kmon:orhun/kmon (won't link statically)
 # xplr:sayanarijit/xplr (mlua crate fails with musl-gcc)
 
