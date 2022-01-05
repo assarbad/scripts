@@ -6,7 +6,8 @@ OPENSSL_ARCH=${OPENSSL_ARCH:-x86}
 ZLIBURL="https://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in chmod cp curl date dirname mkdir readlink sed tee grep ldd rustup sha256sum sort strip tar wget xz cargo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+((${BASH_VERSION%%.*} >= 4)) || { echo -e "${cR}ERROR:${cZ}: expecting a minimum Bash version of 4. You have ${BASH_VERSION}."; exit 1; }
+for tool in chmod cp curl date dirname env make mkdir readlink sed tee grep ldd rustup sha256sum sort strip tar wget xz cargo; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 BASEDIR="${BASEDIR:-$(pwd)}"
 [[ -f "$BASEDIR/.cacherc" ]] && . .cacherc
@@ -20,6 +21,8 @@ if ! rustup target list --installed|grep -q "$TARGET"; then
 	exit 1
 fi
 # These can be installed using 'cargo install' and statically linked against musl libc
+# Format: [@branch-tip:]crate-name:[binary-name:]url
+#     or: [~tag-name:]crate-name:[binary-name:]url
 DEFAULT_SIMPLE_INSTALLS="\
 @main:waitfor:aeshirey/waitfor
 @master:bookmark:Szymongib/bookmark
@@ -37,6 +40,7 @@ diffr:mookid/diffr
 dirstat-rs:dirstat:scullionw/dirstat-rs
 diskonaut:imsnif/diskonaut
 diskus:sharkdp/diskus
+dtool:guoxbin/dtool
 du-dust:dust:bootandy/dust
 dupe-krill:kornelski/dupe-krill
 durt:cauebs/durt
@@ -47,11 +51,12 @@ eva:NerdyPepper/eva
 exa:ogham/exa
 fastmod:facebookincubator/fastmod
 fd-find:fd:sharkdp/fd
-fddf://lib.rs/crates/fddf
+fddf:birkenfeld/fddf
 find-files:ff:vishaltelangre/ff
 fselect:jhspetersson/fselect
 funzzy:cristianoliveira/funzzy
 gfold:nickgerace/gfold
+gifski:ImageOptim/gifski
 git-absorb:tummychow/git-absorb
 git-brws:rhysd/git-brws
 git-delta:delta:dandavison/delta
@@ -65,7 +70,6 @@ hexyl:sharkdp/hexyl
 huniq:koraa/huniq
 hyperfine:sharkdp/hyperfine
 jql:yamafaktory/jql
-kmon:orhun/kmon
 kondo:tbillington/kondo
 lfs:Canop/lfs
 licensor:raftario/licensor
@@ -101,7 +105,7 @@ starship:starship/starship
 svgcleaner:RazrFalcon/svgcleaner
 tealdeer:tldr:dbrgn/tealdeer
 tiny:osa1/tiny
-tokei://lib.rs/crates/tokei
+tokei:XAMPPRocky/tokei
 topgrade:r-darwish/topgrade
 treesum:anderejd/treesum
 vcprompt:sscherfke/rust-vcprompt
@@ -111,17 +115,22 @@ vivid:sharkdp/vivid
 vopono:jamesmcm/vopono
 watchexec-cli:watchexec:watchexec/watchexec
 websocat:vi/websocat
+xplr:sayanarijit/xplr
 xsv:BurntSushi/xsv
 yadf:jRimbault/yadf
 zenith:bvaisvil/zenith
-zoxide://lib.rs/crates/zoxide
+zoxide:ajeetdsouza/zoxide
 zrs:fauxfaux/zrs
 "
-# wool:grapegrip/wool
-# Candidates or temporarily removed:
-# * amp:jmacdonald/amp
-# * dtool:guoxbin/dtool
-#   -> failed to select a version for the requirement `zeroize = "^0.9.3"`
+
+# Issues:
+# kmon:orhun/kmon (won't link statically)
+# xplr:sayanarijit/xplr (mlua crate fails with musl-gcc)
+
+# Crates for which we want to pass --locked and --force respectively to 'cargo install' (the assigned value isn't important, the keys are)
+declare -A CARGO_LOCKED=( ["sccache"]=1 ["xplr"]=1 ["zoxide"]=1 )
+declare -A CARGO_FORCE=( ["xplr"]=1 )
+
 if (($# > 0)); then
 	SIMPLE_INSTALLS="$1"
 	shift
@@ -210,11 +219,11 @@ function cargo_install
 	CC="musl-gcc"
 	# Binaries go into subfolder named ./bin underneath --root
 	if [[ "${CRATENAME:0:1}" == "@" ]]; then
-		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --branch "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
+		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install ${CARGO_LOCKED[$CRATENAME]:+--locked }${CARGO_FORCE[$CRATENAME]:+--force }--target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --branch "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
 	elif [[ "${CRATENAME:0:1}" == "~" ]]; then
-		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --tag "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
+		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install ${CARGO_LOCKED[$CRATENAME]:+--locked }${CARGO_FORCE[$CRATENAME]:+--force }--target "$TARGET" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" --git "$HTTPS_URL" --tag "${CRATENAME:1:${#CRATENAME}}" ) && return 0 || return 1
 	else
-		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install --target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
+		( set -x; env CPATH="$INCPATHS" LIBRARY_PATH="$LIBPATHS" OPENSSL_STATIC=1 OPENSSL_DIR="$OPENSSL_DIR" CC="$CC" cargo install ${CARGO_LOCKED[$CRATENAME]:+--locked }${CARGO_FORCE[$CRATENAME]:+--force }--target "$TARGET" "$CRATENAME" --target-dir "$TGTDIR/crates/$CRATENAME" --root "$TGTDIR" ) && return 0 || return 1
 	fi
 	if [[ -x "$TGTDIR/bin/$BINNAME" ]]; then
 		if ! ldd "$TGTDIR/bin/$BINNAME"|grep -q 'statically linked'; then
