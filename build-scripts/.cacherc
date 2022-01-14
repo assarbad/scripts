@@ -1,1 +1,12 @@
-CACHEDIR="/data/$USER/cache"
+# vim: set autoindent smartindent ts=4 sw=4 sts=4 noet filetype=sh:
+
+if [[ -n "$TEMPDIR" ]]; then
+	CACHEDIR="${TEMPDIR%/*}"
+	if [[ "cache" != "${CACHEDIR##*/}" ]]; then
+		echo -e "WARNING: unsetting TEMPDIR, since it doesn't match our expectations (TEMPDIR=$TEMPDIR)."
+		unset TEMPDIR
+		CACHEDIR="/data/$USER/cache"
+	fi
+else
+	CACHEDIR="/data/$USER/cache"
+fi

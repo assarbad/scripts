@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+#
+# NOTE: you can set NOCLEAN=1 to prevent the script from scrapping the scratch space
+# NOTE: you can override TEMPDIR with a previous scratch space path, also
+# NOTE: you can set SCCACHE=1 to have sscache do its magic and save some time if repeatedly invoking this script
+#
 # Possible sources for interesting Rust-based stuff: https://lib.rs + crates.io + cli.rs
 TARGET=${TARGET:-x86_64-unknown-linux-musl}
 OPENSSL_REFNAME=${OPENSSL_REFNAME:-OpenSSL_1_1_1l}
@@ -111,7 +116,6 @@ vcprompt:sscherfke/rust-vcprompt
 verco:matheuslessarodrigues/verco
 viu:atanunq/viu
 vivid:sharkdp/vivid
-vopono:jamesmcm/vopono
 watchexec-cli:watchexec:watchexec/watchexec
 websocat:vi/websocat
 xsv:BurntSushi/xsv
@@ -125,9 +129,10 @@ zrs:fauxfaux/zrs
 # emplace:tversteeg/emplace (needs investigating)
 # kmon:orhun/kmon (won't link statically)
 # xplr:sayanarijit/xplr (mlua crate fails with musl-gcc)
+# vopono:jamesmcm/vopono
 
 # Crates for which we want to pass --locked and --force respectively to 'cargo install' (the assigned value isn't important, the keys are)
-declare -A CARGO_LOCKED=( ["sccache"]=1 ["xplr"]=1 ["zoxide"]=1 )
+declare -A CARGO_LOCKED=( ["xplr"]=1 ["zoxide"]=1 )
 declare -A CARGO_FORCE=( ["xplr"]=1 )
 
 if (($# > 0)); then
@@ -180,10 +185,10 @@ function openssl_build
 	git_checkout "https://github.com/sabotage-linux/kernel-headers.git" "$KRNLSUBDIR" master "$TEMPDIR" || return $?
 	( cd "$TEMPDIR/openssl"; set -x; ln -s "$TEMPDIR/$KRNLSUBDIR" "$KRNLSUBDIR" ) || { echo -e "${cR}ERROR:${cZ} failed to symlink kernel headers into OpenSSL source directory"; return 1; }
 	PREFIX="$TEMPDIR/openssl-dir"
-	( set -x; test -d "$PREFIX" && { rm -rf "$PREFIX"; exit 1; } || true ) || { echo -e "${cR}ERROR:${cZ} failed to clean out the OpenSSL installation directory"; return 1; }
+	( set -x; test -d "$PREFIX" && { rm -rf "$PREFIX" || exit 1; } || true ) || { echo -e "${cR}ERROR:${cZ} failed to clean out the OpenSSL installation directory"; return 1; }
 	( set -x; mkdir "$PREFIX" ) || { echo -e "${cR}ERROR:${cZ} failed to create OpenSSL installation directory"; return 1; }
 	#type ccache > /dev/null 2>&1 && CC="ccache musl-gcc" || CC="musl-gcc"
-	CC="musl-gcc"
+	[[ -n "$SCCACHE" ]] && CC="sccache musl-gcc" || CC="musl-gcc"
 	( cd "$TEMPDIR/openssl"; set -x; \
 		env CC="$CC" CPPFLAGS="-Ikernel-headers/$OPENSSL_ARCH/include" bash -c "./config --prefix=$PREFIX no-engine no-shared no-threads no-ts && make -j $PM" \
 	) || { echo -e "${cR}ERROR:${cZ} failed to install OpenSSL"; return 1; }
@@ -304,37 +309,60 @@ function strip_and_store_binaries
 	( CURRDIR="$(pwd)"; set -x; pushd "$CURRDIR"; sha256sum "$TARBALL.txz" | tee "$TARBALL.txz.SHA256SUM" ) || { echo -e "${cR}ERROR:${cZ} failed to compute hash of package"; exit 1; }
 }
 
+if [[ -n "$SCCACHE" ]]; then
+	export SCCACHE_DIR="$CACHEDIR/sccache_dir"
+	export RUSTC_WRAPPER="sccache"
+	echo -e "${cG}CACHE:${cZ} starting ${cW}sccache${cZ}"
+	sccache --start-server
+fi
 # Ensure we clean up after ourselves in any case
 let TIME_START=$(date +%s)
-trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+# Clean exit, or leave everything in place if NOCLEAN environment variable was set
+if [[ -z "$NOCLEAN" ]]; then
+	trap 'echo "Removing temporary directory"; ( set -x; rm -rf "'$TEMPDIR'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+else
+	trap 'echo "Reuse the temporary directory by invoking with: TEMPDIR='$TEMPDIR'"; trap - INT TERM EXIT; exit $?' INT TERM EXIT
+fi
 SRCTARBALLDIR="${TEMPDIR%/*}/source-tarballs"
 ZLIBPKG="$SRCTARBALLDIR/${ZLIBURL##*/}"
-echo -e "${cW}INFO:${cZ} fetching zlib source"
-[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
-if [[ -f "$ZLIBPKG" ]]; then
-	echo -e "${cW}${ZLIBURL##*/} already downloaded, using cached copy${cZ}"
+if [[ -n "$PREREQ" ]]; then
+	echo -e "${cW}INFO:${cZ} Skipping building of prerequisites as requested, but checking for directories"
+	if [[ ! -d "$TEMPDIR/zlib/tempinstall" ]]; then
+		echo -e "${cR}ERROR:${cZ} zlib installation directory not found"
+		exit 1
+	fi
+	if [[ ! -d "$TEMPDIR/openssl-dir" ]]; then
+		echo -e "${cR}ERROR:${cZ} OpenSSL installation directory not found"
+		exit 1
+	fi
 else
-	wget -nc -O "$ZLIBPKG" "$ZLIBURL" || curl -o "$ZLIBPKG" "$ZLIBURL" || { echo -e "${cR}ERROR:${cZ} failed to download $ZLIBURL"; exit 1; }
-fi
-echo "$ZLIBSHA256  $ZLIBPKG"|sha256sum -c ||  { echo -e "${cR}ERROR:${cZ} SHA-2 (256-bit) hash does not match!"; exit 1; }
-( rm -rf "$TEMPDIR/zlib"; mkdir -p "$TEMPDIR/zlib" )
-if echo -ne "${cW}INFO:${cZ} unpacking zlib" && tar --strip-components=1 -C "$TEMPDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$TEMPDIR/zlib/tempinstall"; then
-	echo -e " ${cG}[OK]${cZ}"
-else
-	echo -e " ${cR}[failed]${cZ}"
-	exit 1
-fi
-echo -e "Configuring and building ${cW}zlib${cZ}"
-(
-	cd "$TEMPDIR/zlib" && \
-		( set -x; $DBGCONFIGURE./configure --static "--prefix=$TEMPDIR/zlib/tempinstall" ) && \
-		make --no-print-directory -C "$TEMPDIR/zlib" -j $PM && \
-		make --no-print-directory -C "$TEMPDIR/zlib" install
-) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
-if [[ -z "$NOSSL" ]]; then
-	echo -e "${cW}INFO:${cZ} building OpenSSL"
-	openssl_build || exit 1
-	echo -e "${cG}SUCCESS:${cZ} built OpenSSL"
+	echo -e "${cW}INFO:${cZ} fetching zlib source"
+	[[ -d "$SRCTARBALLDIR" ]] || mkdir -p "$SRCTARBALLDIR"
+	if [[ -f "$ZLIBPKG" ]]; then
+		echo -e "${cW}${ZLIBURL##*/} already downloaded, using cached copy${cZ}"
+	else
+		wget -nc -O "$ZLIBPKG" "$ZLIBURL" || curl -o "$ZLIBPKG" "$ZLIBURL" || { echo -e "${cR}ERROR:${cZ} failed to download $ZLIBURL"; exit 1; }
+	fi
+	echo "$ZLIBSHA256  $ZLIBPKG"|sha256sum -c ||  { echo -e "${cR}ERROR:${cZ} SHA-2 (256-bit) hash does not match!"; exit 1; }
+	( rm -rf "$TEMPDIR/zlib"; mkdir -p "$TEMPDIR/zlib" )
+	if echo -ne "${cW}INFO:${cZ} unpacking zlib" && tar --strip-components=1 -C "$TEMPDIR/zlib" -xf "$ZLIBPKG" && mkdir -p "$TEMPDIR/zlib/tempinstall"; then
+		echo -e " ${cG}[OK]${cZ}"
+	else
+		echo -e " ${cR}[failed]${cZ}"
+		exit 1
+	fi
+	echo -e "Configuring and building ${cW}zlib${cZ}"
+	(
+		cd "$TEMPDIR/zlib" && \
+			( set -x; $DBGCONFIGURE./configure --static "--prefix=$TEMPDIR/zlib/tempinstall" ) && \
+			make --no-print-directory -C "$TEMPDIR/zlib" -j $PM && \
+			make --no-print-directory -C "$TEMPDIR/zlib" install
+	) || { echo -e "${cR}ERROR:${cZ} zlib failed to build."; exit 1; }
+	if [[ -z "$NOSSL" ]]; then
+		echo -e "${cW}INFO:${cZ} building OpenSSL"
+		openssl_build || exit 1
+		echo -e "${cG}SUCCESS:${cZ} built OpenSSL"
+	fi
 fi
 for tool in $SIMPLE_INSTALLS; do
 	echo -e "${cW}INFO:${cZ} about to build ${cW}${tool%%:*}${cZ} ($tool)"
@@ -345,7 +373,9 @@ for tool in $SIMPLE_INSTALLS; do
 	fi
 done
 strip_and_store_binaries "$TEMPDIR"
-# Clean exit, or leave everything in place if NOCLEAN environment variable was set
-[[ -n "$NOCLEAN" ]] && trap - INT TERM EXIT
 let TIME_END=$(date +%s)
 show_time_diff $TIME_START $TIME_END "Overall runtime: %s (m:ss) with $PM parallel job(s)"
+if [[ -n "$SCCACHE" ]]; then
+	sccache --stop-server
+	echo -e "${cG}CACHE:${cZ} stopped ${cW}sccache${cZ}"
+fi
