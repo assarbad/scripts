@@ -18,4 +18,4 @@ License
 -------
 The scripts are placed into the PUBLIC DOMAIN/CC0.
 
-.. _premake4: https://bitbucket.org/windirstat/premake-stable/
+.. _premake4: https://sourceforge.net/p/windirstat/premake-stable/

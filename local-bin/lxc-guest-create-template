@@ -57,8 +57,8 @@ chmod -R o= /root
 cp /usr/share/doc/tmux/examples/bash_completion_tmux.sh /etc/bash_completion.d/
 sed -i '/^%sudo/s/ALL$/NOPASSWD:ALL/' "/etc/sudoers"
 rm -f "/home/oliver/.bashrc" "/root/.bashrc"
-hg --cwd "/home/oliver" clone https://bitbucket.org/assarbad/dotfiles .dotfiles
-hg --cwd "/root" clone https://bitbucket.org/assarbad/dotfiles .dotfiles
+hg --cwd "/home/oliver" clone ssh://server/hg/public/dotfiles .dotfiles
+hg --cwd "/root" clone ssh://server/hg/public/dotfiles .dotfiles
 make -C "/home/oliver/.dotfiles" "TGTDIR=/home/oliver" install
 make -C "/root/.dotfiles" "TGTDIR=/root" install
 PATH="$FAKE_PATH" apt-get -y --purge autoremove
