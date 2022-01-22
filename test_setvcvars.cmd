@@ -1,8 +1,8 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2015-2019, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
-::: Available from: <https://bitbucket.org/assarbad/scripts/>
+::: 2015-2022, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: Available from Git mirror: <https://github.com/assarbad/scripts>
 :::
 ::: PURPOSE:    This script tests the setvcvars.cmd script.
 :::
@@ -12,7 +12,37 @@
 :::             software.
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 cls
-set TESTSTORUN=HelpSwitches VS_nosuch VS2002 VS2003 VS2005 VS2008 VS2010 VS2012 VS2013 VS2015 VS2017 VS2019 VS2005_amd64 VS2008_amd64 VS2010_amd64 VS2012_amd64 VS2013_amd64 VS2015_amd64 VS2017_amd64 VS2019_amd64 VS2005_ia64 VS2008_ia64 VS2010_ia64 VS2012_ia64 VS2013_ia64 VS2015_ia64 VS2017_ia64 VS2019_ia64
+set TESTSTORUN=HelpSwitches ^
+VS_nosuch ^
+VS2002 ^
+VS2003 ^
+VS2005 ^
+VS2008 ^
+VS2010 ^
+VS2012 ^
+VS2013 ^
+VS2015 ^
+VS2017 ^
+VS2019 ^
+VS2022 ^
+VS2005_amd64 ^
+VS2008_amd64 ^
+VS2010_amd64 ^
+VS2012_amd64 ^
+VS2013_amd64 ^
+VS2015_amd64 ^
+VS2017_amd64 ^
+VS2019_amd64 ^
+VS2022_amd64 ^
+VS2005_ia64 ^
+VS2008_ia64 ^
+VS2010_ia64 ^
+VS2012_ia64 ^
+VS2013_ia64 ^
+VS2015_ia64 ^
+VS2017_ia64 ^
+VS2019_ia64 ^
+VS2022_ia64
 for %%i in (%TESTSTORUN%) do @(
   @echo.
   @echo TEST %%i
@@ -186,6 +216,20 @@ call %~dp0setvcvars.cmd 16.0
 if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @goto :EOF
+:VS2022
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd vs2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 17.0
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@goto :EOF
 :: Some versions that don't exist
 :VS_nosuch
 @setlocal&pushd .&echo on
@@ -325,6 +369,20 @@ call %~dp0setvcvars.cmd amd64 16.0
 if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @goto :EOF
+:VS2022_amd64
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 vs2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 17.0
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@goto :EOF
 :: Checking ia64 toolset on all
 :VS2005_ia64
 @setlocal&pushd .&echo on
@@ -435,6 +493,20 @@ if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @setlocal&pushd .&echo on
 call %~dp0setvcvars.cmd ia64 16.0
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@goto :EOF
+:VS2022_ia64
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 vs2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 2022
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd ia64 17.0
 if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @goto :EOF
