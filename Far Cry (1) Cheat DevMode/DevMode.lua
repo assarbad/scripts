@@ -270,7 +270,7 @@ end
 
 default_speeds = nil
 
-function AccelerateSpeedsBy(val)
+function AccelerateSpeedsBy(val, factor)
 	if _localplayer then
 		-- Save default speeds
 		if default_speeds == nil then
@@ -281,34 +281,47 @@ function AccelerateSpeedsBy(val)
 				end
 			end
 		end
+		local f = factor or 1.0
 		for k, v in _localplayer.move_params do
 			if (strfind(k, "speed_")) then
-				_localplayer.move_params[k] = _localplayer.move_params[k] + val
+				_localplayer.move_params[k] = (_localplayer.move_params[k] * f) + val
 			end
 		end
 		_localplayer.cnt:SetMoveParams(_localplayer.move_params)
 	end
 end
 
+function ShowSpeeds(descr)
+	if _localplayer then
+		local speedstr = ""
+		for k, v in _localplayer.move_params do
+			if (strfind(k, "speed_")) and not (strfind(k, "_back") or strfind(k, "_strafe")) then 
+				speedstr = speedstr .. format(" %s=%.1f, ", k, _localplayer.move_params[k])
+			end
+		end
+		Hud:AddMessage(format("[CHEAT]: Current %sspeeds:" .. speedstr, descr or ""));
+	end
+end
+
 function GoFaster()
-	AccelerateSpeedsBy(0.5)
-	Hud:AddMessage("[CHEAT]: Go faster");
+	AccelerateSpeedsBy(0.5, nil)
+	ShowSpeeds("faster ")
 end
 
 function GoSlower()
-	AccelerateSpeedsBy(-0.5)
-	Hud:AddMessage("[CHEAT]: Go slower");
+	AccelerateSpeedsBy(-0.5, nil)
+	ShowSpeeds("slower ")
 end
 
 function DefaultSpeeds()
 	if (default_speeds ~= nil) and _localplayer then
-		Hud:AddMessage("[CHEAT]: Revert to default speed");
 		for k, v in _localplayer.move_params do
 			if (strfind(k, "speed_")) then
 				_localplayer.move_params[k] = default_speeds[k]
 			end
 		end
 		_localplayer.cnt:SetMoveParams(_localplayer.move_params)
+		ShowSpeeds("default ")
 	end
 end
 Input:BindCommandToKey("#DefaultSpeeds()","=",1);
@@ -319,17 +332,23 @@ function GodLike_Client_OnTimerCustom(self)
 	if (Hud and self == _localplayer) then
 		self.cnt.health = self.cnt.max_health
 		self.cnt.armor = self.cnt.max_armor
+		self.cnt.stamina = 100
 	end
 end
 
 function ToggleGod()
 	if (Hud and _localplayer) then
 		if _localplayer.Client_OnTimerCustom == nil then
-			Hud:AddMessage("[CHEAT]: (Say in Homer Simpson's voice) I am invincible!");
 			_localplayer.Client_OnTimerCustom = GodLike_Client_OnTimerCustom
+			_localplayer.NoFallDamage = 1
+			Hud:AddMessage("[CHEAT]: (Say in Homer Simpson's voice) I am invincible!");
+			DefaultSpeeds()
+			AccelerateSpeedsBy(0, 2.5)
 		else
-			Hud:AddMessage("[CHEAT]: ... and back to mortal");
 			_localplayer.Client_OnTimerCustom = nil
+			_localplayer.NoFallDamage = nil
+			DefaultSpeeds()
+			Hud:AddMessage("[CHEAT]: ... and back to mortal");
 		end
 	end
 end
