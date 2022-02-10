@@ -2,25 +2,14 @@
 cl_display_hud = 1
 cl_drunken_cam = 0
 ThirdPersonView = 0
---p_model = "objects/characters/pmodels/hero/hero.cgf"
 
 --Input:BindCommandToKey('#Movie:StopAllCutScenes()',"F7",1);
 --Input:BindCommandToKey("\\SkipCutScene","F7",1);
 
 -- Developer Cheat keys ---
 
---- non standard key bindings ---
--- Please NEWER use F9,F10 keys (reserved for debug purposes) (Vlad)
-
---Input:BindCommandToKey("#SwitchCameraMode()","f1",1);
--- Input:BindCommandToKey("#r_GetScreenShot=1","f12",1); -- this is now bindable
 Input:BindCommandToKey("#ToggleAIInfo()","f11",1);
-
---Input:BindCommandToKey("#ToggleScreenshotMode()","f11",1);
-
 Input:BindCommandToKey("#ToggleNewDesignerMode(10,15,0)","f4",1);
-
--- to be removed
 Input:BindCommandToKey("#GotoNextSpawnpoint()","f2",1);
 Input:BindCommandToKey("#MoreAmmo()","o",1);
 Input:BindCommandToKey("#AllWeapons()","p",1);
@@ -28,21 +17,6 @@ Input:BindAction("SAVEPOS", "f9", "default");
 Input:BindAction("LOADPOS", "f10", "default");
 Input:BindCommandToKey("#ToggleNewDesignerMode(40,120,1)","f3",1);
 Input:BindCommandToKey("#System:ShowDebugger();", "f8", 1);
-
--- to be removed
-
--- removed
---Input:BindCommandToKey("#Game.Save()","f5",1);
---Input:BindCommandToKey("#Game.Load()","f6",1);
---Input:BindCommandToKey("#DefaultSpeed()","=",1);
---Input:BindCommandToKey("#DecreaseSpeed()","<",1);
---Input:BindCommandToKey("#IncreaseSpeed()",">",1);
---Input:BindCommandToKey("#p_single_step_mode=1-p_single_step_mode","[",1);
---Input:BindCommandToKey("#p_do_step=1","]",1);
---Input:BindCommandToKey("#TCM()",".",1);
---Input:BindCommandToKey("#e_hires_screenshoot=4","f10",1);
--- removed
-
 
 --- temp variables for functions below ---
 prev_speed_walk=p_speed_walk;
@@ -174,39 +148,6 @@ function ToggleScreenshotMode()
 	end
 end
 
--- function DecreaseSpeed()
-
--- 	if tonumber(p_speed_walk)>5 then
--- 		p_speed_walk=p_speed_walk-5;
--- 		p_speed_run=p_speed_run-5;
--- 		Hud:AddMessage("Decreased player speed by 5");
--- 		System:LogToConsole("Decreased player speed by 5");
--- 	else
--- 		Hud:AddMessage("You can not go any slower!");
--- 		System:LogToConsole("You can not go any slower!");
--- 	end 
--- end
-
--- function IncreaseSpeed()
-
--- 	if tonumber(p_speed_walk)<500 then
--- 		p_speed_walk=p_speed_walk+5;
--- 		p_speed_run=p_speed_run+5;
--- 		Hud:AddMessage("Increased player speed by 5");
--- 		System:LogToConsole("Increased player speed by 5");
--- 	else
--- 		Hud:AddMessage("You can not go any faster!");
--- 		System:LogToConsole("You can not go any faster!");
--- 	end 
--- end
-
--- function DefaultSpeed()
-
--- 	p_speed_walk=default_speed_walk;
--- 	p_speed_run=default_speed_run;
--- 	System:LogToConsole("Player speed reset");
--- end
-
 function TeleportToSpawn(n)
 	local player = _localplayer;
 	local pos = Server:GetRespawnPoint("Respawn"..n);
@@ -328,26 +269,76 @@ Input:BindCommandToKey("#DefaultSpeeds()","=",1);
 Input:BindCommandToKey("#GoSlower()","<",1);
 Input:BindCommandToKey("#GoFaster()",">",1);
 
+-- If set, BasicPlayer:Client_OnTimer calls self:Client_OnTimerCustom()
 function GodLike_Client_OnTimerCustom(self)
 	if (Hud and self == _localplayer) then
-		self.cnt.health = self.cnt.max_health
+		self.cnt.health = self.cnt.max_health -- 255 is the maximum for players (network protocol limitation)
 		self.cnt.armor = self.cnt.max_armor
 		self.cnt.stamina = 100
+		-- This isn't a battery anymore, it's a microscopic fusion reactor 😁
+		self:ChangeEnergy(self.MaxEnergy)
+		-- available effects: 1= reset, 2= team color, 3= invulnerable, 4= heatsource, 5= stealth mode, 6= mutated arms
+		-- self.iPlayerEffect = 5 
+		-- self.bUpdatePlayerEffectParams=1
 	end
 end
+
+origdmg = {}
 
 function ToggleGod()
 	if (Hud and _localplayer) then
 		if _localplayer.Client_OnTimerCustom == nil then
+			_localplayer.cnt.max_armor = 255
 			_localplayer.Client_OnTimerCustom = GodLike_Client_OnTimerCustom
 			_localplayer.NoFallDamage = 1
-			Hud:AddMessage("[CHEAT]: (Say in Homer Simpson's voice) I am invincible!");
+			-- Water won't be our grave
+			if origdmg.IsDrowning == nil then
+				origdmg.IsDrowning = BasicPlayer.IsDrowning
+				BasicPlayer.IsDrowning = function(self) return nil end
+			end
+			-- We don't want to take damage
+			if origdmg.ApplyDamage == nil then
+				origdmg.ApplyDamage = GameRules.ApplyDamage
+				GameRules.ApplyDamage = function(self, target, damage, damage_type)
+					if target ~= _localplayer then
+						origdmg.ApplyDamage(self, target, damage, damage_type)
+					end
+				end
+			end
+			-- We don't want to take damage
+			if origdmg.OnDamage == nil then
+				origdmg.OnDamage = GameRules.OnDamage
+				GameRules.OnDamage = function(self, hit)
+					if hit.target ~= _localplayer then
+						origdmg.OnDamage(self, hit)
+					end
+				end
+			end
+			Hud:AddMessage(format("[CHEAT]: (Say in Homer Simpson's voice) I am invincible! [a=%.2f, e=%.2f, h=%.2f]", _localplayer.cnt.max_armor, _localplayer.MaxEnergy, _localplayer.cnt.max_health))
 			DefaultSpeeds()
 			AccelerateSpeedsBy(0, 2.5)
+			hud_screendamagefx = 0 -- Disable blurred screen when taking damage (there will still be visuals)
+			Hud:ResetDamage()
 		else
 			_localplayer.Client_OnTimerCustom = nil
 			_localplayer.NoFallDamage = nil
+			-- Reset to defailt BasicPlayer.IsDrowning()
+			if origdmg.IsDrowning ~= nil then
+				BasicPlayer.IsDrowning = origdmg.IsDrowning
+				origdmg.IsDrowning = nil
+			end
+			-- Reset to default GameRules.ApplyDamage()
+			if origdmg.ApplyDamage ~= nil then
+				GameRules.ApplyDamage = origdmg.ApplyDamage
+				origdmg.ApplyDamage = nil
+			end
+			-- Reset to default GameRules.ApplyDamage()
+			if origdmg.OnDamage ~= nil then
+				GameRules.OnDamage = origdmg.OnDamage
+				origdmg.OnDamage = nil
+			end
 			DefaultSpeeds()
+			hud_screendamagefx = 1 -- Re-enable screen blur
 			Hud:AddMessage("[CHEAT]: ... and back to mortal");
 		end
 	end
@@ -356,19 +347,27 @@ Input:BindCommandToKey("#ToggleGod()","backspace",1);
 
 -- Heat vision aka Cryvision
 function ToggleCryvision()
-	local cv = getglobal("r_Cryvision")
-	if (cv==0) then
-		setglobal("r_Cryvision", 1)
-	else
-		setglobal("r_Cryvision", 0)
-	end
-	cv = getglobal("r_Cryvision")
-	if (cv==0) then
-		System:LogToConsole("Cryvision OFF");
+	-- Don't even check for the goggles or swimming or anything 😁
+	if (ClientStuff.vlayers:IsActive("HeatVision")) then
+		ClientStuff.vlayers:DeactivateLayer("HeatVision")
 		Hud:AddMessage("[CHEAT]: Cryvision OFF");
 	else
-		System:LogToConsole("Cryvision ON");
+		ClientStuff.vlayers:ActivateLayer("HeatVision")
 		Hud:AddMessage("[CHEAT]: Cryvision ON");
 	end
+	-- local cv = getglobal("r_Cryvision")
+	-- if (cv==0) then
+	-- 	setglobal("r_Cryvision", 1)
+	-- else
+	-- 	setglobal("r_Cryvision", 0)
+	-- end
+	-- cv = getglobal("r_Cryvision")
+	-- if (cv==0) then
+	-- 	System:LogToConsole("Cryvision OFF");
+	-- 	Hud:AddMessage("[CHEAT]: Cryvision OFF");
+	-- else
+	-- 	System:LogToConsole("Cryvision ON");
+	-- 	Hud:AddMessage("[CHEAT]: Cryvision ON");
+	-- end
 end
 Input:BindCommandToKey("#ToggleCryvision()","i",1);
