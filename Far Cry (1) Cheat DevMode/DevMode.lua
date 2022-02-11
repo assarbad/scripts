@@ -299,7 +299,9 @@ function ToggleGod()
 			-- We don't want to take damage
 			if origdmg.ApplyDamage == nil then
 				origdmg.ApplyDamage = GameRules.ApplyDamage
+				--System:LogAlways(format("Before setting GameRules.ApplyDamage: lplayer = %s", tostring(_localplayer)))
 				GameRules.ApplyDamage = function(self, target, damage, damage_type)
+					--System:LogAlways(format("ApplyDamage: tgt = %s, lplayer = %s", tostring(target), tostring(_localplayer)))
 					if target ~= _localplayer then
 						origdmg.ApplyDamage(self, target, damage, damage_type)
 					end
@@ -308,7 +310,9 @@ function ToggleGod()
 			-- We don't want to take damage
 			if origdmg.OnDamage == nil then
 				origdmg.OnDamage = GameRules.OnDamage
+				--System:LogAlways(format("Before setting GameRules.OnDamage: lplayer = %s", tostring(_localplayer)))
 				GameRules.OnDamage = function(self, hit)
+					--System:LogAlways(format("OnDamage: tgt = %s, lplayer = %s", tostring(hit.target), tostring(_localplayer)))
 					if hit.target ~= _localplayer then
 						origdmg.OnDamage(self, hit)
 					end
