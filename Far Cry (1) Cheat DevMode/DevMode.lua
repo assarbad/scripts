@@ -160,14 +160,13 @@ end
 
 -- Give the player the passed weapon, load it if neccesary
 function AddWeapon(Name)
-
 	Game:AddWeapon(Name)
 	for i, CurWeapon in WeaponClassesEx do
 		if (i == Name) then
 			_localplayer.cnt:MakeWeaponAvailable(CurWeapon.id);
 		end
-		AmmoGalore()
 	end
+	AmmoGalore()
 end
 
 function AmmoGalore()
@@ -269,6 +268,22 @@ Input:BindCommandToKey("#DefaultSpeeds()","=",1);
 Input:BindCommandToKey("#GoSlower()","<",1);
 Input:BindCommandToKey("#GoFaster()",">",1);
 
+function UnlimitedAmmo(self)
+	self.fireparams.AmmoType = "Unlimited"
+	-- for wName, CurWeapon in WeaponClassesEx do
+	-- 	local wptbl = getglobal(wName)
+	-- 	for fpIdx, CurFireParameters in wptbl.FireParams do
+	-- 		for wIdx, wState in self.WeaponState do
+	-- 			if type(wIdx) == "number" and type(wState.AmmoInClip) == "table" then
+	-- 				wState.AmmoType = "Unlimited"
+	-- 				-- wState.AmmoInClip[fpIdx] = CurFireParameters.bullets_per_clip
+	-- 				-- print("test")
+	-- 			end
+	-- 		end
+	-- 	end
+	-- end
+end
+
 -- If set, BasicPlayer:Client_OnTimer calls self:Client_OnTimerCustom()
 function GodLike_Client_OnTimerCustom(self)
 	if (Hud and self == _localplayer) then
@@ -280,6 +295,7 @@ function GodLike_Client_OnTimerCustom(self)
 		-- available effects: 1= reset, 2= team color, 3= invulnerable, 4= heatsource, 5= stealth mode, 6= mutated arms
 		-- self.iPlayerEffect = 5 
 		-- self.bUpdatePlayerEffectParams=1
+		UnlimitedAmmo(self)
 	end
 end
 
@@ -323,6 +339,7 @@ function ToggleGod()
 			AccelerateSpeedsBy(0, 2.5)
 			hud_screendamagefx = 0 -- Disable blurred screen when taking damage (there will still be visuals)
 			Hud:ResetDamage()
+			UnlimitedAmmo(_localplayer)
 		else
 			_localplayer.Client_OnTimerCustom = nil
 			_localplayer.NoFallDamage = nil
