@@ -6,7 +6,7 @@
 #
 # Possible sources for interesting Rust-based stuff: https://lib.rs + crates.io + cli.rs
 TARGET=${TARGET:-x86_64-unknown-linux-musl}
-OPENSSL_REFNAME=${OPENSSL_REFNAME:-OpenSSL_1_1_1l}
+OPENSSL_REFNAME=${OPENSSL_REFNAME:-OpenSSL_1_1_1m}
 OPENSSL_ARCH=${OPENSSL_ARCH:-x86}
 ZLIBURL="https://zlib.net/zlib-1.2.11.tar.gz"
 ZLIBSHA256="c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1"
