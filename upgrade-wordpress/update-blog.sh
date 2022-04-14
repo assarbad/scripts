@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vim: set autoindent smartindent tabstop=4 shiftwidth=4 noexpandtab filetype=sh:
 [[ -t 1 ]] && { cG="\033[1;32m"; cR="\033[1;31m"; cB="\033[1;34m"; cW="\033[1;37m"; cY="\033[1;33m"; cG_="\033[0;32m"; cR_="\033[0;31m"; cB_="\033[0;34m"; cW_="\033[0;37m"; cY_="\033[0;33m"; cZ="\033[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
-for tool in find grep mktemp mysqldump perl sed sha1sum sudo tar wc wget; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
+for tool in find grep mysqldump perl sed sha1sum sudo tar wc wget; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 [[ -n "$DEBUG" ]] && set -x
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
 
@@ -43,7 +43,7 @@ function blog_update
 		fi
 	fi
 	# Make sure we clean up after ourselves
-	trap 'echo "Removing temporary download path"; ( set -x; rm -rf "'${UPDTGZ%/*}'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+	#trap 'echo "Removing temporary download path"; ( set -x; rm -rf "'${UPDTGZ%/*}'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
 	[[ -f "$WPCONFIG" ]] || WPCONFIG="$BASEDIR/wp-config.php"
 	# Import the DB credentials as variables by the same name as the defines in PHP
 	eval $(perl -pe "s/define\('(DB_(?:NAME|USER|PASSWORD|HOST))', '([^']+)'\);.+/\$1='\$2';/img;" "$WPCONFIG" 2>/dev/null|grep -E '^DB_(NAME|USER|PASSWORD|HOST)')
@@ -58,10 +58,11 @@ function blog_update
 	local OLDWPBKUP="$BASEDIR/${NOWDATE}_wordpress_backup_for_${DB_NAME}_wp${wp_version}.tgz"
 	OLDDBBKUP="$BASEDIR/${NOWDATE}_$DB_NAME.sql"
 	echo -e "Backing up ${cW}database $DB_NAME${cZ}"
+	# "--host=$DB_HOST" "--user=$DB_USER" "--password=$DB_PASSWORD"
 	if ( \
-		mysqldump "--host=$DB_HOST" "--user=$DB_USER" "--password=$DB_PASSWORD" -w "comment_approved not in ('spam', 'trash')" --opt "$DB_NAME" wp_comments \
+		sudo mysqldump --defaults-file=/etc/mysql/debian.cnf -w "comment_approved not in ('spam', 'trash')" --opt "$DB_NAME" wp_comments \
 		&& \
-		mysqldump "--host=$DB_HOST" "--user=$DB_USER" "--password=$DB_PASSWORD" --ignore-table=${DB_NAME}.wp_comments --opt "$DB_NAME" \
+		sudo mysqldump --defaults-file=/etc/mysql/debian.cnf --ignore-table=${DB_NAME}.wp_comments --opt "$DB_NAME" \
 		) > "$OLDDBBKUP"; then
 		echo -e "Backing up ${cW}folder${cZ}"
 		if ( set -x; tar -C "$BASEDIR" -czf "$OLDWPBKUP" "${BLOGBASE#$BASEDIR/}" "${WPCONFIG#$BASEDIR/}" "${OLDDBBKUP##*/}" ); then

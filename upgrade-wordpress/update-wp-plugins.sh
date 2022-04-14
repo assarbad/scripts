@@ -22,9 +22,9 @@ function update_content
 		let COUNT=$(find "$WPTEMPDIR" -maxdepth 1 -mindepth 1 -type d -printf '%f\n'|wc -l)
 		if ((COUNT == 1)); then
 			PLDIRNAME=$(find "$WPTEMPDIR" -maxdepth 1 -mindepth 1 -type d -printf '%f')
-			if [[ -d "$BLOGBASE/wp-content/$CONTENTTYPE/$PLDIRNAME" ]]; then
+			if [[ -d "$BLOGBASE/wp-content/$CONTENTTYPE/$PLDIRNAME" ]] || [[ -n "$NONEXISTING" ]]; then
 				[[ -f "$CURRABSPATH/.update-wp-$CONTENTTYPE.pre-move" ]] && ( set -x; source "$CURRABSPATH/.update-wp-$CONTENTTYPE.pre-move" )
-				if ( set -x;  rm -rf "$BLOGBASE/wp-content/$CONTENTTYPE/$PLDIRNAME" ); then
+				if ( set -x;  rm -rf "$BLOGBASE/wp-content/$CONTENTTYPE/$PLDIRNAME" ) || [[ -n "$NONEXISTING" ]]; then
 					if ( set -x;  mv "$WPTEMPDIR/$PLDIRNAME" "$BLOGBASE/wp-content/$CONTENTTYPE"/ ); then
 						echo -e "${cG}SUCCESS${cZ}: at this point you may want to take a fresh backup."
 						[[ -f "$CURRABSPATH/.update-wp-$CONTENTTYPE.post-move" ]] && ( set -x; source "$CURRABSPATH/.update-wp-$CONTENTTYPE.post-move" )
