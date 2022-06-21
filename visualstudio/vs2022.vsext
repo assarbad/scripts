@@ -1,0 +1,40 @@
+{
+  "id": "2c29a59c-86d6-4141-8efe-f0b14a32f29a",
+  "name": "My Visual Studio extensions",
+  "description": "A collection of my Visual Studio extensions",
+  "version": "1.0",
+  "extensions": [
+    {
+      "name": "Comment Remover",
+      "vsixId": "d7c3f904-cc5a-4d47-aa25-81fb7c36df89"
+    },
+    {
+      "name": "Editor Enhancements",
+      "vsixId": "13a2ec1a-6b20-46a9-af99-b1064b00c9a8"
+    },
+    {
+      "name": "Extension Manager 2022",
+      "vsixId": "4a196712-2c3f-4730-ad1d-e7cda4185eb3"
+    },
+    {
+      "name": "Markdown Editor v2",
+      "vsixId": "MarkdownEditor2022.2347dc70-1875-4775-bf48-f2b9fdfee8d4"
+    },
+    {
+      "name": "SVG Viewer",
+      "vsixId": "SvgViewer.7a08d0d4-985c-4415-93d5-ddd9135d8f4f"
+    },
+    {
+      "name": "The Essentials 2022",
+      "vsixId": "046d9eae-a595-4033-9a0d-209e3f01b90e"
+    },
+    {
+      "name": "Time Stamp Margin 2022",
+      "vsixId": "TimeStampMargin2022.255e8b14-4a53-4eb7-89a7-7ab741c1f612"
+    },
+    {
+      "name": "Trailing Whitespace Visualizer",
+      "vsixId": "dac582ef-fc73-42f6-ad45-afaad93d88a4"
+    }
+  ]
+}

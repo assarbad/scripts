@@ -1,0 +1,56 @@
+{
+  "id": "6371baaf-0c8b-4226-bcb3-1c55a5e906bd",
+  "name": "My Visual Studio extensions",
+  "description": "A collection of my Visual Studio extensions",
+  "version": "1.0",
+  "extensions": [
+    {
+      "name": "AsmDude",
+      "vsixId": "c729d6b2-f412-49ed-893d-a8f61f25db98"
+    },
+    {
+      "name": "Command Explorer",
+      "vsixId": "1a973c52-a674-48d8-a276-65ddab1ac598"
+    },
+    {
+      "name": "Editor Enhancements",
+      "vsixId": "a3112f81-e423-4f88-9f2c-e089a309e48e"
+    },
+    {
+      "name": "EditorConfig Language Service",
+      "vsixId": "1209461d-57f8-46a4-814a-dbe5fecef941"
+    },
+    {
+      "name": "Extension Manager 2019",
+      "vsixId": "4a196712-2c3f-4730-ad1d-e7cda4185eb2"
+    },
+    {
+      "name": "Intrinsics Dude",
+      "vsixId": "5BC76C2B-A941-40D2-9EB4-F0DB92DD7C06"
+    },
+    {
+      "name": "Pretty Paste",
+      "vsixId": "PasteR..5f7b47b4-c3d1-4252-bc32-ed92bbb93a8d"
+    },
+    {
+      "name": "Shortcut commander",
+      "vsixId": "ShortcutCommander.VSIX..56323777-fe33-4b3c-a61b-4423688c1dbd"
+    },
+    {
+      "name": "SVG Viewer",
+      "vsixId": "SvgViewer.7a08d0d4-985c-4415-93d5-ddd9135d8f4f"
+    },
+    {
+      "name": "The Essentials 2019",
+      "vsixId": "046d9eae-a595-4033-9a0d-209e3f01b90d"
+    },
+    {
+      "name": "Time Stamp Margin",
+      "vsixId": "TimeStampMargin.255e8b14-4a53-4eb7-89a7-7ab741c1f612"
+    },
+    {
+      "name": "Trailing Whitespace Visualizer",
+      "vsixId": "4c1a78e6-e7b8-4aa9-8812-4836e051ff6d"
+    }
+  ]
+}
