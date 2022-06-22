@@ -4,7 +4,7 @@
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
 __copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.2"
+__version__ = "0.3"
 import os
 import sys
 import functools
@@ -38,6 +38,18 @@ email = i0116
 password = i0118
 nextbtn = idSIButton9
 exportbtn = id__15
+
+[suppressions]
+claim = (VL)
+    Virtual Server 2005 Standard
+    Windows Essential Business Server 2008 Standard and Premium Management Server
+    Windows Essential Business Server 2008 Standard and Premium Messaging Server
+    Windows Essential Business Server 2008 Standard and Premium Security Server
+    Windows Small Business Server 2011 Essentials
+    Windows Storage Server 2008 Workgroup
+    Windows Storage Server 2008 Standard
+    Windows Thin PC
+    Windows XP Home
 """
 
 DEFAULT_CREDENTIALS = """\
@@ -105,7 +117,7 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
             yield driver
         finally:
             dlkeys = Path(os.path.join(dl_path, "KeysExport.xml"))
-            if dlkeys.is_file:
+            if dlkeys.is_file():
                 print("Keys were downloaded as: {}".format(str(dlkeys)))
                 newname = os.path.join(str(parent_dir), "{:04d}-{:02d}-{:02d}_{:s}".format(utcnow.year, utcnow.month, utcnow.day, str(dlkeys.name)))
                 if no_rename:
@@ -203,17 +215,24 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
 
         do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
 
-        # Merely report a count
+
+        suppress_claim = kwargs.get("suppression_claim", set())
+        # Merely report a count of potentially eligible links
         claims = driver.find_elements(By.CSS_SELECTOR, "a.claim-key-link")
+        if len(suppress_claim):
+            claims = [x for x in claims if not any(needle in x.get_attribute("aria-label") for needle in suppress_claim)]
         num_claims = len(claims)
-        print("\t{} links with 'Claim Key'".format(num_claims), file=sys.stderr)
+        print("\t{} links with 'Claim Key', excluding suppressed".format(num_claims), file=sys.stderr)
         if not num_claims:
             print("\tNothing to do!", file=sys.stderr)
             return
 
+        for claim in claims:
+            print(claim.get_attribute("aria-label"))
         driver.implicitly_wait(10)
 
         while True:
+            # TODO/FIXME: this should once again use the filtering from above and skip elements that match suppressions
             claim = WebDriverWait(driver, 120).until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.claim-key-link")))
             print("[STEP] Clicking: '{}'".format(claim.get_attribute("aria-label")), file=sys.stderr)
             claim.click()
@@ -270,6 +289,8 @@ def get_config():
                 options["{}_{}".format(section.lower()[:-1], key)] = tuple(x for x in value.split("\n"))
             elif section in {"IDs"}:
                 options["{}_{}".format(section.lower()[:-1], key)] = value
+            elif section in {"suppressions"}:
+                options["{}_{}".format(section.lower()[:-1], key)] = set(x.strip() for x in value.split("\n"))
     cred = ConfigParser()
     cred_path = get_config_basepath(".credentials")
     cred.read(cred_path)
