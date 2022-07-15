@@ -16,7 +16,7 @@ Homepage: https://www.tug.org/texlive/debian.html
 Standards-Version: 4.1.4
 
 Package: texlive-local
-Version: 2021.99999999-1
+Version: 2022.99999999-1
 Maintainer: Not Relevant <you@example.com>
 Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context, 
  dvidvi, dvipng, feynmf, fragmaster, jadetex, lacheck, latex-beamer, 
@@ -47,11 +47,11 @@ Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context,
  texlive-pstricks, texlive-pstricks-doc, texlive-publishers,
  texlive-publishers-doc, texlive-science, texlive-science-doc, texlive-xetex,
  thailatex, tipa, tipa-doc, xindy, xindy-rules, xmltex, asymptote, texinfo
-Depends: freeglut3, lmodern
+Depends: freeglut3
 Recommends: fonts-noto, fonts-linuxlibertine, fonts-texgyre, fonts-junicode, fonts-croscore, fonts-ebgaramond, fonts-courier-prime, fonts-cmu, fonts-vollkorn, fonts-mononoki
 Architecture: all
-Description: My local installation of TeX Live 2021.
- A full "vanilla" TeX Live 2021
+Description: My local installation of TeX Live 2022.
+ A full "vanilla" TeX Live 2022
  http://tug.org/texlive/debian#vanilla
 
 # fonts-dejavu - metapackage to pull in fonts-dejavu-core and fonts-dejavu-extra
