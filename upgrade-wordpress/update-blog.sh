@@ -10,18 +10,27 @@ function fetch_and_verify
 	local UPDURL="$1"
 	local DLNAME="$(mktemp -dp $(pwd))/${UPDURL##*/}"
 	# Make sure we clean up after ourselves
-	trap 'echo "Removing temporary download path"; ( set -x; rm -rf "'${DLNAME%/*}'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
+	trap 'echo "Removing temporary download path" > /dev/stderr; ( set -x; rm -rf "'${DLNAME%/*}'" ); trap - INT TERM EXIT; exit $?' INT TERM EXIT
 	echo -e "Downloading ${cW}$UPDURL${cZ} -> ${cW}$DLNAME${cZ}" > /dev/stderr
-	if wget -qO "$DLNAME" "$UPDURL" > /dev/stderr; then
-		echo -e "Downloading ${cW}$UPDURL.sha1${cZ}" > /dev/stderr
-		if wget -qO "$DLNAME.sha1" "$UPDURL.sha1" > /dev/stderr; then
+	if (set -x; wget -qO "$DLNAME" "$UPDURL" > /dev/stderr); then
+		echo -e "Downloading ${cW}$UPDURL.sha1${cZ} -> ${cW}$DLNAME.sha1${cZ}" > /dev/stderr
+		if (set -x; wget -qO "$DLNAME.sha1" "$UPDURL.sha1" > /dev/stderr); then
 			echo -e "Verifying download" > /dev/stderr
-			if sha1sum "$DLNAME"|grep -iq "^$(cat "$DLNAME.sha1")"; then
+			if (set -x; sha1sum "$DLNAME"|grep -iq "^$(cat "$DLNAME.sha1")"); then
+				echo -e "${cG}SUCCESS:${cZ} hashes match!" > /dev/stderr
 				echo "$DLNAME"
 				trap - INT TERM EXIT
 				exit 0
+			else
+				echo -e "${cR}FATAL:${cZ} exit code $? (hash mismatch?)" > /dev/stderr
+				echo $(cat "$DLNAME.sha1") > /dev/stderr
+				sha1sum "$DLNAME" > /dev/stderr
 			fi
+		else
+			echo -e "${cR}FATAL:${cZ} exit code $? (download of hash file failed?)" > /dev/stderr
 		fi
+	else
+		echo -e "${cR}FATAL:${cZ} exit code $? (download of release tarball?)" > /dev/stderr
 	fi
 	exit 1
 }
@@ -58,7 +67,6 @@ function blog_update
 	local OLDWPBKUP="$BASEDIR/${NOWDATE}_wordpress_backup_for_${DB_NAME}_wp${wp_version}.tgz"
 	OLDDBBKUP="$BASEDIR/${NOWDATE}_$DB_NAME.sql"
 	echo -e "Backing up ${cW}database $DB_NAME${cZ}"
-	# "--host=$DB_HOST" "--user=$DB_USER" "--password=$DB_PASSWORD"
 	if ( \
 		sudo mysqldump --defaults-file=/etc/mysql/debian.cnf -w "comment_approved not in ('spam', 'trash')" --opt "$DB_NAME" wp_comments \
 		&& \
@@ -66,7 +74,7 @@ function blog_update
 		) > "$OLDDBBKUP"; then
 		( set -x; ( cd "${OLDDBBKUP%/*}" && sha256sum "${OLDDBBKUP##*/}" )|tee "$OLDDBBKUP.SHA256SUM" )
 		echo -e "Backing up ${cW}folder${cZ}"
-		if ( set -x; tar -C "$BASEDIR" -czf "$OLDWPBKUP" "${BLOGBASE#$BASEDIR/}" "${WPCONFIG#$BASEDIR/}" $(cd "$BASEDIR" && find -type f -maxdepth 1 -name 'update-blog.sh' -o -name 'update-wp-*' -o -name '.update-blog.*' -o -name '.update-wp-*' -o -name "${OLDDBBKUP##*/}.SHA256SUM") "${OLDDBBKUP##*/}" && ( cd "${OLDWPBKUP%/*}" && sha256sum "${OLDWPBKUP##*/}" )|tee "$OLDWPBKUP.SHA256SUM" ); then
+		if ( set -x; tar -C "$BASEDIR" -czf "$OLDWPBKUP" "${BLOGBASE#$BASEDIR/}" "${WPCONFIG#$BASEDIR/}" $(cd "$BASEDIR" && find -type f -maxdepth 1 -name 'update-blog.sh' -o -name 'update-wp-*' -o -name '.update-blog.*' -o -name '.update-wp-*') "${OLDDBBKUP##*/}"{,.SHA256SUM} && ( cd "${OLDWPBKUP%/*}" && sha256sum "${OLDWPBKUP##*/}" )|tee "$OLDWPBKUP.SHA256SUM" ); then
 			if [[ "$UPDTGZ" != "--backup" ]] && [[ "$UPDTGZ" != "-b" ]]; then
 				echo -e "Removing old wp-include and wp-admin"
 				rm -rf "$BLOGBASE/wp-includes" "$BLOGBASE/wp-admin" || \
@@ -85,16 +93,16 @@ function blog_update
 				fi
 			else
 				echo -e "${cW}INFO:${cZ} no new release tarball given, skipping actual upgrade."
-				rm -f "$OLDDBBKUP" "$OLDDBBKUP.SHA256SUM"
+				rm -f "$OLDDBBKUP"{,.SHA256SUM}
 				echo -e "Done."
 			fi
 		else
-			rm -f "$OLDDBBKUP" "$OLDWPBKUP" "$OLDDBBKUP.SHA256SUM" "$OLDWPBKUP.SHA256SUM" 2> /dev/null
+			rm -f "$OLDDBBKUP"{,.SHA256SUM} "$OLDWPBKUP"{,.SHA256SUM} 2> /dev/null
 			echo -e "${cR}ERROR${cZ}: could not back up old WordPress folder"
 			exit 1
 		fi
 	else
-			rm -f "$OLDDBBKUP" "$OLDWPBKUP" "$OLDDBBKUP.SHA256SUM" "$OLDWPBKUP.SHA256SUM" 2> /dev/null
+			rm -f "$OLDDBBKUP"{,.SHA256SUM} "$OLDWPBKUP"{,.SHA256SUM} 2> /dev/null
 			echo -e "${cR}ERROR${cZ}: could not back up old WordPress database"
 			exit 1
 	fi
