@@ -66,7 +66,7 @@ function blog_update
 		) > "$OLDDBBKUP"; then
 		( set -x; ( cd "${OLDDBBKUP%/*}" && sha256sum "${OLDDBBKUP##*/}" )|tee "$OLDDBBKUP.SHA256SUM" )
 		echo -e "Backing up ${cW}folder${cZ}"
-		if ( set -x; tar -C "$BASEDIR" -czf "$OLDWPBKUP" "${BLOGBASE#$BASEDIR/}" "${WPCONFIG#$BASEDIR/}" $(cd "$BASEDIR" && find -type f -maxdepth 1 -name 'update-blog.sh' -o -name 'update-wp-*' -o -name '.update-blog.*' -o -name '.update-wp-*') "${OLDDBBKUP##*/}" && ( cd "${OLDWPBKUP%/*}" && sha256sum "${OLDWPBKUP##*/}" )|tee "$OLDWPBKUP.SHA256SUM" ); then
+		if ( set -x; tar -C "$BASEDIR" -czf "$OLDWPBKUP" "${BLOGBASE#$BASEDIR/}" "${WPCONFIG#$BASEDIR/}" $(cd "$BASEDIR" && find -type f -maxdepth 1 -name 'update-blog.sh' -o -name 'update-wp-*' -o -name '.update-blog.*' -o -name '.update-wp-*' -o -name "${OLDDBBKUP##*/}.SHA256SUM") "${OLDDBBKUP##*/}" && ( cd "${OLDWPBKUP%/*}" && sha256sum "${OLDWPBKUP##*/}" )|tee "$OLDWPBKUP.SHA256SUM" ); then
 			if [[ "$UPDTGZ" != "--backup" ]] && [[ "$UPDTGZ" != "-b" ]]; then
 				echo -e "Removing old wp-include and wp-admin"
 				rm -rf "$BLOGBASE/wp-includes" "$BLOGBASE/wp-admin" || \
