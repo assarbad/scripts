@@ -37,7 +37,7 @@ function fetch_and_verify
 
 function blog_update
 {
-	local UPDTGZ="${1:-https://wordpress.org/latest.tar.gz}"
+	local UPDTGZ="${1:-https://de.wordpress.org/latest-de_DE.tar.gz}"
 	local BLOGDIR="$2"
 	local BASEDIR="$3"
 	local BLOGBASE="$BASEDIR/$BLOGDIR"
