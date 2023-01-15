@@ -32,7 +32,7 @@
     "alwaysShowNotificationIcon": true,
     "copyFormatting": "none",
     "copyOnSelect": false,
-    "defaultProfile": "{6d19242c-20c2-580c-98bc-c19c1ff9e0f9}",
+    "defaultProfile": "{d0eb1333-675c-45b0-b9c8-0d15abe05a18}",
     "disabledProfileSources": 
     [
         "Windows.Terminal.Wsl",
@@ -189,39 +189,51 @@
                 "startingDirectory": "%__CD__%"
             },
             {
-                "bellStyle": 
-                [
-                    "window",
-                    "taskbar"
-                ],
-                "commandline": "cmd.exe /k \"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Enterprise\\Common7\\Tools\\VsDevCmd.bat\"",
+                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Enterprise\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell d38fc6ad -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x86 -host_arch=x64\"\"\"}\"",
                 "cursorShape": "underscore",
                 "font": 
                 {
                     "face": "SauceCodePro NF"
                 },
-                "guid": "{ea5aaf13-3465-59cb-b86b-a8a37f3e0351}",
-                "hidden": true,
-                "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
-                "name": "VS2022 dev prompt",
+                "guid": "{b40b729b-c7d3-4052-b4c1-7915e9bf72df}",
+                "icon": "ms-appx:///ProfileIcons/pwsh.png",
+                "name": "VS2022 PWSH (x86)",
                 "startingDirectory": "%__CD__%"
             },
             {
-                "bellStyle": 
-                [
-                    "window",
-                    "taskbar"
-                ],
-                "commandline": "cmd.exe /k \"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat\"",
+                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Enterprise\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell d38fc6ad -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x64 -host_arch=x64\"\"\"}\"",
                 "cursorShape": "underscore",
                 "font": 
                 {
                     "face": "SauceCodePro NF"
                 },
-                "guid": "{6d19242c-20c2-580c-98bc-c19c1ff9e0f9}",
-                "hidden": true,
-                "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
-                "name": "VS2022 dev prompt (x64)",
+                "guid": "{d0eb1333-675c-45b0-b9c8-0d15abe05a18}",
+                "icon": "ms-appx:///ProfileIcons/pwsh.png",
+                "name": "VS2022 PWSH (x64)",
+                "startingDirectory": "%__CD__%"
+            },
+            {
+                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell a85a51fd -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x86 -host_arch=x64\"\"\"}\"",
+                "cursorShape": "underscore",
+                "font": 
+                {
+                    "face": "SauceCodePro NF"
+                },
+                "guid": "{b78fd53d-78bd-4913-9bbb-441b4e234653}",
+                "icon": "ms-appx:///ProfileIcons/pwsh.png",
+                "name": "VS2019 PWSH (x86)",
+                "startingDirectory": "%__CD__%"
+            },
+            {
+                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell a85a51fd -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x64 -host_arch=x64\"\"\"}\"",
+                "cursorShape": "underscore",
+                "font": 
+                {
+                    "face": "SauceCodePro NF"
+                },
+                "guid": "{f42f063b-215b-48e9-b762-f8df784b32b6}",
+                "icon": "ms-appx:///ProfileIcons/pwsh.png",
+                "name": "VS2019 PWSH (x64)",
                 "startingDirectory": "%__CD__%"
             },
             {
@@ -237,57 +249,25 @@
                     "face": "SauceCodePro NF"
                 },
                 "guid": "{90903c1e-1d23-5880-865e-68411e42979d}",
-                "hidden": true,
                 "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
                 "name": "VS2022 dev prompt (x86)",
                 "startingDirectory": "%__CD__%"
             },
             {
-                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Professional\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell 3ea3f535 -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x86 -host_arch=x64\"\"\"}\"",
+                "bellStyle": 
+                [
+                    "window",
+                    "taskbar"
+                ],
+                "commandline": "cmd.exe /k \"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvars64.bat\"",
                 "cursorShape": "underscore",
                 "font": 
                 {
                     "face": "SauceCodePro NF"
                 },
-                "guid": "{b40b729b-c7d3-4052-b4c1-7915e9bf72df}",
-                "icon": "ms-appx:///ProfileIcons/pwsh.png",
-                "name": "VS2022 PWSH (x86)",
-                "startingDirectory": "%__CD__%"
-            },
-            {
-                "commandline": "\"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoExit -Command \"&{Import-Module \"\"\"%ProgramFiles%\\Microsoft Visual Studio\\2022\\Professional\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell 3ea3f535 -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x64 -host_arch=x64\"\"\"}\"",
-                "cursorShape": "underscore",
-                "font": 
-                {
-                    "face": "SauceCodePro NF"
-                },
-                "guid": "{d0eb1333-675c-45b0-b9c8-0d15abe05a18}",
-                "icon": "ms-appx:///ProfileIcons/pwsh.png",
-                "name": "VS2022 PWSH (x64)",
-                "startingDirectory": "%__CD__%"
-            },
-            {
-                "commandline": "%ProgramFiles%\\PowerShell\\7\\pwsh.exe -NoLogo -noe -c \"&{Import-Module \"\"\"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2019\\Professional\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell 9c96d3d9 -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x86 -host_arch=x64\"\"\"}\"",
-                "cursorShape": "underscore",
-                "font": 
-                {
-                    "face": "SauceCodePro NF"
-                },
-                "guid": "{b78fd53d-78bd-4913-9bbb-441b4e234653}",
-                "icon": "ms-appx:///ProfileIcons/pwsh.png",
-                "name": "VS2019 PWSH (x86)",
-                "startingDirectory": "%__CD__%"
-            },
-            {
-                "commandline": "%ProgramFiles%\\PowerShell\\7\\pwsh.exe -NoLogo -noe -c \"&{Import-Module \"\"\"%ProgramFiles(x86)%\\Microsoft Visual Studio\\2019\\Professional\\Common7\\Tools\\Microsoft.VisualStudio.DevShell.dll\"\"\"; Enter-VsDevShell 9c96d3d9 -SkipAutomaticLocation -DevCmdArguments \"\"\"-arch=x64 -host_arch=x64\"\"\"}\"",
-                "cursorShape": "underscore",
-                "font": 
-                {
-                    "face": "SauceCodePro NF"
-                },
-                "guid": "{f42f063b-215b-48e9-b762-f8df784b32b6}",
-                "icon": "ms-appx:///ProfileIcons/pwsh.png",
-                "name": "VS2019 PWSH (x64)",
+                "guid": "{6d19242c-20c2-580c-98bc-c19c1ff9e0f9}",
+                "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
+                "name": "VS2022 dev prompt (x64)",
                 "startingDirectory": "%__CD__%"
             },
             {
