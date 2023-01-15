@@ -20,6 +20,9 @@ build-scripts/*_rust-cli-tools-*.manifest.txt*
 build-scripts/*_rust-cli-tools/
 build-scripts/packaged-*.tar
 build-scripts/unpack-*
+build-scripts/include/**
+build-scripts/lib/**
+build-scripts/nasm-*-win??.zip
 tlive/*.deb
 **.mp4
 **.zim

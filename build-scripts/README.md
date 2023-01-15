@@ -25,3 +25,7 @@ Dropbear is an SSH server and client and so on and this script builds a statical
 Rust is an up and coming language which I am in the process of acquiring and these are some CLI tools I found useful. They are linked against the musl libc (via Rust's own toolchain/target mechanism) and most stand for themselves. However, I have noticed that some have _minor_ dependencies on the system and these are the ones listed in `warnings.txt` once the script was successful.
 
 * [Download](https://bitfab.org/rust-cli-tools/)
+
+## OpenSSL (libcrypto only)
+
+The PowerShell script `openssl-build-libcrypto.ps1` is meant to build libcrypto from OpenSSL for Windows (x86-32 and x86-64).
