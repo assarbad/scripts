@@ -22,6 +22,7 @@ build-scripts/packaged-*.tar
 build-scripts/unpack-*
 build-scripts/include/**
 build-scripts/lib/**
+build-scripts/staging/**
 build-scripts/nasm-*-win??.zip
 tlive/*.deb
 **.mp4
@@ -30,4 +31,5 @@ tlive/*.deb
 **/.venv/
 **/.git/
 **.bak
+**.log
 msdn/**
