@@ -18,15 +18,107 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 
 ## NB: the idea of this script is to build libcrypto static libs, it doesn't care about libssl currently.
 
+$openssl = @{
+    "1.1.1s" = "c5ac01e760ee6ff0dab61d6b2bbd30146724d063eb322180c6f18a6f74e4b6aa"
+}
+$nasm = @{
+    "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"
+}
+
+<#
+.Description
+Downloads a file using Invoke-WebRequest. This is suboptimal, but should be okay for this sort of script.
+#>
+function Download_File
+{
+    Param (
+        [Parameter(Mandatory=$true)]  [String]$url,
+        [Parameter(Mandatory=$true)]  [String]$fname
+    )
+
+    $prevPreference = $global:ProgressPreference
+    try
+    {
+        $global:ProgressPreference = 'SilentlyContinue'
+        $tgtdir = [System.IO.Path]::GetDirectoryName($fname)
+        if (-not (Test-Path -Path "$tgtdir" -PathType Container))
+        {
+            New-Item -Type Directory "$tgtdir"
+        }
+        Invoke-WebRequest $url -OutFile $fname -UseBasicParsing
+    }
+    finally 
+    {
+        $global:ProgressPreference = $prevPreference
+    }
+}
+
+function Download_OpenSSL_version
+{
+    Param (
+        [Parameter(Mandatory=$true)]  [String]$version,
+        [Parameter(Mandatory=$true)]  [String]$knownhash,
+        [Parameter(Mandatory=$true)]  [String]$tgtdir
+    )
+
+    $url = "https://www.openssl.org/source/openssl-${version}.tar.gz"
+    $fname = $url.Substring($url.LastIndexOf("/") + 1)
+    if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
+    {
+        Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
+    }
+    else
+    {
+        $host.ui.WriteErrorLine("Downloading OpenSSL $version from $url as $fname (into $tgtdir)")
+        Download_File $url "$tgtdir\$fname"
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
+    if ($knownhash -eq $hash)
+    {
+        Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
+        [hashtable]$retval = @{ fpath="$tgtdir\$fname"; fname=$fname; version=$version; hash=$knownhash }
+        return $retval
+    }
+    else
+    {
+        throw "The expected ($knownhash) and actual hashes ($hash) don't match for $fname!"
+    }
+}
+
+function Download_NASM_version
+{
+    Param (
+        [Parameter(Mandatory=$true)]  [String]$version,
+        [Parameter(Mandatory=$true)]  [String]$knownhash,
+        [Parameter(Mandatory=$true)]  [String]$tgtdir
+    )
+
+    $url = "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-win64.zip"
+    $fname = $url.Substring($url.LastIndexOf("/") + 1)
+    if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
+    {
+        Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
+    }
+    else
+    {
+        $host.ui.WriteErrorLine("Downloading NASM $version from $url as $fname (into $tgtdir)")
+        Download_File $url "$tgtdir\$fname"
+    }
+    $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
+    if ($knownhash -eq $hash)
+    {
+        Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
+        [hashtable]$retval = @{ fpath="$tgtdir\$fname"; fname=$fname; version=$version; hash=$knownhash }
+        return $retval
+    }
+    else
+    {
+        throw "The expected ($knownhash) and actual hashes ($hash) don't match for $fname!"
+    }
+}
+
 $funcs =
 {
-    $openssl = @{
-        "1.1.1s" = "c5ac01e760ee6ff0dab61d6b2bbd30146724d063eb322180c6f18a6f74e4b6aa"
-    }
-    $nasm = @{
-        "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"
-    }
-
     <#
     .Description
     Checks the return code of the previous (native) command and throws an error with or without message, if the exit code was "unclean" (non-zero)
@@ -51,74 +143,32 @@ $funcs =
 
     <#
     .Description
-    Downloads a file using Invoke-WebRequest. This is suboptimal, but should be okay for this sort of script.
-    #>
-    function Download_File
-    {
-        Param (
-            [Parameter(Mandatory=$true)]  [String]$url,
-            [Parameter(Mandatory=$true)]  [String]$fname
-        )
-
-        $prevPreference = $global:ProgressPreference
-        try
-        {
-            $global:ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest $url -OutFile $fname -UseBasicParsing
-        }
-        finally 
-        {
-            $global:ProgressPreference = $prevPreference
-        }
-    }
-
-    <#
-    .Description
     This downloads the OpenSSL version defined in $openssl and checks the file hash against the known value and then unpacks the downloaded archive.
     #>
     function Import_OpenSSL
     {
         Param (
+            [Parameter(Mandatory=$true)]  [hashtable]$details,
             [Parameter(Mandatory=$true)]  [String]$tgtdir
         )
 
-        foreach($version in $script:openssl.keys)
+        $version = $($details.version)
+        $fname = $($details.fpath)
+        $dirname = "$tgtdir\openssl-${version}"
+        if (Test-Path -Path $dirname) # we want the folder freshly unpacked, always
         {
-            $url = "https://www.openssl.org/source/openssl-${version}.tar.gz"
-            $fname = $url.Substring($url.LastIndexOf("/") + 1)
-            if (Test-Path -Path $fname -PathType Leaf)
-            {
-                $host.ui.WriteErrorLine("Note: using existing file $fname. If this is not desired, remove it prior to running this script.")
-            }
-            else
-            {
-                $host.ui.WriteErrorLine("Downloading OpenSSL $version from $url as $fname")
-                Download_File $url $fname
-            }
-            $hash = (Get-FileHash -Algorithm SHA256 -Path $fname).Hash
-            if ($script:openssl.$version -eq $hash)
-            {
-                $dirname = "$tgtdir\openssl-${version}"
-                if (Test-Path -Path $dirname) # we want the folder freshly unpacked, always
-                {
-                    $host.ui.WriteErrorLine("Removing existing folder $dirname")
-                    Remove-Item -Path $dirname -Recurse -Force
-                }
-                $host.ui.WriteErrorLine("Unpacking OpenSSL $version (hash matches)")
-                # bsdtar is onboard in modern Windows versions
-                tar -C "$tgtdir" -xf "$fname" | Out-Null
-                ThrowOnNativeFailure "Failed to unpack $fname"
-                if (!(Test-Path -Path $dirname))
-                {
-                    throw "Expected to find a folder named '$dirname' after unpacking the archive."
-                }
-                return $dirname
-            }
-            else
-            {
-                throw "The expected ($script:openssl.$version) and actual hashes ($hash) don't match for $fname!"
-            }
+            $host.ui.WriteErrorLine("Removing existing folder $dirname")
+            Remove-Item -Path $dirname -Recurse -Force
         }
+        $host.ui.WriteErrorLine("Unpacking OpenSSL $version (hash matches)")
+        # bsdtar is onboard in modern Windows versions
+        tar -C "$tgtdir" -xf "$fname" | Out-Null
+        ThrowOnNativeFailure "Failed to unpack $fname"
+        if (!(Test-Path -Path $dirname))
+        {
+            throw "Expected to find a folder named '$dirname' after unpacking the archive."
+        }
+        return $dirname
     }
 
     <#
@@ -128,44 +178,25 @@ $funcs =
     function Import_NASM
     {
         Param (
+            [Parameter(Mandatory=$true)]  [hashtable]$details,
             [Parameter(Mandatory=$true)]  [String]$tgtdir
         )
 
-        foreach($version in $script:nasm.keys)
+        $version = $($details.version)
+        $fname = $($details.fpath)
+        $dirname = "$tgtdir\nasm-${version}"
+        if (Test-Path -Path $dirname) # we want the folder freshly unpacked, always
         {
-            $url = "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-win64.zip"
-            $fname = $url.Substring($url.LastIndexOf("/") + 1)
-            if (Test-Path -Path $fname -PathType Leaf)
-            {
-                $host.ui.WriteErrorLine("Note: using existing file $fname. If this is not desired, remove it prior to running this script.")
-            }
-            else
-            {
-                $host.ui.WriteErrorLine("Downloading NASM $version from $url as $fname")
-                Download_File $url $fname
-            }
-            $hash = (Get-FileHash -Algorithm SHA256 -Path $fname).Hash
-            if ($script:nasm.$version -eq $hash)
-            {
-                $dirname = "$tgtdir\nasm-${version}"
-                if (Test-Path -Path $dirname) # we want the folder freshly unpacked, always
-                {
-                    $host.ui.WriteErrorLine("Removing existing folder $dirname")
-                    Remove-Item -Path $dirname -Recurse -Force
-                }
-                $host.ui.WriteErrorLine("Unpacking NASM $version (hash matches)")
-                Expand-Archive -Path $fname -DestinationPath $tgtdir -Force
-                if (!(Test-Path -Path $dirname))
-                {
-                    throw "Expected to find a folder named '$dirname' after unpacking the archive."
-                }
-                return $dirname
-            }
-            else
-            {
-                throw "The expected ($script:nasm.$version) and actual hashes ($hash) don't match for $fname!"
-            }
+            $host.ui.WriteErrorLine("Removing existing folder $dirname")
+            Remove-Item -Path $dirname -Recurse -Force
         }
+        $host.ui.WriteErrorLine("Unpacking NASM $version (hash matches)")
+        Expand-Archive -Path $fname -DestinationPath $tgtdir -Force
+        if (!(Test-Path -Path $dirname))
+        {
+            throw "Expected to find a folder named '$dirname' after unpacking the archive."
+        }
+        return $dirname
     }
 
     <#
@@ -207,19 +238,26 @@ $funcs =
     #>
     function Patch_Makefile
     {
-        $ccache = Get_sccache
+        Param (
+            [Parameter(Mandatory=$true)]  [String]$tgtdir
+        )
+
+        #$ccache = Get_sccache
         $cl = "cl"
+        <#
         if ($ccache -ne $null)
         {
             $cl = "$ccache $cl"
         }
+        #>
         # Patch the makefile so that the debug info is embedded in the object files (/Z7)
         echo "Patching makefile ..."
         Move-Item -Force .\makefile .\makefile.unpatched
         (Get-Content .\makefile.unpatched) `
             -replace '^(LIB_CFLAGS=)/Zi /Fdossl_static.pdb(.+)$', '$1/Brepro /Z7$2' `
             -replace '^(LDFLAGS=/nologo)( /debug)(.*)$', '$1$3 /Brepro' `
-            -replace '^CC=cl$', "CC=$cl" |
+            -replace '^CC=cl$', "CC=$cl" `
+            -replace '^(CFLAGS=/W3)', "`$1 /d1trimfile:'$tgtdir'" |
         Out-File .\makefile
     }
 
@@ -230,49 +268,64 @@ $funcs =
     function Build_And_Place_LibCrypto
     {
         Param (
+            [Parameter(Mandatory=$true)]  [hashtable]$nasm,
+            [Parameter(Mandatory=$true)]  [hashtable]$ossl,
             [Parameter(Mandatory=$true)]  [String]$arch,
             [Parameter(Mandatory=$true)]  [String]$ossl_target,
             [Parameter(Mandatory=$true)]  [String]$target_fname,
             [Parameter(Mandatory=$true)]  [String]$ossl_hdrs,
             [Parameter(Mandatory=$true)]  [String]$staging
         )
-        $tgtdir = "$staging\$pid"
-        $parentpath = "$pwd"
-        Write-Host "Current job [$pid]: ${arch}: $ossl_target, $target_fname, $ossl_hdrs`n`$tgtdir = $tgtdir`n`$parentpath = $parentpath"
-
-        if (-not (Test-Path -Path "$tgtdir" -PathType Container))
+        $tgtdir = "$staging\$ossl_target.$pid"
+        try
         {
-            New-Item -Type Directory "$tgtdir"
+            $parentpath = "$pwd"
+            Write-Host "Current job [$pid]: ${arch}: $ossl_target, $target_fname, $ossl_hdrs`n`$tgtdir = $tgtdir`n`$parentpath = $parentpath"
+
+            if (-not (Test-Path -Path "$tgtdir" -PathType Container))
+            {
+                New-Item -Type Directory "$tgtdir"
+            }
+
+            $nasmdir = Import_NASM $nasm $tgtdir
+            # Make our copy of NASM available
+            $env:PATH =  $nasmdir + ";" + $env:PATH
+            Write-Host -ForegroundColor white "NASM: $nasmdir"
+
+            $vspath = Get_VSBasePath
+            Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
+            Enter-VsDevShell -VsInstallPath "$vspath" -DevCmdArguments "-arch=$arch -no_logo" -SkipAutomaticLocation
+            $ossldir = Import_OpenSSL $ossl $tgtdir
+            Write-Host -ForegroundColor white "OpenSSL dir: $ossldir"
+            Push-Location -Path "$ossldir"
+
+            # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
+            & perl Configure $ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
+            ThrowOnNativeFailure "Failed to configure OpenSSL for build ($ossl_target, $arch, $target_fname)"
+            # Fix up the makefile to fit our needs better
+            Patch_Makefile "$tgtdir"
+            & nmake /nologo include\crypto\bn_conf.h include\crypto\dso_conf.h include\openssl\opensslconf.h libcrypto.lib *>&1
+            # Copy-Item .\makefile "$parentpath\makefile.$pid"
+            ThrowOnNativeFailure "Failed to build OpenSSL ($ossl_target, $arch, $target_fname)"
+            $libpath = "$parentpath\lib"
+            if (-not (Test-Path -Path "$libpath" -PathType Container))
+            {
+                New-Item -Type Directory "$libpath"
+            }
+            Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
+            if (Test-Path -Path "$parentpath\include\$ossl_hdrs" -PathType Container)
+            {
+                Remove-Item -Path "$parentpath\include\$ossl_hdrs" -Recurse -Force
+            }
+            Copy-Item -Recurse .\include\openssl "$parentpath\include\$ossl_hdrs"
+
+            Pop-Location
         }
-
-        $nasmdir = Import_NASM $tgtdir
-        # Make our copy of NASM available
-        $env:PATH =  $nasmdir + ";" + $env:PATH
-        echo "NASM: $nasmdir"
-
-        $vspath = Get_VSBasePath
-        Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
-        Enter-VsDevShell -VsInstallPath "$vspath" -DevCmdArguments "-arch=$arch -no_logo" -SkipAutomaticLocation
-        $ossldir = Import_OpenSSL $tgtdir
-        Write-Host "OpenSSL dir: $ossldir"
-        Push-Location -Path "$ossldir"
-
-        # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
-        & perl Configure $ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
-        ThrowOnNativeFailure "Failed to configure OpenSSL for build ($ossl_target, $arch, $target_fname)"
-        # Fix up the makefile to fit our needs better
-        Patch_Makefile
-        & nmake /nologo include\crypto\bn_conf.h include\crypto\dso_conf.h include\openssl\opensslconf.h libcrypto.lib | Out-Host
-        ThrowOnNativeFailure "Failed to build OpenSSL ($ossl_target, $arch, $target_fname)"
-        $libpath = "$parentpath\lib"
-        if (-not (Test-Path -Path "$libpath" -PathType Container))
+        finally
         {
-            New-Item -Type Directory "$libpath"
+            Write-Host -ForegroundColor yellow "Removing $tgtdir"
+            Remove-Item -Path $tgtdir -Recurse -Force
         }
-        Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
-        Copy-Item -Recurse .\include\openssl "$parentpath\include\$ossl_hdrs"
-
-        Pop-Location
     }
 
     <#
@@ -286,35 +339,57 @@ $funcs =
         {
             echo "NOTE: You need to have Perl installed for this build for work. Kicking off the installation. Feel free to cancel, but be aware that the build will fail."
             winget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl
+            $perl = Get-Command perl -CommandType Application -ErrorAction silentlycontinue
+            if ($perl -eq $null)
+            {
+                throw "Perl not available and wasn't installed by the user"
+            }
         }
     }
 } # $funcs
 
-$targets = @{ x86=@("VC-WIN32", "libcrypto32.lib", "openssl32"); x64=@("VC-WIN64A", "libcrypto64.lib", "openssl64") }
-$logpath = "$PSScriptRoot\build-openssl-libcrypto.log"
-$staging = "$pwd\staging"
-Start-Transcript -Path $logpath -Append
-
-$funcs:Check_Perl_Available
-
-foreach($tgt in $targets.GetEnumerator())
+try
 {
-    $arch = $($tgt.Name)
-    $ossl_target, $target_fname, $ossl_hdrs = $($tgt.Value)
-    Write-Host "Before starting job: ${arch}: $ossl_target, $target_fname, $ossl_hdrs"
-    Start-Job -InitializationScript $funcs -Name "OpenSSL build: $($tgt.Name)" -ScriptBlock { Build_And_Place_LibCrypto $using:arch $using:ossl_target $using:target_fname $using:ossl_hdrs $using:staging }
-}
+    $targets = @{ x86=@("VC-WIN32", "libcrypto32.lib", "openssl32"); x64=@("VC-WIN64A", "libcrypto64.lib", "openssl64") }
+    $logpath = "$PSScriptRoot\build-openssl-libcrypto.log"
+    $staging = "$pwd\staging"
+    Start-Transcript -Path $logpath -Append
 
-while (Get-Job -State "Running")
+    $funcs:Check_Perl_Available
+    
+    # Cache copies of the files we need for the build
+    foreach($version in $nasm.keys)
+    {
+        $nasm_details = Download_NASM_version "$version" "$($nasm.$version)" "$staging"
+        break # use the first one always
+    }
+    foreach($version in $openssl.keys)
+    {
+        $ossl_details = Download_OpenSSL_version  "$version" "$($openssl.$version)" "$staging"
+        break # use the first one always
+    }
+    foreach($tgt in $targets.GetEnumerator())
+    {
+        $arch = $($tgt.Name)
+        $ossl_target, $target_fname, $ossl_hdrs = $($tgt.Value)
+        Write-Host "Before starting job: ${arch}: $ossl_target, $target_fname, $ossl_hdrs"
+        Start-Job -InitializationScript $funcs -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" -ScriptBlock {Build_And_Place_LibCrypto $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:target_fname $using:ossl_hdrs $using:staging}
+    }
+
+    while (Get-Job -State "Running")
+    {
+        Clear-Host
+        Get-Job|%{ $runtime = "{0:hh}:{0:mm}:{0:ss}" -f ([datetime]::now - $_.PSBeginTime); Write-Host "$($_.Id): $($_.Name) -> $($_.State), $runtime" }
+        Start-Sleep 2
+    }
+}
+finally
 {
-    Clear-Host
-    Get-Job
-    Start-Sleep 2
+    # Write output from the jobs (commented out, because we have a log file)
+    Get-Job | Receive-Job
+    Get-Job | %{ $duration = $_.PSEndTime - $_.PSBeginTime; Write-Host "$($_.Name) took $duration" }
+    # Remove jobs from queue
+    Get-Job | Remove-Job
+
+    Stop-Transcript
 }
-
-# Write output from the jobs (commented out, because we have a log file)
-# Get-Job | Receive-Job
-# Remove jobs from queue
-Get-Job | Remove-Job
-
-Stop-Transcript
