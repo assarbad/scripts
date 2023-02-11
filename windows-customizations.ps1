@@ -543,7 +543,7 @@ function SetGuidGen()
 }
 
 <#
-; Approximates the following, but for even more programs
+; Approximates the following, but for even more related programs
 [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\cl.exe\PerfOptions]
 "CpuPriorityClass"=dword:00000005
 "IoPriority"=dword:00000001
@@ -558,12 +558,16 @@ function SetLowerCompilerPrio()
     if ($vspath -ne $null)
     {
         $KeysToSet = (
-            "cl.exe",
-            "link.exe",
-            "lib.exe",
-            "lld-link.exe",
-            "clang-cl.exe",
-            "llvm-lib.exe"
+            "bscmake.exe", # creation of browsing info
+            "cl.exe", # compiler driver
+            "link.exe", # linker
+            "lib.exe", # librarian
+            "ml.exe", # Macro Assembler
+            "ml64.exe", # Macro Assembler (64 bit)
+            "mspdbsrv.exe", # Creation of debug symbols
+            "clang-cl.exe", # Clang compiler driver in "cl" mode
+            "lld-link.exe", # LLVM linker in "link" mode
+            "llvm-lib.exe" # LLVM librarian in "lib" mode
         )
         foreach($key in $KeysToSet)
         {
@@ -572,9 +576,12 @@ function SetLowerCompilerPrio()
             {
                 New-Item -Path HKLM:$subkey -Force|Out-Null
             }
-            # CpuPriorityClass
+            # These are read by ntoskrnl!PspReadIFEOPerfOptions, via RtlQueryImageFileKeyOption
+            # (also WorkingSetLimitInKB in addition to the below)
+            #
+            # CpuPriorityClass (PspSetProcessPriorityClass)
             # ----------------
-            # 1 Low
+            # 1 Idle
             # 2 Normal
             # 3 High
             # 4 Realtime (n/a)
@@ -589,7 +596,7 @@ function SetLowerCompilerPrio()
             # 3 High
             # 4 Critical
             #
-            # PagePriority
+            # PagePriority (MmGetDefaultPagePriority)
             # ------------
             # 0 Idle
             # 1 Very Low
@@ -668,6 +675,20 @@ function DisableFireFoxTelemetry()
 }
 
 <#
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter]
+"DEFAULT"=dword:ffffffff
+#>
+function SetDefaultDebugFilter()
+{
+    $key = "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager\Debug Print Filter"
+    if ( -not (Test-Path -Path $key -PathType Container) )
+    {
+        New-Item -Path $key -Force|Out-Null
+    }
+    Set-ItemProperty -Path $key -Type Dword -Name DEFAULT -Value 0xffffffff
+}
+
+<#
 [HKEY_CLASSES_ROOT\Directory\shell\git_shell\command]
 ; REG_EXPAND_SZ
 ; -> "%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe" -w 0 -p "Git Bash" -d "%V"
@@ -706,10 +727,38 @@ function DisableFireFoxTelemetry()
 function EnableGitBashHereInWindowsTerminal()
 {
     # Detect presence of wt.exe App Execution Alias and/or App Paths entry
-    # HKCU:Software\Microsoft\Windows\CurrentVersion\App Paths\wt.exe
-    # HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\wt.exe
-    # $env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe
-    Write-Host "Not yet implemented"
+    if ( `
+        (Test-Path -Path "HKCU:Software\Microsoft\Windows\CurrentVersion\App Paths\wt.exe" -PathType Container) `
+        -or `
+        (Test-Path -Path "HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\wt.exe" -PathType Container) `
+        )
+    {
+        if (Test-Path -Path "$env:LOCALAPPDATA\Microsoft\WindowsApps\wt.exe" -PathType Leaf)
+        {
+            $value = "`"%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe`" -w 0 -p `"Git Bash`" -d `"%V`""
+            $KeysToCheckAndSet = (
+                "Registry::HKCR\Directory\shell\git_shell\command",
+                "Registry::HKCR\Directory\Background\shell\git_shell\command",
+                "Registry::HKCR\LibraryFolder\background\shell\git_shell\command"
+            )
+            foreach($key in $KeysToCheckAndSet)
+            {
+                if (Test-Path -Path $key -PathType Container)
+                {
+                    Set-ItemProperty -Path $key -Type ExpandString -Name '(Default)' -Value $value -Force
+                    Write-Host -NoNewline "`tInfo: "|White
+                    Write-Host "$key"
+                    Write-Host "`t-> $value"
+                }
+                else
+                {
+                    Write-Host -NoNewline "`tWarning: "|Yellow
+                    Write-Host -NoNewline "'$key'"|White
+                    Write-Host "not found. Ignoring."
+                }
+            }
+        }
+    }
 }
 
 function main()
@@ -732,6 +781,8 @@ function main()
     TelemetryOptOutAndMore
     Write-Host "Disabling Firefox telemetry"
     DisableFireFoxTelemetry
+    Write-Host "Setting DEFAULT Debug Filter"
+    SetDefaultDebugFilter
     Write-Host "Enabling Git Bash for Windows Terminal"
     EnableGitBashHereInWindowsTerminal
 }
