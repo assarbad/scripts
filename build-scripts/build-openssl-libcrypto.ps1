@@ -19,7 +19,7 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 ## NB: the idea of this script is to build libcrypto static libs, it doesn't care about libssl currently.
 
 $openssl = @{
-    "1.1.1s" = "c5ac01e760ee6ff0dab61d6b2bbd30146724d063eb322180c6f18a6f74e4b6aa"
+    "1.1.1t" = "8dee9b24bdb1dcbf0c3d1e9b02fb8f6bf22165e807f45adeb7c9677536859d3b"
 }
 $nasm = @{
     "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"

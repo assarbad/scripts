@@ -1,4 +1,6 @@
+#Requires -Version 6.0
 Set-StrictMode -Version Latest
+Set-PSDebug -Off
 
 function Configure-And-Set-Service
 {
@@ -12,13 +14,13 @@ function Configure-And-Set-Service
     $Service = Get-Service -Name $name -ErrorAction SilentlyContinue -ErrorVariable SvcError
     if ($SvcError)
     {
-        Write-Error "Could not retrieve service '$name'."
-        Write-Error $SvcError
+        Write-Host "ERROR: Could not retrieve service '$name'."
+        $SvcError|Write-Verbose
         return
     }
     Write-Host "Setting $($Service.Name) ($($Service.DisplayName)) to $state [Current type/status: $($Service.StartType)/$($Service.Status)]"
     $Service|Set-Service -StartupType $state -ErrorAction SilentlyContinue -ErrorVariable SvcCfgError
-    if ($SvcCfgError -and ($state -eq "Disabled"))
+    if ($SvcCfgError -and ($state -eq "Disabled") -and ($($Service.StartType) -ne $state))
     {
         # $SvcCfgError|Format-List -Property *
         Write-Host "`tTrying to forcibly disable via registry ..."
@@ -29,12 +31,12 @@ function Configure-And-Set-Service
         $Service|Restart-Service -Force
         return
     }
-    if ($stop)
+    if ($stop -and ($($Service.Status) -ne "Stopped"))
     {
         $Service|Stop-Service -Force
         return
     }
-    if ($start)
+    if ($start -and ($($Service.Status) -ne "Running"))
     {
         $Service|Start-Service
         return
@@ -43,7 +45,9 @@ function Configure-And-Set-Service
 
 function Stop-And-Disable-Service
 {
-    Param([Parameter(Mandatory=$true)] [string]$name)
+    Param(
+        [Parameter(Mandatory=$true)] [string]$name
+    )
 
     Configure-And-Set-Service $name Disabled $false $true
 }
@@ -162,28 +166,35 @@ $ServicesToStopAndDisableByWildCard = (
 )
 
 $logpath = "$PSScriptRoot\windows-services.log"
-Start-Transcript -Path $logpath -Append
 
-Configure-And-Set-Service "SuRunSVC" Automatic $true $false
-Configure-And-Set-Service "TeamViewer" Manual $false $true
-
-foreach($svcname in $ServicesToStopAndDisable)
+try
 {
-    Stop-And-Disable-Service $svcname
-}
+    Start-Transcript -Path $logpath -Append
 
-foreach($svcname in $ServicesToStopAndDisableByWildCard)
-{
-    Get-Service "$svcname"|%{ Stop-And-Disable-Service $_.Name }
-}
+    Configure-And-Set-Service "SuRunSVC" Automatic $true $false
+    Configure-And-Set-Service "TeamViewer" Manual $false $true
 
-$Service = Get-Service -Name "TabletInputService" -ErrorAction SilentlyContinue -ErrorVariable SvcError
-if (!$SvcError)
-{
-    if (($Service.StartType -eq Manual) -or ($Service.StartType -eq Disabled))
+    foreach($svcname in $ServicesToStopAndDisable)
     {
-        Write-Host "Setting InputServiceEnabled=0"
-        Set-ItemProperty -Path "HKLM:SOFTWARE\Microsoft\Input" -Name "InputServiceEnabled" -Value 0 -Type DWord
+        Stop-And-Disable-Service "$svcname"
+    }
+
+    foreach($svcname in $ServicesToStopAndDisableByWildCard)
+    {
+        Get-Service "$svcname" -ErrorAction SilentlyContinue -ErrorVariable SvcError|%{ Stop-And-Disable-Service $_.Name }
+    }
+
+    $Service = Get-Service -Name "TabletInputService" -ErrorAction SilentlyContinue -ErrorVariable SvcError
+    if (!$SvcError)
+    {
+        if (($Service.StartType -eq "Manual") -or ($Service.StartType -eq "Disabled"))
+        {
+            Write-Host "Setting InputServiceEnabled=0"
+            Set-ItemProperty -Path "HKLM:SOFTWARE\Microsoft\Input" -Name "InputServiceEnabled" -Value 0 -Type DWord
+        }
     }
 }
-Stop-Transcript
+finally
+{
+    Stop-Transcript
+}
