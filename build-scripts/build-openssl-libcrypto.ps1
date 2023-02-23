@@ -348,6 +348,70 @@ $funcs =
     }
 } # $funcs
 
+function Patch_opensslconf_Header
+{
+    Param (
+        [Parameter(Mandatory=$true)]  [String]$srcfile,
+        [Parameter(Mandatory=$true)]  [String]$tgtfile
+    )
+
+    $fname = Split-Path "$srcfile" -Leaf
+    if ($fname -ne "opensslconf.h")
+    {
+        Write-Host -ForegroundColor Yellow "Not patching unexpected mismatched file $fname!"
+        return
+    }
+    echo "Patching $fname ..."
+    (Get-Content "$srcfile") `
+        -replace '^#\s*?ifndef\s+?OPENSSL_SYS_WIN(32|64A)$', '#if defined(_M_AMD64)' `
+        -replace '^(#(\s*?)define)\s+?OPENSSL_SYS_WIN(32|64A)\s+?\d+$', `
+            "`$1 OPENSSL_SYS_WIN64A 1`n#elif defined(_M_IX86)`n`$1 OPENSSL_SYS_WIN32 1`n#else`n#`$2error This OpenSSL build is not prepared for the target platform!" `
+        -replace '^#(\s+?)(define|undef)\s+(BN_LLONG)$', `
+            "#if defined(_M_AMD64)`n#`${1}define `$3`n#elif defined(_M_IX86)`n#`${1}undef `$3`n#endif" `
+        -replace '^#(\s*?)(define|undef)\s+?(SIXTY_FOUR_BIT)\s*?$', `
+            "#if defined(_M_AMD64)`n`#`${1}define `$3`n#`${1}undef THIRTY_TWO_BIT`n#elif defined(_M_IX86)`n#`${1}undef `$3`n#`${1}define THIRTY_TWO_BIT`n#endif" `
+        -replace '^#(\s*?)(define|undef)\s+?(THIRTY_TWO_BIT)\s*?$', '' |
+    Out-File "$tgtfile"
+}
+
+function FinalizeHeaders
+{
+    Param (
+        [Parameter(Mandatory=$true)]  [hashtable]$targets
+    )
+    $ossl_hdrs_common = "openssl"
+    $ossl_target, $target_fname, $ossl_hdrs64 = $targets["x64"]
+    $ossl_target, $target_fname, $ossl_hdrs = $targets["x86"]
+    if (Test-Path -Path "$pwd\include\$ossl_hdrs" -PathType Container)
+    {
+        $incdir = "$pwd\include"
+        Write-Host "Post-processing: $ossl_target, $target_fname, $ossl_hdrs"
+        # Ensure the common include folder exists
+        if (-not (Test-Path -Path "$incdir\$ossl_hdrs_common" -PathType Container))
+        {
+            New-Item -Type Directory "$incdir\$ossl_hdrs_common"|Out-Null
+        }
+
+        $hashes = Get-ChildItem -Path "$pwd\include\$ossl_hdrs" -File|%{ Get-FileHash $_ }|Select-Object -Property Hash,Path
+        foreach($hash in $hashes)
+        {
+            $fname = Split-Path "$($hash.Path)" -Leaf
+            if (Test-Path -Path "$pwd\include\$ossl_hdrs64\$fname" -PathType Leaf)
+            {
+                $otherhash = Get-FileHash "$pwd\include\$ossl_hdrs64\$fname"
+                if ($($otherhash.Hash) -eq $($hash.Hash))
+                {
+                    Copy-Item -Force "$($hash.Path)" "$incdir\$ossl_hdrs_common\"
+                }
+                else
+                {
+                    Patch_opensslconf_Header "$($hash.Path)" "$incdir\$ossl_hdrs_common\$fname"
+                }
+            }
+        }
+    }
+}
+
 try
 {
     $targets = @{ x86=@("VC-WIN32", "libcrypto32.lib", "openssl32"); x64=@("VC-WIN64A", "libcrypto64.lib", "openssl64") }
@@ -382,6 +446,8 @@ try
         Get-Job|%{ $runtime = "{0:hh}:{0:mm}:{0:ss}" -f ([datetime]::now - $_.PSBeginTime); Write-Host "$($_.Id): $($_.Name) -> $($_.State), $runtime" }
         Start-Sleep 2
     }
+
+    FinalizeHeaders $targets
 }
 finally
 {
