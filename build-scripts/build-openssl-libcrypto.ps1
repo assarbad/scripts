@@ -258,7 +258,7 @@ $funcs =
 
         $ccache = Get_sccache
         $cl = "cl"
-        if (($ccache -ne $null) -and ($script:UseSccache))
+        if (($ccache -ne $null) -and ($global:UseSccache))
         {
             $cl = "$ccache $cl"
         }
@@ -303,20 +303,20 @@ $funcs =
             [Parameter(Mandatory=$true)]  [String]$ossl_hdrs,
             [Parameter(Mandatory=$true)]  [String]$staging
         )
-        $tgtdir = "$staging\$ossl_target.$pid"
+        $blddir = "$staging\$ossl_target.$pid"
         try
         {
             $parentpath = "$pwd"
             $hdrsubdir = "$ossl_hdrs$tgt_base_suffix"
             $tgtincdir = "$parentpath\include\$hdrsubdir"
-            Write-Host "Current job [$pid]: ${arch}: $ossl_target, $hdrsubdir`n`$tgtdir = $tgtdir`n`$parentpath = $parentpath"
+            Write-Host "Current job [$pid]: ${arch}: $ossl_target, $hdrsubdir`n`$blddir = $blddir`n`$parentpath = $parentpath"
 
-            if (-not (Test-Path -Path "$tgtdir" -PathType Container))
+            if (-not (Test-Path -Path "$blddir" -PathType Container))
             {
-                New-Item -Type Directory "$tgtdir" | Out-Null
+                New-Item -Type Directory "$blddir" | Out-Null
             }
 
-            $nasmdir = Import_NASM $nasm $tgtdir
+            $nasmdir = Import_NASM $nasm $blddir
             # Make our copy of NASM available
             $env:PATH =  $nasmdir + ";" + $env:PATH
             Write-Host -ForegroundColor white "NASM: $nasmdir"
@@ -324,7 +324,7 @@ $funcs =
             $vspath = Get_VSBasePath
             Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
             Enter-VsDevShell -VsInstallPath "$vspath" -DevCmdArguments "-arch=$arch -no_logo" -SkipAutomaticLocation
-            $ossldir = Import_OpenSSL $ossl $tgtdir
+            $ossldir = Import_OpenSSL $ossl $blddir
             Write-Host -ForegroundColor white "OpenSSL dir: $ossldir"
             Push-Location -Path "$ossldir"
 
@@ -334,22 +334,23 @@ $funcs =
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
             & perl Configure $ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($ossl_target, $arch, $target_fname)"
+            Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
             # Fix up the makefile to fit our needs better
-            if ($script:NoDebugInfo)
+            if ($global:NoDebugInfo)
             {
-                Patch_Makefile "$tgtdir" ''
+                Patch_Makefile "$blddir" ' '
             }
             else
             {
-                Patch_Makefile "$tgtdir"
+                Patch_Makefile "$blddir"
             }
-            if ($script:LibSsl)
+            if ($global:LibSsl)
             {
-                & nmake /nologo depend libcrypto.lib libssl.lib *>&1
+                & nmake /nologo build_generated libcrypto.lib libssl.lib *>&1
             }
             else
             {
-                & nmake /nologo include\crypto\bn_conf.h include\crypto\dso_conf.h include\openssl\opensslconf.h libcrypto.lib *>&1
+                & nmake /nologo build_generated libcrypto.lib *>&1
             }
             Copy-Item .\makefile "$parentpath\makefile.$pid"
             ThrowOnNativeFailure "Failed to build OpenSSL ($ossl_target, $arch, $target_fname)"
@@ -359,13 +360,14 @@ $funcs =
                 New-Item -Type Directory "$libpath" | Out-Null
             }
             Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
-            if ($script:LibSsl)
+            if ($global:LibSsl)
             {
                 $target_fname2 = FileNameFromTargetName "libssl.lib" $tgt_base_suffix
                 Copy_Finished .\libssl.lib "$libpath\$target_fname2"
             }
             if (Test-Path -Path "$tgtincdir" -PathType Container)
             {
+                Write-Host -ForegroundColor yellow "Removing target include directory $tgtincdir"
                 Remove-Item -Path "$tgtincdir" -Recurse -Force -ErrorAction SilentlyContinue
             }
             Copy-Item -Recurse .\include\openssl "$tgtincdir"
@@ -374,10 +376,15 @@ $funcs =
         }
         finally
         {
-            if (-not $script:NoDeleteBuildDirectories)
+            Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
+            if ($global:NoDeleteBuildDirectories)
             {
-                Write-Host -ForegroundColor yellow "Removing $tgtdir"
-                Remove-Item -Path $tgtdir -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host -ForegroundColor green "Keeping build directory $blddir ($global:NoDeleteBuildDirectories)"
+            }
+            else
+            {
+                Write-Host -ForegroundColor yellow "Removing build directory $blddir ($global:NoDeleteBuildDirectories)"
+                #Remove-Item -Path $blddir -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
     }
@@ -500,13 +507,16 @@ try
         break # use the first one always
     }
 
-    Write-Host "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo"
+    Write-Host -ForegroundColor white "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
     foreach($tgt in $targets.GetEnumerator())
     {
         $arch = $($tgt.Name)
         $ossl_target, $tgt_base_suffix = $($tgt.Value)
         Write-Host "Before starting job: ${arch}: $ossl_target, $tgt_base_suffix"
-        Start-Job -InitializationScript $funcs -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" -ScriptBlock {BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
+        Start-Job `
+            -InitializationScript $funcs `
+            -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" `
+            -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
     }
 
     while (Get-Job -State "Running")
@@ -526,7 +536,7 @@ finally
     # Remove jobs from queue
     Get-Job | Remove-Job
 
-    Write-Host "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo"
+    Write-Host -ForegroundColor white "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
 
     Stop-Transcript
 }
