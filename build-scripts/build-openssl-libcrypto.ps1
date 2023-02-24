@@ -1,4 +1,11 @@
 #Requires -Version 6.0
+[CmdletBinding()]
+param(
+    [switch]$LibSsl = $false,
+    [switch]$NoDebugInfo = $false,
+    [switch]$NoDeleteBuildDirectories = $false,
+    [switch]$UseSccache = $false
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $PSDefaultParameterValues['*:ErrorAction']='Stop'
@@ -16,8 +23,6 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 ##
 ###############################################################################################################################################################
 
-## NB: the idea of this script is to build libcrypto static libs, it doesn't care about libssl currently.
-
 $openssl = @{
     "1.1.1t" = "8dee9b24bdb1dcbf0c3d1e9b02fb8f6bf22165e807f45adeb7c9677536859d3b"
 }
@@ -31,7 +36,7 @@ Downloads a file using Invoke-WebRequest. This is suboptimal, but should be okay
 #>
 function Download_File
 {
-    Param (
+    param(
         [Parameter(Mandatory=$true)]  [String]$url,
         [Parameter(Mandatory=$true)]  [String]$fname
     )
@@ -43,7 +48,7 @@ function Download_File
         $tgtdir = [System.IO.Path]::GetDirectoryName($fname)
         if (-not (Test-Path -Path "$tgtdir" -PathType Container))
         {
-            New-Item -Type Directory "$tgtdir"
+            New-Item -Type Directory "$tgtdir" | Out-Null
         }
         Invoke-WebRequest $url -OutFile $fname -UseBasicParsing
     }
@@ -53,9 +58,13 @@ function Download_File
     }
 }
 
+<#
+.Description
+Downloads the given version of the OpenSSL tarball, checks the hash and returns a boolean denoting success or failure
+#>
 function Download_OpenSSL_version
 {
-    Param (
+    param(
         [Parameter(Mandatory=$true)]  [String]$version,
         [Parameter(Mandatory=$true)]  [String]$knownhash,
         [Parameter(Mandatory=$true)]  [String]$tgtdir
@@ -85,9 +94,13 @@ function Download_OpenSSL_version
     }
 }
 
+<#
+.Description
+Downloads the given version of the NASM x64 ZIP file, checks the hash and returns a boolean denoting success or failure
+#>
 function Download_NASM_version
 {
-    Param (
+    param(
         [Parameter(Mandatory=$true)]  [String]$version,
         [Parameter(Mandatory=$true)]  [String]$knownhash,
         [Parameter(Mandatory=$true)]  [String]$tgtdir
@@ -125,7 +138,7 @@ $funcs =
     #>
     function ThrowOnNativeFailure
     {
-        Param($message)
+        param($message)
 
         if (-not $?)
         {
@@ -147,7 +160,7 @@ $funcs =
     #>
     function Import_OpenSSL
     {
-        Param (
+        param(
             [Parameter(Mandatory=$true)]  [hashtable]$details,
             [Parameter(Mandatory=$true)]  [String]$tgtdir
         )
@@ -177,7 +190,7 @@ $funcs =
     #>
     function Import_NASM
     {
-        Param (
+        param(
             [Parameter(Mandatory=$true)]  [hashtable]$details,
             [Parameter(Mandatory=$true)]  [String]$tgtdir
         )
@@ -205,7 +218,7 @@ $funcs =
     #>
     function Get_VSBasePath
     {
-        Param($vsrange = "[16.0,18.0)")
+        param($vsrange = "[16.0,18.0)")
 
         $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
         $vspath = & $vswhere -products "*" -format value -property installationPath -latest -version "$vsrange"
@@ -215,7 +228,7 @@ $funcs =
 
     function Copy_Finished
     {
-        Param (
+        param(
             [Parameter(Mandatory=$true)]  [String]$source,
             [Parameter(Mandatory=$true)]  [String]$target
         )
@@ -229,7 +242,7 @@ $funcs =
     #>
     function Get_sccache
     {
-        return Get-Command sccache -CommandType Application -ErrorAction silentlycontinue
+        return Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue
     }
 
     <#
@@ -238,23 +251,22 @@ $funcs =
     #>
     function Patch_Makefile
     {
-        Param (
-            [Parameter(Mandatory=$true)]  [String]$tgtdir
+        param(
+            [Parameter(Mandatory=$true)]  [String]$tgtdir,
+            [Parameter(Mandatory=$false)] [String]$dbgarg = " /Z7"
         )
 
-        #$ccache = Get_sccache
+        $ccache = Get_sccache
         $cl = "cl"
-        <#
-        if ($ccache -ne $null)
+        if (($ccache -ne $null) -and ($script:UseSccache))
         {
             $cl = "$ccache $cl"
         }
-        #>
         # Patch the makefile so that the debug info is embedded in the object files (/Z7)
         echo "Patching makefile ..."
         Move-Item -Force .\makefile .\makefile.unpatched
         (Get-Content .\makefile.unpatched) `
-            -replace '^(LIB_CFLAGS=)/Zi /Fdossl_static.pdb(.+)$', '$1/Brepro /Z7$2' `
+            -replace '^(LIB_CFLAGS=)(/Zi /Fdossl_static.pdb)(.+)$', "`$1/Brepro$dbgarg`$3" `
             -replace '^(LDFLAGS=/nologo)( /debug)(.*)$', '$1$3 /Brepro' `
             -replace '^CC=cl$', "CC=$cl" `
             -replace '^(CFLAGS=/W3)', "`$1 /d1trimfile:'$tgtdir'" |
@@ -263,16 +275,31 @@ $funcs =
 
     <#
     .Description
+    Uses a suffix to create a lib name that contains the suffix. Example (suffix="32") "libcrypto.lib" -> "libcrypto32.lib"
+    #>
+    function FileNameFromTargetName
+    {
+        param(
+            [Parameter(Mandatory=$true)]  [String]$path,
+            [Parameter(Mandatory=$true)]  [String]$suffix
+        )
+        $basename = Split-Path $path -LeafBase
+        $ext = Split-Path $path -Extension
+        return "$basename$suffix$ext"
+    }
+
+    <#
+    .Description
     This builds libcrypto by invoking the correct commands in the correct order (as of OpenSSL 1.1.x)
     #>
-    function Build_And_Place_LibCrypto
+    function BuildAndPlaceOpenSSLLib
     {
-        Param (
+        param(
             [Parameter(Mandatory=$true)]  [hashtable]$nasm,
             [Parameter(Mandatory=$true)]  [hashtable]$ossl,
             [Parameter(Mandatory=$true)]  [String]$arch,
             [Parameter(Mandatory=$true)]  [String]$ossl_target,
-            [Parameter(Mandatory=$true)]  [String]$target_fname,
+            [Parameter(Mandatory=$true)]  [String]$tgt_base_suffix,
             [Parameter(Mandatory=$true)]  [String]$ossl_hdrs,
             [Parameter(Mandatory=$true)]  [String]$staging
         )
@@ -280,11 +307,13 @@ $funcs =
         try
         {
             $parentpath = "$pwd"
-            Write-Host "Current job [$pid]: ${arch}: $ossl_target, $target_fname, $ossl_hdrs`n`$tgtdir = $tgtdir`n`$parentpath = $parentpath"
+            $hdrsubdir = "$ossl_hdrs$tgt_base_suffix"
+            $tgtincdir = "$parentpath\include\$hdrsubdir"
+            Write-Host "Current job [$pid]: ${arch}: $ossl_target, $hdrsubdir`n`$tgtdir = $tgtdir`n`$parentpath = $parentpath"
 
             if (-not (Test-Path -Path "$tgtdir" -PathType Container))
             {
-                New-Item -Type Directory "$tgtdir"
+                New-Item -Type Directory "$tgtdir" | Out-Null
             }
 
             $nasmdir = Import_NASM $nasm $tgtdir
@@ -299,32 +328,57 @@ $funcs =
             Write-Host -ForegroundColor white "OpenSSL dir: $ossldir"
             Push-Location -Path "$ossldir"
 
+            $target_fname = FileNameFromTargetName "libcrypto.lib" $tgt_base_suffix
+            Write-Host "Target file name for lib: $target_fname"
+
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
             & perl Configure $ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($ossl_target, $arch, $target_fname)"
             # Fix up the makefile to fit our needs better
-            Patch_Makefile "$tgtdir"
-            & nmake /nologo include\crypto\bn_conf.h include\crypto\dso_conf.h include\openssl\opensslconf.h libcrypto.lib *>&1
-            # Copy-Item .\makefile "$parentpath\makefile.$pid"
+            if ($script:NoDebugInfo)
+            {
+                Patch_Makefile "$tgtdir" ''
+            }
+            else
+            {
+                Patch_Makefile "$tgtdir"
+            }
+            if ($script:LibSsl)
+            {
+                & nmake /nologo depend libcrypto.lib libssl.lib *>&1
+            }
+            else
+            {
+                & nmake /nologo include\crypto\bn_conf.h include\crypto\dso_conf.h include\openssl\opensslconf.h libcrypto.lib *>&1
+            }
+            Copy-Item .\makefile "$parentpath\makefile.$pid"
             ThrowOnNativeFailure "Failed to build OpenSSL ($ossl_target, $arch, $target_fname)"
             $libpath = "$parentpath\lib"
             if (-not (Test-Path -Path "$libpath" -PathType Container))
             {
-                New-Item -Type Directory "$libpath"
+                New-Item -Type Directory "$libpath" | Out-Null
             }
             Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
-            if (Test-Path -Path "$parentpath\include\$ossl_hdrs" -PathType Container)
+            if ($script:LibSsl)
             {
-                Remove-Item -Path "$parentpath\include\$ossl_hdrs" -Recurse -Force
+                $target_fname2 = FileNameFromTargetName "libssl.lib" $tgt_base_suffix
+                Copy_Finished .\libssl.lib "$libpath\$target_fname2"
             }
-            Copy-Item -Recurse .\include\openssl "$parentpath\include\$ossl_hdrs"
+            if (Test-Path -Path "$tgtincdir" -PathType Container)
+            {
+                Remove-Item -Path "$tgtincdir" -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Copy-Item -Recurse .\include\openssl "$tgtincdir"
 
             Pop-Location
         }
         finally
         {
-            Write-Host -ForegroundColor yellow "Removing $tgtdir"
-            Remove-Item -Path $tgtdir -Recurse -Force
+            if (-not $script:NoDeleteBuildDirectories)
+            {
+                Write-Host -ForegroundColor yellow "Removing $tgtdir"
+                Remove-Item -Path $tgtdir -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 
@@ -334,12 +388,12 @@ $funcs =
     #>
     function Check_Perl_Available
     {
-        $perl = Get-Command perl -CommandType Application -ErrorAction silentlycontinue
+        $perl = Get-Command perl -CommandType Application -ErrorAction SilentlyContinue
         if ($perl -eq $null)
         {
             echo "NOTE: You need to have Perl installed for this build for work. Kicking off the installation. Feel free to cancel, but be aware that the build will fail."
             winget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl
-            $perl = Get-Command perl -CommandType Application -ErrorAction silentlycontinue
+            $perl = Get-Command perl -CommandType Application -ErrorAction SilentlyContinue
             if ($perl -eq $null)
             {
                 throw "Perl not available and wasn't installed by the user"
@@ -348,9 +402,13 @@ $funcs =
     }
 } # $funcs
 
+<#
+.Description
+Patches the openssl/opensslconf.h to unify the x86 and x64 headers generated during the OpenSSL builds.
+#>
 function Patch_opensslconf_Header
 {
-    Param (
+    param(
         [Parameter(Mandatory=$true)]  [String]$srcfile,
         [Parameter(Mandatory=$true)]  [String]$tgtfile
     )
@@ -365,47 +423,56 @@ function Patch_opensslconf_Header
     (Get-Content "$srcfile") `
         -replace '^#\s*?ifndef\s+?OPENSSL_SYS_WIN(32|64A)$', '#if defined(_M_AMD64)' `
         -replace '^(#(\s*?)define)\s+?OPENSSL_SYS_WIN(32|64A)\s+?\d+$', `
-            "`$1 OPENSSL_SYS_WIN64A 1`n#elif defined(_M_IX86)`n`$1 OPENSSL_SYS_WIN32 1`n#else`n#`$2error This OpenSSL build is not prepared for the target platform!" `
+            "`$1 OPENSSL_SYS_WIN64A 1`r`n#elif defined(_M_IX86)`r`n`$1 OPENSSL_SYS_WIN32 1`r`n#else`r`n#`$2error This OpenSSL build is not prepared for the target platform!" `
         -replace '^#(\s+?)(define|undef)\s+(BN_LLONG)$', `
-            "#if defined(_M_AMD64)`n#`${1}define `$3`n#elif defined(_M_IX86)`n#`${1}undef `$3`n#endif" `
+            "#if defined(_M_AMD64)`r`n#`${1}define `$3`r`n#elif defined(_M_IX86)`r`n#`${1}undef `$3`r`n#endif" `
         -replace '^#(\s*?)(define|undef)\s+?(SIXTY_FOUR_BIT)\s*?$', `
-            "#if defined(_M_AMD64)`n`#`${1}define `$3`n#`${1}undef THIRTY_TWO_BIT`n#elif defined(_M_IX86)`n#`${1}undef `$3`n#`${1}define THIRTY_TWO_BIT`n#endif" `
+            "#if defined(_M_AMD64)`r`n`#`${1}define `$3`r`n#`${1}undef THIRTY_TWO_BIT`r`n#elif defined(_M_IX86)`r`n#`${1}undef `$3`r`n#`${1}define THIRTY_TWO_BIT`r`n#endif" `
         -replace '^#(\s*?)(define|undef)\s+?(THIRTY_TWO_BIT)\s*?$', '' |
     Out-File "$tgtfile"
 }
 
+<#
+.Description
+Verifies that all generated header files except for opensslconf.h are identical, copies the identical ones
+into a common include/openssl folder and patches the opensslconf.h to make it available for both x86 and x64
+on Windows.
+#>
 function FinalizeHeaders
 {
-    Param (
+    param(
         [Parameter(Mandatory=$true)]  [hashtable]$targets
     )
+
     $ossl_hdrs_common = "openssl"
-    $ossl_target, $target_fname, $ossl_hdrs64 = $targets["x64"]
-    $ossl_target, $target_fname, $ossl_hdrs = $targets["x86"]
-    if (Test-Path -Path "$pwd\include\$ossl_hdrs" -PathType Container)
+    $ossl_target, $tgt_base_suffix64, $null = $targets["x64"]
+    $ossl_target, $tgt_base_suffix32, $null = $targets["x86"]
+    $incdir = "$pwd\include\$ossl_hdrs_common"
+    $incdir32 = "$incdir$tgt_base_suffix32"
+    $incdir64 = "$incdir$tgt_base_suffix64"
+    if (Test-Path -Path "$incdir32" -PathType Container)
     {
-        $incdir = "$pwd\include"
-        Write-Host "Post-processing: $ossl_target, $target_fname, $ossl_hdrs"
+        Write-Host "Post-processing: $ossl_target, $incdir32 -> $incdir"
         # Ensure the common include folder exists
-        if (-not (Test-Path -Path "$incdir\$ossl_hdrs_common" -PathType Container))
+        if (-not (Test-Path -Path "$incdir" -PathType Container))
         {
-            New-Item -Type Directory "$incdir\$ossl_hdrs_common"|Out-Null
+            New-Item -Type Directory "$incdir" | Out-Null
         }
 
-        $hashes = Get-ChildItem -Path "$pwd\include\$ossl_hdrs" -File|%{ Get-FileHash $_ }|Select-Object -Property Hash,Path
+        $hashes = Get-ChildItem -Path "$incdir32" -File|%{ Get-FileHash $_ }|Select-Object -Property Hash,Path
         foreach($hash in $hashes)
         {
             $fname = Split-Path "$($hash.Path)" -Leaf
-            if (Test-Path -Path "$pwd\include\$ossl_hdrs64\$fname" -PathType Leaf)
+            if (Test-Path -Path "$incdir64\$fname" -PathType Leaf)
             {
-                $otherhash = Get-FileHash "$pwd\include\$ossl_hdrs64\$fname"
+                $otherhash = Get-FileHash "$incdir64\$fname"
                 if ($($otherhash.Hash) -eq $($hash.Hash))
                 {
-                    Copy-Item -Force "$($hash.Path)" "$incdir\$ossl_hdrs_common\"
+                    Copy-Item -Force "$($hash.Path)" "$incdir"
                 }
                 else
                 {
-                    Patch_opensslconf_Header "$($hash.Path)" "$incdir\$ossl_hdrs_common\$fname"
+                    Patch_opensslconf_Header "$($hash.Path)" "$incdir\$fname"
                 }
             }
         }
@@ -414,7 +481,7 @@ function FinalizeHeaders
 
 try
 {
-    $targets = @{ x86=@("VC-WIN32", "libcrypto32.lib", "openssl32"); x64=@("VC-WIN64A", "libcrypto64.lib", "openssl64") }
+    $targets = @{ x86=@("VC-WIN32", "32"); x64=@("VC-WIN64A", "64") }
     $logpath = "$PSScriptRoot\build-openssl-libcrypto.log"
     $staging = "$pwd\staging"
     Start-Transcript -Path $logpath -Append
@@ -432,12 +499,14 @@ try
         $ossl_details = Download_OpenSSL_version  "$version" "$($openssl.$version)" "$staging"
         break # use the first one always
     }
+
+    Write-Host "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo"
     foreach($tgt in $targets.GetEnumerator())
     {
         $arch = $($tgt.Name)
-        $ossl_target, $target_fname, $ossl_hdrs = $($tgt.Value)
-        Write-Host "Before starting job: ${arch}: $ossl_target, $target_fname, $ossl_hdrs"
-        Start-Job -InitializationScript $funcs -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" -ScriptBlock {Build_And_Place_LibCrypto $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:target_fname $using:ossl_hdrs $using:staging}
+        $ossl_target, $tgt_base_suffix = $($tgt.Value)
+        Write-Host "Before starting job: ${arch}: $ossl_target, $tgt_base_suffix"
+        Start-Job -InitializationScript $funcs -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" -ScriptBlock {BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
     }
 
     while (Get-Job -State "Running")
@@ -456,6 +525,8 @@ finally
     Get-Job | %{ $duration = $_.PSEndTime - $_.PSBeginTime; Write-Host "$($_.Name) took $duration" }
     # Remove jobs from queue
     Get-Job | Remove-Job
+
+    Write-Host "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo"
 
     Stop-Transcript
 }
