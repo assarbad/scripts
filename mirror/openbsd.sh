@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-FREEBSD_VERSION=${1:-13.1}
+OPENBSD_VERSION=${1:-7.2}
 ARCHITECTURES="amd64 i386"
-BASEURL="https://download.freebsd.org/ftp/releases"
+BASEURL="https://cdn.openbsd.org/pub/OpenBSD"
 [[ -t 1 ]] && { cG="\e[1;32m"; cR="\e[1;31m"; cB="\e[1;34m"; cW="\e[1;37m"; cY="\e[1;33m"; cG_="\e[0;32m"; cR_="\e[0;31m"; cB_="\e[0;34m"; cW_="\e[0;37m"; cY_="\e[0;33m"; cZ="\e[0m"; export cR cG cB cY cW cR_ cG_ cB_ cY_ cW_ cZ; }
 for tool in curl dirname find grep readlink sha256sum xz; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 pushd $(dirname $0) > /dev/null; CURRABSPATH=$(readlink -nf "$(pwd)"); popd > /dev/null; # Get the directory in which the script resides
@@ -50,10 +50,6 @@ function download_several
 	[[ -d "$DIRNAME" ]] || mkdir -p "$DIRNAME"
 	for url in "$@"; do
 		local fname="${url##*/}"
-		if [[ "${fname}" != "${fname%.xz}" ]] && [[ -f "$DIRNAME/${fname%.xz}" ]]; then
-			echo -e "${cW}INFO:${cZ} file ${cW}${fname}${cZ} already unpacked, skipping download."
-			continue
-		fi
 		if [[ -f "$DIRNAME/$fname" ]]; then
 			echo -e "${cW}INFO:${cZ} file ${cW}${fname}${cZ} already downloaded"
 		else
@@ -62,27 +58,33 @@ function download_several
 	done
 }
 
+# Common downloads
+if ( check_preexisting_hashes "$OPENBSD_VERSION" ); then
+	echo -e "${cW}INFO:${cZ} skipping downloads into ${cY}$DIRNAME${cZ}"
+else
+	download_several "$OPENBSD_VERSION" $BASEURL/$OPENBSD_VERSION/{ANNOUNCEMENT,README,openbsd-${OPENBSD_VERSION//./}-base.pub,root.mail,{ports,src,sys,xenocara}.tar.gz,SHA256{,.sig}}
+	if ! (validate_using_hashfile_and_sign "$OPENBSD_VERSION" "" "" --ignore-missing ); then
+		echo -e "${cR}ERROR:${cZ} an error occurred, likely a file could not be validated or signature verification or signing failed"
+		exit 1
+	fi
+fi
+# Per architecture downloads
 for arch in $ARCHITECTURES; do
-	DIRNAME="$FREEBSD_VERSION/$arch"
-	# Skip if downloaded and unpacked
+	DIRNAME="$OPENBSD_VERSION/$arch"
 	if ( check_preexisting_hashes "$DIRNAME" --ignore-missing ); then
 		echo -e "${cW}INFO:${cZ} skipping downloads into ${cY}$DIRNAME${cZ}"
 		continue
 	fi
+	BASEURL2="$BASEURL/$OPENBSD_VERSION"
 	# Downloads
-	download_several "$DIRNAME" $BASEURL/$arch/$arch/ISO-IMAGES/$FREEBSD_VERSION/FreeBSD-${FREEBSD_VERSION}-RELEASE-${arch}-{bootonly,disc1,dvd1}.iso.xz $BASEURL/$arch/$arch/ISO-IMAGES/$FREEBSD_VERSION/CHECKSUM.SHA{256,512}-FreeBSD-${FREEBSD_VERSION}-RELEASE-${arch}
+	download_several "$DIRNAME" $BASEURL2/$arch/install${OPENBSD_VERSION//./}.{iso,img} $BASEURL2/$arch/man${OPENBSD_VERSION//./}.tgz $BASEURL2/$arch/BUILDINFO $BASEURL2/$arch/SHA256{,.sig} $BASEURL2/$arch/INSTALL.${arch}
 done
+# Validation
 for arch in $ARCHITECTURES; do
-	DIRNAME="$FREEBSD_VERSION/$arch"
+	DIRNAME="$OPENBSD_VERSION/$arch"
 	# Validate, unpack, extract relevant hashes, sign hash file
-	if ( cd "$DIRNAME"; set -x; grep '.*\.iso\.xz' CHECKSUM.SHA256*| sha256sum --check ); then
-		( cd "$DIRNAME"; set -x; for i in *.iso.xz; do xz -kd $i; done )
-		if ( cd "$DIRNAME"; set -x; grep '.*\.iso' CHECKSUM.SHA256*|grep -v '.*\.iso\.xz'|tee "SHA256SUMS"|sha256sum --check ); then
-			echo -e "${cG}SUCCESS:${cZ} ISO files successfully validated, removing .iso.xz files"
-			( cd "$DIRNAME"; set -x; gpg -bao SHA256SUMS{.asc,} )
-			( cd "$DIRNAME"; set -x; rm -f *.iso.xz )
-		else
-			echo -e "${cR}ERROR:${cZ} Some files did not match the expected hashes!"
-		fi
+	if ! (validate_using_hashfile_and_sign "$DIRNAME" "" "" --ignore-missing ); then
+		echo -e "${cR}ERROR:${cZ} an error occurred, likely a file could not be validated or signature verification or signing failed"
+		exit 1
 	fi
 done
