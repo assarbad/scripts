@@ -1,3 +1,15 @@
+<# ::
+@echo off
+:: Rename this file to .ps1.cmd to have this NT script wrapper take effect
+set PSSCRIPT=%~dpnx0
+set PSSCRIPT=%PSSCRIPT:.cmd=%
+@echo on
+copy /y "%~dpnx0" "%PSSCRIPT%" > nul
+PowerShell.exe -ExecutionPolicy Bypass -NoLogo -NoProfile -File "%PSSCRIPT%" %*
+set ERR=%ERRORLEVEL%
+del /f "%PSSCRIPT%" > nul
+@exit /b %ERR%
+#>
 #Requires -Version 6.0
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -9,18 +21,25 @@ Set-PSDebug -Off
 Self-elevates the current script.
 NB: currently doesn't pass the script arguments on!
 #>
-function SelfElevateIfNeeded([string] $script)
+function Self-Elevate-If-Needed
 {
-    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator'))
+    Param(
+        [Parameter(Mandatory=$true)] [string]$script
+    )
+
+    if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator'))
     {
-        Write-Host "UAC-elevating $script"
-        # On Windows Vista and newer
-        if ([int](Get-CimInstance -Class Win32_OperatingSystem | Select-Object -ExpandProperty BuildNumber) -ge 6000)
+        $majwinver = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x026c)
+        if ($majwinver -ge 6)
         {
-            $CommandLine = "-File `"$script`""
+            $CommandLine = "-ExecutionPolicy Bypass -NoLogo -NoProfile -File `"$script`""
+            if (($fullname -ne "") -or ($email -ne ""))
+            {
+                $CommandLine += " `"$fullname`" `"$email`""
+            }
             $pwsh = (Get-Process -Id $PID).ProcessName + ".exe"
-            Start-Process -FilePath $pwsh -Verb Runas -ArgumentList $CommandLine
-            Exit # the unprivileged instance
+            $proc = Start-Process -FilePath $pwsh -Verb Runas -ArgumentList $CommandLine
+            Exit
         }
     }
 }
@@ -787,5 +806,5 @@ function main()
     EnableGitBashHereInWindowsTerminal
 }
 
-SelfElevateIfNeeded $MyInvocation.MyCommand.Path
+Self-Elevate-If-Needed $MyInvocation.MyCommand.Path
 main
