@@ -22,7 +22,6 @@ function Configure-And-Set-Service
     $Service|Set-Service -StartupType $state -ErrorAction SilentlyContinue -ErrorVariable SvcCfgError
     if ($SvcCfgError -and ($state -eq "Disabled") -and ($($Service.StartType) -ne $state))
     {
-        # $SvcCfgError|Format-List -Property *
         Write-Host "`tTrying to forcibly disable via registry ..."
         Set-Itemproperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$name" -Name Start -Value 4 -Type DWord
     }
