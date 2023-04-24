@@ -16,7 +16,7 @@ Homepage: https://www.tug.org/texlive/debian.html
 Standards-Version: 4.1.4
 
 Package: texlive-local
-Version: 2023.99999999-2
+Version: 2023.99999999-3
 Maintainer: Not Relevant <you@example.com>
 Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context, 
  dvidvi, dvipng, feynmf, fragmaster, jadetex, lacheck, latex-beamer, 
@@ -47,7 +47,7 @@ Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context,
  texlive-pstricks, texlive-pstricks-doc, texlive-publishers,
  texlive-publishers-doc, texlive-science, texlive-science-doc, texlive-xetex,
  thailatex, tipa, tipa-doc, xindy, xindy-rules, xmltex, asymptote, texinfo
-Depends: freeglut3
+Depends: freeglut3, perl-doc
 Recommends: fonts-noto, fonts-linuxlibertine, fonts-texgyre, fonts-junicode, fonts-croscore, fonts-ebgaramond, fonts-courier-prime, fonts-cmu, fonts-vollkorn, fonts-mononoki
 Architecture: all
 Description: My local installation of TeX Live 2023.
