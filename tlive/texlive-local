@@ -3,7 +3,7 @@
 # 3. Add TeX Live's bin directory to ENV_PATH in /etc/login.defs. (can be skipped if symlinks created in /usr/local/bin during installation)
 # 4. Tell APT about your TeX Live installation by building a dummy package using equivs:
 #   - apt install equivs
-#   - wget https://www.tug.org/texlive/files/debian-equivs-2020-ex.txt
+#   - wget https://www.tug.org/texlive/files/debian-equivs-2022-ex.txt
 #   - equivs-control texlive-local
 #   - merge the two files
 #   - equivs-build texlive-local
@@ -16,7 +16,7 @@ Homepage: https://www.tug.org/texlive/debian.html
 Standards-Version: 4.1.4
 
 Package: texlive-local
-Version: 2022.99999999-1
+Version: 2023.99999999-2
 Maintainer: Not Relevant <you@example.com>
 Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context, 
  dvidvi, dvipng, feynmf, fragmaster, jadetex, lacheck, latex-beamer, 
@@ -50,8 +50,8 @@ Provides: chktex, biblatex, biblatex-dw, cm-super, cm-super-minimal, context,
 Depends: freeglut3
 Recommends: fonts-noto, fonts-linuxlibertine, fonts-texgyre, fonts-junicode, fonts-croscore, fonts-ebgaramond, fonts-courier-prime, fonts-cmu, fonts-vollkorn, fonts-mononoki
 Architecture: all
-Description: My local installation of TeX Live 2022.
- A full "vanilla" TeX Live 2022
+Description: My local installation of TeX Live 2023.
+ A full "vanilla" TeX Live 2023
  http://tug.org/texlive/debian#vanilla
 
 # fonts-dejavu - metapackage to pull in fonts-dejavu-core and fonts-dejavu-extra
