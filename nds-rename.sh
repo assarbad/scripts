@@ -57,11 +57,37 @@ for i in *.pdf; do
 				cut -d : -f 3-| \
 				tr -d '\n'| \
 				awk '{$1=$1;print}'| \
-				sed -e 's|:|：|g;s|\?|？|g;'| \
+				sed -e 's|:|：|g; s|\?|？|g; s|/|⧸|g'| \
 				rg '^([^|]+)\|\s*?(\d+\.\s+?\w+\s+?\d+)\s+?1' -r '$1:$2'| \
 				awk -F : '{$1=$1;$2=$2;printf "TITLE=\"%s\"; DATE=\"%s\";", $1, $2}'| \
 				sed -e 's|[ \t]*";|";|g;s|="[ \t]*|="|g' \
 		)
+		if [[ -z "$SNIPPET" ]]; then
+			SNIPPET=$(rga --color never -UIH '(?:NachDenkSeiten - )?([^\|]+)\|\s+?Veröffentlicht am:\s+?([^\|]+)\|' -r '$1|$2' "$i"| \
+				grep ':Page 1:'| \
+				cut -d : -f 3-| \
+				tr -d '\n'| \
+				awk '{$1=$1;print}'| \
+				sed -e 's|:|：|g; s|\?|？|g; s|/|⧸|g'| \
+				rg -o '^([^|]+)\|\s*?(\d+\.\s+?\w+\s+?\d+)\s+?1' -r '$1:$2'| \
+				awk -F : '{$1=$1;$2=$2;printf "TITLE=\"%s\"; DATE=\"%s\";", $1, $2}'| \
+				sed -e 's|[ \t]*";|";|g;s|="[ \t]*|="|g' \
+			)
+		fi
+		if [[ -z "$SNIPPET" ]]; then
+			SNIPPET=$(rga -A 4 -UIH 'NachDenkSeiten\s+?-\s+?(\w+[^\|]+)\|.+?Veröffentlicht' -o "$i"| \
+				rg -B 4 -- '[\-:]Page 1:\s*?$'| \
+				sed -e 's|-Page 1:|:|g'| \
+				cut -d : -f 2-| \
+				tr -d '\n'| \
+				awk '{$1=$1;print}'| \
+				rg 'NachDenkSeiten\s+?-\s+?([^\|]+)\|.+?Veröffentlicht\s+?am:\s+?([^\|]+)\|' -r '$1|$2'| \
+				sed -e 's|:|：|g; s|\?|？|g; s|/|⧸|g'| \
+				rg -o '^([^|]+)\|\s*?(\d+\.\s+?\w+\s+?\d+)\s+?1' -r '$1:$2'| \
+				awk -F : '{$1=$1;$2=$2;printf "TITLE=\"%s\"; DATE=\"%s\";", $1, $2}'| \
+				sed -e 's|[ \t]*";|";|g;s|="[ \t]*|="|g' \
+			)
+		fi
 		if [[ -n "$SNIPPET" ]]; then
 			echo "$i"
 			eval "$SNIPPET"
@@ -76,6 +102,8 @@ for i in *.pdf; do
 					( set -x; mv "$i" "$NEWNAME" )
 				fi
 			fi
+		else
+			echo "INFO: kein Titel?: $i"
 		fi
 	fi
 done
