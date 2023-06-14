@@ -15,6 +15,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $PSDefaultParameterValues['*:ErrorAction']='Stop'
 Set-PSDebug -Off
+$VerbosePreference = "continue"
 
 <#
 .Description
@@ -99,8 +100,9 @@ function ShowHeader()
     $WinVerMaj = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x026c)
     $WinVerMin = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x0270)
     $WinVerBld = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x0260)
+    $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
     Write-Output "Windows: $WinVerMaj.$WinVerMin.$WinVerBld"|Green
-    Write-Output "Machine: $env:COMPUTERNAME (domain: $env:USERDOMAIN, logon server: $env:LOGONSERVER)`n"|White
+    Write-Output "Machine: $env:COMPUTERNAME (domain: $env:USERDOMAIN, logon server: $env:LOGONSERVER); admin: $IsAdmin`n"|White
 }
 
 <#

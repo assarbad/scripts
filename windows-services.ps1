@@ -13,6 +13,22 @@ del /f "%PSSCRIPT%" > nul
 #Requires -Version 6.0
 Set-StrictMode -Version Latest
 Set-PSDebug -Off
+$VerbosePreference = "continue"
+
+function ShowHeader()
+{
+    <#
+    Reading actual Windows version from KUSER_SHARED_DATA
+    xref: http://terminus.rewolf.pl/terminus/structures/ntdll/_KUSER_SHARED_DATA_combined.html
+    xref: https://msrc-blog.microsoft.com/2022/04/05/randomizing-the-kuser_shared_data-structure-on-windows/
+    #>
+    $WinVerMaj = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x026c)
+    $WinVerMin = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x0270)
+    $WinVerBld = [System.Runtime.InteropServices.Marshal]::ReadInt32((New-Object IntPtr(0x7ffe0000)), 0x0260)
+    $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')
+    Write-Output "Windows: $WinVerMaj.$WinVerMin.$WinVerBld"
+    Write-Output "Machine: $env:COMPUTERNAME (domain: $env:USERDOMAIN, logon server: $env:LOGONSERVER); admin: $IsAdmin`n"
+}
 
 function Configure-And-Set-Service
 {
@@ -153,8 +169,10 @@ $ServicesToStopAndDisable = (
     "WpnService", # Windows Push Notifications System Service
     "dmwappushservice", # Device Management Wireless Application Protocol (WAP) Push message Routing Service
     "RmSvc", # Radio Management Service
+    "WaaSMedicSvc", # Windows Update Medic Service
     "WPDBusEnum", # Portable Device Enumerator Service (arguably for MTP devices etc)
-    "WSearch" # Windows Search
+    "WSearch", # Windows Search
+    "wuauserv" # Windows Update
 )
 
 $ServicesToStopAndDisableByWildCard = (
@@ -177,7 +195,7 @@ $ServicesToStopAndDisableByWildCard = (
 )
 
 $logpath = "$PSScriptRoot\windows-services.log"
-
+ShowHeader
 try
 {
     Start-Transcript -Path $logpath -Append
