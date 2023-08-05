@@ -4,6 +4,7 @@ param(
     [switch]$LibSsl = $false,
     [switch]$NoDebugInfo = $false,
     [switch]$NoDeleteBuildDirectories = $false,
+    [switch]$UseMasm = $false,
     [switch]$UseSccache = $false
 )
 Set-StrictMode -Version Latest
@@ -24,7 +25,7 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 ###############################################################################################################################################################
 
 $openssl = @{
-    "1.1.1t" = "8dee9b24bdb1dcbf0c3d1e9b02fb8f6bf22165e807f45adeb7c9677536859d3b"
+    "1.1.1v" = "d6697e2871e77238460402e9362d47d18382b15ef9f246aba6c7bd780d38a6b0"
 }
 $nasm = @{
     "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"
@@ -251,11 +252,6 @@ $funcs =
     #>
     function Patch_Makefile
     {
-        param(
-            [Parameter(Mandatory=$true)]  [String]$tgtdir,
-            [Parameter(Mandatory=$false)] [String]$dbgarg = " /Z7"
-        )
-
         $ccache = Get_sccache
         $cl = "cl"
         if (($ccache -ne $null) -and ($global:UseSccache))
@@ -266,10 +262,8 @@ $funcs =
         echo "Patching makefile ..."
         Move-Item -Force .\makefile .\makefile.unpatched
         (Get-Content .\makefile.unpatched) `
-            -replace '^(LIB_CFLAGS=)(/Zi /Fdossl_static.pdb)(.+)$', "`$1/Brepro$dbgarg`$3" `
-            -replace '^(LDFLAGS=/nologo)( /debug)(.*)$', '$1$3 /Brepro' `
-            -replace '^CC=cl$', "CC=$cl" `
-            -replace '^(CFLAGS=/W3)', "`$1 /d1trimfile:'$tgtdir'" |
+            -replace '/Zi /Fdossl_static.pdb', "" `
+            -replace '^CC=cl$', "CC=$cl" |
         Out-File .\makefile
     }
 
@@ -316,10 +310,19 @@ $funcs =
                 New-Item -Type Directory "$blddir" | Out-Null
             }
 
-            $nasmdir = Import_NASM $nasm $blddir
-            # Make our copy of NASM available
-            $env:PATH =  $nasmdir + ";" + $env:PATH
-            Write-Host -ForegroundColor white "NASM: $nasmdir"
+            if ($global:UseMasm)
+            {
+                $configure_ossl_target = "${ossl_target}-masm"
+                Write-Host -ForegroundColor white "Using MASM"
+            }
+            else
+            {
+                $configure_ossl_target = $ossl_target
+                $nasmdir = Import_NASM $nasm $blddir
+                # Make our copy of NASM available
+                $env:PATH =  $nasmdir + ";" + $env:PATH
+                Write-Host -ForegroundColor white "NASM: $nasmdir"
+            }
 
             $vspath = Get_VSBasePath
             Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
@@ -331,18 +334,33 @@ $funcs =
             $target_fname = FileNameFromTargetName "libcrypto.lib" $tgt_base_suffix
             Write-Host "Target file name for lib: $target_fname"
 
+            $env:LOG_BUILD_COMMANDLINES="$blddir\buildcmdlines.log"
+            $srcepoch = ([DateTimeOffset](Get-Item "$pwd\INSTALL").LastWriteTime).ToUnixTimeSeconds() # any freshly unpacked file will do
+            $env:SOURCE_DATE_EPOCH="$srcepoch"
+
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
-            & perl Configure $ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
-            ThrowOnNativeFailure "Failed to configure OpenSSL for build ($ossl_target, $arch, $target_fname)"
+            & perl Configure $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
+            ThrowOnNativeFailure "Failed to configure OpenSSL for build ($configure_ossl_target, $arch, $target_fname)"
             Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
+            # A non-invasive way of getting /Brepro into the build all the while avoiding
+            $env:CL="/nologo"
+            $env:LIB="/nologo"
+            $env:LINK="/nologo"
+            $env:ML="/nologo"
+            $env:_LIB_="/Brepro"
+            $env:_LINK_="/Brepro"
             # Fix up the makefile to fit our needs better
             if ($global:NoDebugInfo)
             {
-                Patch_Makefile "$blddir" ' '
+                Patch_Makefile
+                $env:_CL_="/d1trimfile:'$blddir' /Brepro"
+                $env:_ML_="/Brepro"
             }
             else
             {
-                Patch_Makefile "$blddir"
+                Patch_Makefile
+                $env:_CL_="/d1trimfile:'$blddir' /Brepro /Z7"
+                $env:_ML_="/Brepro /Zi"
             }
             if ($global:LibSsl)
             {
@@ -496,10 +514,17 @@ try
     $funcs:Check_Perl_Available
     
     # Cache copies of the files we need for the build
-    foreach($version in $nasm.keys)
+    if ($UseMasm)
     {
-        $nasm_details = Download_NASM_version "$version" "$($nasm.$version)" "$staging"
-        break # use the first one always
+        $nasm_details = @{ }
+    }
+    else
+    {
+        foreach($version in $nasm.keys)
+        {
+            $nasm_details = Download_NASM_version "$version" "$($nasm.$version)" "$staging"
+            break # use the first one always
+        }
     }
     foreach($version in $openssl.keys)
     {
@@ -516,7 +541,7 @@ try
         Start-Job `
             -InitializationScript $funcs `
             -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" `
-            -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
+            -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseMasm = $using:UseMasm; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
     }
 
     while (Get-Job -State "Running")
