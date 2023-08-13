@@ -12,6 +12,8 @@ virtualenv = "*"
 selenium = "*"
 flake8 = "*"
 vulture = "*"
+jupyterlab = "*"
+notebook = "*"
 
 [dev-packages]
 

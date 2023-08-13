@@ -3,7 +3,7 @@
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 __author__ = "Oliver Schneider"
-__copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain, or CC0 where Public Domain dedications are not possible"
 __version__ = "0.3"
 import os
 import sys
