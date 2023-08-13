@@ -33,3 +33,4 @@ tlive/*.deb
 **.bak
 **.log
 msdn/**
+*.gitbundle
