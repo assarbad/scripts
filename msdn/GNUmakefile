@@ -1,3 +1,13 @@
+PYSCRIPTS:=combine-msdn-keys.py get-msdn-keys.py weed-out-dupes.py
+ifneq ($(COMSPEC)$(ComSpec),)
+BLACK:=py -3 -m black
+FLAKE8:=py -3 -m flake8
+VULTURE:=py -3 -m vulture
+else
+BLACK:=black
+FLAKE8:=flake8
+VULTURE:=vulture
+endif
 KEYS:=$(sort $(wildcard keys/*.xml))
 TGTS.raw:=MSDN-keys-xml.7z MSDN-keys-xml.tar.xz
 TGTS:=$(addsuffix .SHA256SUM,$(TGTS.raw))
@@ -39,5 +49,18 @@ REBUILD: CLEAN all
 renew-keys: rmkeys allkeys.txt
 keys: allkeys.txt
 
-.PHONY: all clean CLEAN rebuild REBUILD keys rmkeys renew-keys
+lint: $(PYSCRIPTS)
+	$(FLAKE8) $^
+
+pretty: black
+
+black: $(PYSCRIPTS)
+	$(BLACK) $^
+
+vulture: $(PYSCRIPTS)
+	$(VULTURE) $^
+
+check: pretty lint vulture
+
+.PHONY: all black check clean CLEAN lint pretty rebuild REBUILD vulture keys rmkeys renew-keys
 .PRECIOUS: $(TGTS.raw)

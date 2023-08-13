@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
+
 __author__ = "Oliver Schneider"
-__copyright__ = "2017-2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
-__version__ = "0.1.3"
+__copyright__ = "2017-2023 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
+__version__ = "0.1.4"
 import fnmatch
 import io
 import os
@@ -12,6 +13,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
+
 try:
     from functools import cache
 except ImportError:
@@ -24,22 +26,22 @@ good_keychars = set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-")
 @cache
 def keytype(s):
     types = {
-         "kms": "kms",
-         "MultipleActivation": "mak",
-         "MAK": "mak",
-         "mak": "mak",
-         "RTL": "rtl",
-         "rtl": "rtl",
-         "Retail": "rtl",
-         "Static Activation Key": "sta",
-         "sta": "sta",
-         "STA": "sta",
-         "OEM Key": "oem",
-         "OEM": "oem",
-         "Azure Dev Tools for Teaching KMS": "kms",
-         "vol": "vol",
-         "VA 1.0": "vol",
-         }
+        "kms": "kms",
+        "MultipleActivation": "mak",
+        "MAK": "mak",
+        "mak": "mak",
+        "RTL": "rtl",
+        "rtl": "rtl",
+        "Retail": "rtl",
+        "Static Activation Key": "sta",
+        "sta": "sta",
+        "STA": "sta",
+        "OEM Key": "oem",
+        "OEM": "oem",
+        "Azure Dev Tools for Teaching KMS": "kms",
+        "vol": "vol",
+        "VA 1.0": "vol",
+    }
     if s in types:
         return types[s]
     else:
@@ -71,7 +73,7 @@ def genkey(tree):
         for pdkeys in root.iter("Product_Key"):
             for key in pdkeys.iter("Key"):
                 retkey = key.text
-                if set(retkey) <= good_keychars:
+                if retkey and set(retkey) <= good_keychars:
                     retval = {"Name": None, "Type": None, "Date": None}
                     retval["Name"] = pdkeys.attrib["Name"].strip()
                     if "Type" in key.attrib:
@@ -98,61 +100,52 @@ def cal_items(o, m):
 
 
 CORRECTION_REGEXES = [
-        (r"^(Visual Basic 2010 Express Registration Key|Visual Studio Express 2010 for Visual Basic Registration Key)",
-            "Visual Studio Express 2010 (Visual Basic)"),
-        (r"(Visual C# 2010 Express Registration Key|Visual Studio Express 2010 for Visual C# Registration Key)",
-            "Visual Studio Express 2010 (Visual C#)"),
-        (r"(Visual C\+\+ 2010 Express Registration Key|Visual Studio Express 2010 for Visual C\+\+ Registration Key)",
-            "Visual Studio Express 2010 (Visual C++)"),
-        (r"(Visual Studio \.NET|Visual Studio \.NET Professional)",
-            "Visual Studio .NET Professional"),
-        (r"(Visual Studio 2010 Professional|Visual Studio Professional 2010)",
-            "Visual Studio Professional 2010"),
-        (r"(Visual Studio Express 2012 for Web|Visual Studio Express 2012 for Windows 8)",
-            "Visual Studio Express 2012 for Web (+Windows 8)"),
-        (r"Windows Server (2003|2008|2008 R2|2012) (?:Terminal Server|Terminal Services|Remote Desktop Services) ((?:User CAL|user connections)|(?:Device CAL|device connections)) \((\d+)\)",  # noqa: E501
-            cal_items),
-        (r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?Remote Desktop Services (user|device) connections\s\((\d+)\)",
-            lambda o, m: "Windows Server (incl. 2004, 20H2, 2019) Remote Desktop Services {} connections ({})".format(m.group(1), m.group(2))),
-        (r"Windows Web Server 2008|Windows HPC Server 2008 and Windows Web Server 2008",
-            "Windows HPC (+Web) Server 2008"),
-        (r"Windows Server 2008 Enterprise and Windows Server 2008 Standard|Windows Server 2008 Standard",
-            "Windows Server 2008 Enterprise & Standard"),
-        (r"(10-digit|Visual SourceSafe 6\.0|All products requiring a 10-digit product key|Legacy 10-digit product key)",
-            "All legacy products requiring a 10-digit product key"),
-        (r"Windows Embedded Compact 2013 \(MSDN\)|Windows Embedded Compact 2013",
-            "Windows Embedded Compact 2013"),
-        (r"Windows 8.1 Enterprise and Enterprise N|Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL",
-            "Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL"),
-        (r"(?:Windows Server 2012 Storage Server|Windows Storage Server 2012) (Standard|Workgroup)",
-            lambda o, m: "Windows Storage Server 2012 {}".format(m.group(1))),
-        (r"^Windows 10 (?:for )?Education N(?: and KN)?$",
-            "Windows 10 for Education N (+KN)"),
-        (r"^Windows (10|11) (?:for )?Education( N)?$",
-            lambda o, m: "Windows {} for Education{}".format(m.group(1), m.group(2) or "")),
-        (r"^Windows (10|11) Pro(?:fessional)? for Workstations( N)?$",
-            lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
-        (r"^Windows (10|11) Pro(?:fessional)?( N)? for Workstations$",
-            lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
-        (r"^Windows (10|11) Pro(fessional)?(?: \(BizSpark\))?$",
-            lambda o, m: "Windows {} Pro".format(m.group(1))),
-        (r"^Windows 10 Pro(?:fessional)? N(?: and KN)?$",
-            "Windows 10 Pro N (+KN)"),
-        (r"^Windows 11 Pro(?:fessional)? N$",
-            "Windows 11 Pro N"),
-        (r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?(Standard|Datacenter)$",
-            lambda o, m: "Windows Server {} (incl. 2004, 20H2, 2019)".format(m.group(1))),
-        (r"^Windows 10 Enterprise 2015 LTSB N and KN$",
-            "Windows 10 Enterprise 2015 LTSB N (+KN)"),
-        (r"^Windows 10 Enterprise N(?: and KN)?$",
-            "Windows 10 Enterprise N (+KN)"),
-        (r"^Windows 11 Enterprise N(?: \(BizSpark\))?$",
-            "Windows 11 Enterprise N"),
-        (r"^Windows 10 Home N(?: and KN)?$",
-            "Windows 10 Home N (+KN)"),
-        (r"^Windows 11 Home N$",
-            "Windows 11 Home N"),
-        ]
+    (
+        r"^(Visual Basic 2010 Express Registration Key|Visual Studio Express 2010 for Visual Basic Registration Key)",
+        "Visual Studio Express 2010 (Visual Basic)",
+    ),
+    (r"(Visual C# 2010 Express Registration Key|Visual Studio Express 2010 for Visual C# Registration Key)", "Visual Studio Express 2010 (Visual C#)"),
+    (r"(Visual C\+\+ 2010 Express Registration Key|Visual Studio Express 2010 for Visual C\+\+ Registration Key)", "Visual Studio Express 2010 (Visual C++)"),
+    (r"(Visual Studio \.NET|Visual Studio \.NET Professional)", "Visual Studio .NET Professional"),
+    (r"(Visual Studio 2010 Professional|Visual Studio Professional 2010)", "Visual Studio Professional 2010"),
+    (r"(Visual Studio Express 2012 for Web|Visual Studio Express 2012 for Windows 8)", "Visual Studio Express 2012 for Web (+Windows 8)"),
+    (
+        r"Windows Server (2003|2008|2008 R2|2012) (?:Terminal Server|Terminal Services|Remote Desktop Services) ((?:User CAL|user connections)|(?:Device CAL|device connections)) \((\d+)\)",  # noqa: E501
+        cal_items,
+    ),
+    (
+        r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?Remote Desktop Services (user|device) connections\s\((\d+)\)",
+        lambda o, m: "Windows Server (incl. 2004, 20H2, 2019) Remote Desktop Services {} connections ({})".format(m.group(1), m.group(2)),
+    ),
+    (r"Windows Web Server 2008|Windows HPC Server 2008 and Windows Web Server 2008", "Windows HPC (+Web) Server 2008"),
+    (r"Windows Server 2008 Enterprise and Windows Server 2008 Standard|Windows Server 2008 Standard", "Windows Server 2008 Enterprise & Standard"),
+    (
+        r"(10-digit|Visual SourceSafe 6\.0|All products requiring a 10-digit product key|Legacy 10-digit product key)",
+        "All legacy products requiring a 10-digit product key",
+    ),
+    (r"Windows Embedded Compact 2013 \(MSDN\)|Windows Embedded Compact 2013", "Windows Embedded Compact 2013"),
+    (
+        r"Windows 8.1 Enterprise and Enterprise N|Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL",
+        "Windows 8.1 Enterprise, Enterprise N, Pro VL, and Pro N VL",
+    ),
+    (
+        r"(?:Windows Server 2012 Storage Server|Windows Storage Server 2012) (Standard|Workgroup)",
+        lambda o, m: "Windows Storage Server 2012 {}".format(m.group(1)),
+    ),
+    (r"^Windows 10 (?:for )?Education N(?: and KN)?$", "Windows 10 for Education N (+KN)"),
+    (r"^Windows (10|11) (?:for )?Education( N)?$", lambda o, m: "Windows {} for Education{}".format(m.group(1), m.group(2) or "")),
+    (r"^Windows (10|11) Pro(?:fessional)? for Workstations( N)?$", lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
+    (r"^Windows (10|11) Pro(?:fessional)?( N)? for Workstations$", lambda o, m: "Windows {} Pro for Workstations{}".format(m.group(1), m.group(2) or "")),
+    (r"^Windows (10|11) Pro(fessional)?(?: \(BizSpark\))?$", lambda o, m: "Windows {} Pro".format(m.group(1))),
+    (r"^Windows 10 Pro(?:fessional)? N(?: and KN)?$", "Windows 10 Pro N (+KN)"),
+    (r"^Windows 11 Pro(?:fessional)? N$", "Windows 11 Pro N"),
+    (r"^Windows Server (?:2004 |2004 or 20H2 |2019 )?(Standard|Datacenter)$", lambda o, m: "Windows Server {} (incl. 2004, 20H2, 2019)".format(m.group(1))),
+    (r"^Windows 10 Enterprise 2015 LTSB N and KN$", "Windows 10 Enterprise 2015 LTSB N (+KN)"),
+    (r"^Windows 10 Enterprise N(?: and KN)?$", "Windows 10 Enterprise N (+KN)"),
+    (r"^Windows 11 Enterprise N(?: \(BizSpark\))?$", "Windows 11 Enterprise N"),
+    (r"^Windows 10 Home N(?: and KN)?$", "Windows 10 Home N (+KN)"),
+    (r"^Windows 11 Home N$", "Windows 11 Home N"),
+]
 
 
 CACHED_REGEXES = OrderedDict()
@@ -207,7 +200,7 @@ def dumpkeys(keys):
         # Sort by date entries (primary) and key (secondary)
         # if len(keys) > 1:
         #     print(repr(keys[1]), file=sys.stderr)
-        for key in sorted(keys, key=lambda v: (v[1][0:2] if v[1] is not None else (0, 0,), v[0])):
+        for key in sorted(keys, key=lambda v: (v[1][0:2] if v[1] is not None else (0, 0,), v[0])):  # fmt: skip
             ktype = " {%s}" % key[2]
             if len(key) > 1 and not key[1] is None:
                 if lastdate is None:  # first iteration, so append the date
@@ -233,14 +226,14 @@ def main():
     # Get names of all XML files
     f = {}
     # Either take a single .xml file
-    if (len(sys.argv) == 2) and fnmatch.fnmatch(sys.argv[1], '*.xml'):
+    if (len(sys.argv) == 2) and fnmatch.fnmatch(sys.argv[1], "*.xml"):
         xmlfname = os.path.realpath(sys.argv[1])
         print("Single XML file: {}".format(xmlfname), file=sys.stderr)
         f[xmlfname] = {}
     # ... or a directory full of them
     else:
         for r, _, fnames in os.walk(p):
-            for fn in fnmatch.filter(fnames, '*.xml'):
+            for fn in fnmatch.filter(fnames, "*.xml"):
                 f[os.path.join(r, fn)] = fn
     keys = {}
     fkeys = {}
@@ -251,7 +244,7 @@ def main():
         xmldata = ""
         with io.open(fn, "r", encoding="utf-8") as xmlfile:
             # \u2019 (thin space) is contained in some exported XML files
-            xmldata = re.sub(r' xmlns="[^"]+"', '', xmlfile.read().replace('\n', '').replace('\u2019', ' ').replace('\xa0', '').replace('\xc2', ''))
+            xmldata = re.sub(r' xmlns="[^"]+"', "", xmlfile.read().replace("\n", "").replace("\u2019", " ").replace("\xa0", "").replace("\xc2", ""))
         if not len(xmldata):
             print("ERROR: %s appears to be empty or only line breaks." % (f[fn]), file=sys.stderr)
             continue

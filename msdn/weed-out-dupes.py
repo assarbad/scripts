@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
+
 __author__ = "Oliver Schneider"
 __copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain/CC0, or MIT/BSD license where PD is not applicable"
 __version__ = "0.1"
@@ -12,6 +13,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
+
 # from functools import cache
 # A script to consolidate the XML from exported key lists (MSDN)
 # The names of passed .xml files or .xml files in passed directories are processed in
@@ -59,12 +61,12 @@ def main():
     f = {}
     # Go through all the paths given on the command line
     for argpath in sys.argv[1:]:
-        if fnmatch.fnmatch(argpath, '*.xml'):
+        if fnmatch.fnmatch(argpath, "*.xml"):
             xmlfname = os.path.realpath(argpath)
             f[xmlfname] = argpath
         elif os.path.isdir(argpath):
             for r, _, fnames in os.walk(argpath):
-                for fn in fnmatch.filter(fnames, '*.xml'):
+                for fn in fnmatch.filter(fnames, "*.xml"):
                     f[os.path.realpath(os.path.join(r, fn))] = fn
     fkeys = OrderedDict()
     xmltrees = OrderedDict()
@@ -76,7 +78,7 @@ def main():
         xmldata = ""
         with io.open(fname, "r", encoding="utf-8") as xmlfile:
             # \u2019 (thin space) is contained in some exported XML files
-            xmldata = re.sub(r' xmlns="[^"]+"', '', xmlfile.read().replace('\n', '').replace('\u2019', ' ').replace('\xa0', '').replace('\xc2', ''))
+            xmldata = re.sub(r' xmlns="[^"]+"', "", xmlfile.read().replace("\n", "").replace("\u2019", " ").replace("\xa0", "").replace("\xc2", ""))
         if not len(xmldata):
             print("ERROR: %s appears to be empty or only line breaks." % (f[fname]), file=sys.stderr)
             continue
@@ -123,7 +125,7 @@ def main():
     xmlstrings = ["<root><YourKey>"]
     for prodname in sorted(newtree_products.keys()):
         keys = [x for x in newtree_products[prodname]]
-        xmlstrings.append("<Product_Key Name=\"{}\" KeyRetrievalNote=\"\">{}</Product_Key>".format(prodname, "".join(sorted(keys))))
+        xmlstrings.append('<Product_Key Name="{}" KeyRetrievalNote="">{}</Product_Key>'.format(prodname, "".join(sorted(keys))))
     xmlstrings.append("</YourKey></root>")
     xml = ET.fromstringlist(xmlstrings)
     print(ET.tostring(xml, encoding="unicode"))

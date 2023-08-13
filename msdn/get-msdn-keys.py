@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
+
 __author__ = "Oliver Schneider"
 __copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain, or CC0 where Public Domain dedications are not possible"
 __version__ = "0.3"
@@ -13,6 +14,7 @@ from configparser import ConfigParser
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+
 try:
     from selenium import webdriver
     from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
@@ -87,12 +89,12 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
             options.headless = True
         if profile_path and os.path.isdir(profile_path):
             print("Using profile path: '{}'".format(profile_path))
-            options.set_preference('profile', profile_path)
+            options.set_preference("profile", profile_path)
         else:
             options.ensure_clean_session = True
-            options.set_preference('browser.cache.disk.enable', False)
-            options.set_preference('browser.cache.memory.enable', True)
-        options.set_preference('browser.cache.offline.enable', False)
+            options.set_preference("browser.cache.disk.enable", False)
+            options.set_preference("browser.cache.memory.enable", True)
+        options.set_preference("browser.cache.offline.enable", False)
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.manager.showWhenStarting", False)
         options.set_preference("browser.download.manager.alertOnEXEOpen", False)
@@ -174,12 +176,20 @@ def get_exported_keys_xml(driver, url_prodkey, id_exportbtn):
     Work in progress!!!
     """
     do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
-    do_step(driver, "clicking 'Export all keys'", (By.XPATH,
-            "//button[@aria-label='Export all keys' and @aria-expanded='false' and @aria-haspopup='true' and contains(@class, ' export-all-keys ')]"),
-            send=True, assert_urls=url_prodkey)
-    do_step(driver, "clicking 'From active subscriptions'", (By.XPATH,
-            "//button[@aria-label='From active subscriptions' and @aria-disabled='false' and @role='menuitem']"),
-            send=True, assert_urls=url_prodkey)
+    do_step(
+        driver,
+        "clicking 'Export all keys'",
+        (By.XPATH, "//button[@aria-label='Export all keys' and @aria-expanded='false' and @aria-haspopup='true' and contains(@class, ' export-all-keys ')]"),
+        send=True,
+        assert_urls=url_prodkey,
+    )
+    do_step(
+        driver,
+        "clicking 'From active subscriptions'",
+        (By.XPATH, "//button[@aria-label='From active subscriptions' and @aria-disabled='false' and @role='menuitem']"),
+        send=True,
+        assert_urls=url_prodkey,
+    )
     do_step(driver, "waiting for Product Keys page to be accessible after downloading XML", (By.ID, id_exportbtn), assert_urls=url_prodkey)
 
 
@@ -214,7 +224,6 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
             return
 
         do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
-
 
         suppress_claim = kwargs.get("suppression_claim", set())
         # Merely report a count of potentially eligible links
@@ -274,8 +283,9 @@ def get_config():
     cfg.read(ini_path)
     assert "secrets" not in cfg.sections(), "Cannot store credentials in .ini. Use a .credentials file instead."
     expecting = {"URLs", "IDs"}
-    assert all(x in cfg.sections() for x in expecting),\
-        "Missing sections in the read configuration. Expecting at least sections: {}".format(", ".join(expecting))
+    assert all(x in cfg.sections() for x in expecting), "Missing sections in the read configuration. Expecting at least sections: {}".format(
+        ", ".join(expecting)
+    )
     options = {}
     blacklist = cfg.defaults()
     for section in cfg.sections():
@@ -296,8 +306,7 @@ def get_config():
     cred.read(cred_path)
     assert cred.has_section("secrets"), "Need to have a [secrets] section in the .credentials file!"
     expecting = {"password", "email"}
-    assert all(cred.has_option("secrets", x) for x in expecting),\
-        "Expected to find a 'password' and 'email' option in the [secrets] section."
+    assert all(cred.has_option("secrets", x) for x in expecting), "Expected to find a 'password' and 'email' option in the [secrets] section."
     for option in expecting:
         options[option.upper()] = cred.get("secrets", option)
     return cfg, options
@@ -305,24 +314,39 @@ def get_config():
 
 def parse_args():
     from argparse import ArgumentParser
+
     parser = ArgumentParser(description="This script attempts to claim keys from the my.visualstudio.com portal and downloads the KeysExport.xml")
-    parser.add_argument("-A", "--no-auth", action="store_true",
-                        help="Assume the user is already authenticated (best used with -p).")
-    parser.add_argument("-c", "--write-credentials", action="store_true",
-                        help="Writes a .credential with default values next to the script for customization,"
-                        "_unless_ such a file already exists (i.e. it won't overwrite anything!).")
-    parser.add_argument("-d", "--download-only", "--download", action="store_true",
-                        help="This will instruct the script not to attempt to claim keys, but rather download KeysExport.xml"
-                        "_unless_ such a file already exists (i.e. it won't overwrite anything!).")
-    parser.add_argument("-i", "--write-ini", action="store_true",
-                        help="Writes an .ini with default values next to the script for customization,"
-                        "_unless_ such a file already exists (i.e. it won't overwrite anything!).")
-    parser.add_argument("-R", "--no-rename", action="store_true",
-                        help="Will skip renaming the KeysExport.xml to YYYY-MM-DD_KeysExport.xml")
-    parser.add_argument("-s", "--show-browser", action="store_true",
-                        help="Will show the browser window of the marionette geckodriver. The effect of this is _not_ to pass '--headless' to geckodriver.")
-    parser.add_argument("-p", "--profile", action="store",
-                        help="Allows to set the browser profile path to use (WORK IN PROGRESS).")
+    parser.add_argument("-A", "--no-auth", action="store_true", help="Assume the user is already authenticated (best used with -p).")
+    parser.add_argument(
+        "-c",
+        "--write-credentials",
+        action="store_true",
+        help="Writes a .credential with default values next to the script for customization,"
+        "_unless_ such a file already exists (i.e. it won't overwrite anything!).",
+    )
+    parser.add_argument(
+        "-d",
+        "--download-only",
+        "--download",
+        action="store_true",
+        help="This will instruct the script not to attempt to claim keys, but rather download KeysExport.xml"
+        "_unless_ such a file already exists (i.e. it won't overwrite anything!).",
+    )
+    parser.add_argument(
+        "-i",
+        "--write-ini",
+        action="store_true",
+        help="Writes an .ini with default values next to the script for customization,"
+        "_unless_ such a file already exists (i.e. it won't overwrite anything!).",
+    )
+    parser.add_argument("-R", "--no-rename", action="store_true", help="Will skip renaming the KeysExport.xml to YYYY-MM-DD_KeysExport.xml")
+    parser.add_argument(
+        "-s",
+        "--show-browser",
+        action="store_true",
+        help="Will show the browser window of the marionette geckodriver. The effect of this is _not_ to pass '--headless' to geckodriver.",
+    )
+    parser.add_argument("-p", "--profile", action="store", help="Allows to set the browser profile path to use (WORK IN PROGRESS).")
     return parser.parse_args()
 
 
