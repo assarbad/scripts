@@ -25,8 +25,14 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 ###############################################################################################################################################################
 
 $openssl = @{
-    "1.1.1v" = "d6697e2871e77238460402e9362d47d18382b15ef9f246aba6c7bd780d38a6b0"
+    "1.1.1w" = "cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
 }
+# $openssl30x = @{
+#     "3.0.11" = "b3425d3bb4a2218d0697eb41f7fc0cdede016ed19ca49d168b78e8d947887f55"
+# }
+# $openssl31x = @{
+#     "3.1.3" = "f0316a2ebd89e7f2352976445458689f80302093788c466692fb2a188b2eacf6"
+# }
 $nasm = @{
     "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"
 }
@@ -239,31 +245,16 @@ $funcs =
 
     <#
     .Description
-    Determines if sccache is available.
-    #>
-    function Get_sccache
-    {
-        return Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue
-    }
-
-    <#
-    .Description
     Patches the OpenSSL makefile to get rid of some garbage, such as this perpetuated silliness of creating PDBs for static libs ...
     #>
     function Patch_Makefile
     {
-        $ccache = Get_sccache
         $cl = "cl"
-        if (($ccache -ne $null) -and ($global:UseSccache))
-        {
-            $cl = "$ccache $cl"
-        }
         # Patch the makefile so that the debug info is embedded in the object files (/Z7)
         echo "Patching makefile ..."
         Move-Item -Force .\makefile .\makefile.unpatched
         (Get-Content .\makefile.unpatched) `
-            -replace '/Zi /Fdossl_static.pdb', "" `
-            -replace '^CC=cl$', "CC=$cl" |
+            -replace '/Zi /Fdossl_static.pdb', "" |
         Out-File .\makefile
     }
 
@@ -342,11 +333,21 @@ $funcs =
             & perl Configure $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($configure_ossl_target, $arch, $target_fname)"
             Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
-            # A non-invasive way of getting /Brepro into the build all the while avoiding
+            if (Test-Path -Path "$staging\bin\cl.exe" -PathType Leaf)
+            {
+                $env:SCCACHE_ERROR_LOG="$staging\sccache_err.log"
+                $env:SCCACHE_LOG="debug"
+                if (Test-Path -Path "$staging\sccache" -PathType Container)
+                {
+                    $env:SCCACHE_DIR="$staging\sccache"
+                }
+                $env:PATH="$staging\bin;$env:PATH"
+            }
             $env:CL="/nologo"
             $env:LIB="/nologo"
             $env:LINK="/nologo"
             $env:ML="/nologo"
+            # A non-invasive way of getting /Brepro into the build
             $env:_LIB_="/Brepro"
             $env:_LINK_="/Brepro"
             # Fix up the makefile to fit our needs better
@@ -402,7 +403,6 @@ $funcs =
             else
             {
                 Write-Host -ForegroundColor yellow "Removing build directory $blddir ($global:NoDeleteBuildDirectories)"
-                #Remove-Item -Path $blddir -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
     }
@@ -533,6 +533,21 @@ try
     }
 
     Write-Host -ForegroundColor white "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
+
+    if ($UseSccache)
+    {
+        $ccache = Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue
+        if ($ccache -ne $null)
+        {
+            $ccache = $ccache.Path
+            Write-Host -ForegroundColor white "Using sccache: $ccache"
+            $fakebindir = "$staging\bin"
+            New-Item -Type Directory $fakebindir -ErrorAction SilentlyContinue | Out-Null
+            Copy-Item -Force "$ccache" "$fakebindir\cl.exe"
+            New-Item -Type Directory $env:SCCACHE_DIR -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
     foreach($tgt in $targets.GetEnumerator())
     {
         $arch = $($tgt.Name)

@@ -91,7 +91,7 @@ $ServicesToRestore = @{
     "RmSvc"="Manual";
     "WaaSMedicSvc"="Manual";
     "WPDBusEnum"="Manual";
-    "WSearch"="Automatic";
+    "WSearch"="Manual"; # don't really want this ... defaults to "Automatic", but we keep it at least on "Manual"
     "wuauserv"="Manual";
     # User services with wildcard and without
     "BluetoothUserService"="Manual";
