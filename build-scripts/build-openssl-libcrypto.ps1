@@ -5,7 +5,9 @@ param(
     [switch]$NoDebugInfo = $false,
     [switch]$NoDeleteBuildDirectories = $false,
     [switch]$UseMasm = $false,
-    [switch]$UseSccache = $false
+    [switch]$UseSccache = $false,
+    [switch]$NoJobs = $false,
+    [ValidateSet("x86", "x64", "all" , "both", "native")] [string]$ArchToBuild = "native"
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -289,6 +291,7 @@ $funcs =
             [Parameter(Mandatory=$true)]  [String]$staging
         )
         $blddir = "$staging\$ossl_target.$pid"
+        $oldenv = Get-ChildItem env:
         try
         {
             $parentpath = "$pwd"
@@ -301,7 +304,7 @@ $funcs =
                 New-Item -Type Directory "$blddir" | Out-Null
             }
 
-            if ($global:UseMasm)
+            if ($script:UseMasm)
             {
                 $configure_ossl_target = "${ossl_target}-masm"
                 Write-Host -ForegroundColor white "Using MASM"
@@ -332,8 +335,8 @@ $funcs =
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
             & perl Configure $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($configure_ossl_target, $arch, $target_fname)"
-            Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
-            if (Test-Path -Path "$staging\bin\cl.exe" -PathType Leaf)
+            Write-Host -ForegroundColor white "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
+            if ($script:UseSccache -And (Test-Path -Path "$staging\bin\cl.exe" -PathType Leaf))
             {
                 $env:SCCACHE_ERROR_LOG="$staging\sccache_err.log"
                 $env:SCCACHE_LOG="debug"
@@ -351,7 +354,7 @@ $funcs =
             $env:_LIB_="/Brepro"
             $env:_LINK_="/Brepro"
             # Fix up the makefile to fit our needs better
-            if ($global:NoDebugInfo)
+            if ($script:NoDebugInfo)
             {
                 Patch_Makefile
                 $env:_CL_="/d1trimfile:'$blddir' /Brepro"
@@ -363,7 +366,7 @@ $funcs =
                 $env:_CL_="/d1trimfile:'$blddir' /Brepro /Z7"
                 $env:_ML_="/Brepro /Zi"
             }
-            if ($global:LibSsl)
+            if ($script:LibSsl)
             {
                 & nmake /nologo build_generated libcrypto.lib libssl.lib *>&1
             }
@@ -379,7 +382,7 @@ $funcs =
                 New-Item -Type Directory "$libpath" | Out-Null
             }
             Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
-            if ($global:LibSsl)
+            if ($script:LibSsl)
             {
                 $target_fname2 = FileNameFromTargetName "libssl.lib" $tgt_base_suffix
                 Copy_Finished .\libssl.lib "$libpath\$target_fname2"
@@ -395,14 +398,14 @@ $funcs =
         }
         finally
         {
-            Write-Host -ForegroundColor white "${arch}: libssl = $global:LibSsl, no debug info = $global:NoDebugInfo, don't delete build directories = $global:NoDeleteBuildDirectories, use sccache = $global:UseSccache"
-            if ($global:NoDeleteBuildDirectories)
+            Write-Host -ForegroundColor white "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
+            if ($script:NoDeleteBuildDirectories)
             {
-                Write-Host -ForegroundColor green "Keeping build directory $blddir ($global:NoDeleteBuildDirectories)"
+                Write-Host -ForegroundColor green "Keeping build directory $blddir ($script:NoDeleteBuildDirectories)"
             }
             else
             {
-                Write-Host -ForegroundColor yellow "Removing build directory $blddir ($global:NoDeleteBuildDirectories)"
+                Write-Host -ForegroundColor yellow "Removing build directory $blddir ($script:NoDeleteBuildDirectories)"
             }
         }
     }
@@ -506,6 +509,20 @@ function FinalizeHeaders
 
 try
 {
+    if ($ArchToBuild -eq "native")
+    {
+        $oldvalue = $ArchToBuild
+        if ($env:PROCESSOR_ARCHITECTURE -eq "AMD64")
+        {
+            $ArchToBuild = "x64"
+        }
+        elseif ($env:PROCESSOR_ARCHITECTURE -eq "x86")
+        {
+            $ArchToBuild = "x64"
+        }
+        Write-Host -ForegroundColor white "Target architecture was set to ${oldvalue}: ended up picking '$ArchToBuild'"
+    }
+
     $targets = @{ x86=@("VC-WIN32", "32"); x64=@("VC-WIN64A", "64") }
     $logpath = "$PSScriptRoot\build-openssl-libcrypto.log"
     $staging = "$pwd\staging"
@@ -536,45 +553,81 @@ try
 
     if ($UseSccache)
     {
-        $ccache = Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue
-        if ($ccache -ne $null)
+        try
         {
-            $ccache = $ccache.Path
+            $ccache = (Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue).Path
             Write-Host -ForegroundColor white "Using sccache: $ccache"
             $fakebindir = "$staging\bin"
             New-Item -Type Directory $fakebindir -ErrorAction SilentlyContinue | Out-Null
             Copy-Item -Force "$ccache" "$fakebindir\cl.exe"
-            New-Item -Type Directory $env:SCCACHE_DIR -ErrorAction SilentlyContinue | Out-Null
+            New-Item -Type Directory "$staging\sccache" -ErrorAction SilentlyContinue | Out-Null
+        }
+        catch
+        {
+            $UseSccache = $false
+            $fakebindir = $null
+            Write-Warning "Cannot use sccache"
         }
     }
 
     foreach($tgt in $targets.GetEnumerator())
     {
         $arch = $($tgt.Name)
+        if (($ArchToBuild -ne "all") -and ($ArchToBuild -ne "both") -and ($arch -ne $ArchToBuild))
+        {
+            Write-Host "Skipping build for: ${arch} (requested: ${ArchToBuild})"
+            continue;
+        }
         $ossl_target, $tgt_base_suffix = $($tgt.Value)
-        Write-Host "Before starting job: ${arch}: $ossl_target, $tgt_base_suffix"
-        Start-Job `
-            -InitializationScript $funcs `
-            -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" `
-            -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseMasm = $using:UseMasm; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
+        if ($NoJobs)
+        {
+            $oldpwd = $pwd
+            $oldenv = Get-ChildItem env:
+            try
+            {
+                $oldenv|%{ Set-Item -Path "Env:$($_.Name)" "$($_.Value)" }
+                Write-Host "Before starting build: ${arch}: $ossl_target, $tgt_base_suffix"
+                . $funcs
+                BuildAndPlaceOpenSSLLib $nasm_details $ossl_details $arch $ossl_target $tgt_base_suffix "openssl" $staging
+            }
+            finally
+            {
+                cd $oldpwd
+                $oldenv|%{ Set-Item -Path "Env:$($_.Name)" "$($_.Value)" }
+            }
+        }
+        else
+        {
+            Write-Host "Before starting job: ${arch}: $ossl_target, $tgt_base_suffix"
+            Start-Job `
+                -InitializationScript $funcs `
+                -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" `
+                -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseMasm = $using:UseMasm; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
+        }
     }
 
-    while (Get-Job -State "Running")
+    if (-Not ($NoJobs))
     {
-        Clear-Host
-        Get-Job|%{ $runtime = "{0:hh}:{0:mm}:{0:ss}" -f ([datetime]::now - $_.PSBeginTime); Write-Host "$($_.Id): $($_.Name) -> $($_.State), $runtime" }
-        Start-Sleep 2
+        while (Get-Job -State "Running")
+        {
+            Clear-Host
+            Get-Job|%{ $runtime = "{0:hh}:{0:mm}:{0:ss}" -f ([datetime]::now - $_.PSBeginTime); Write-Host "$($_.Id): $($_.Name) -> $($_.State), $runtime" }
+            Start-Sleep 2
+        }
     }
 
     FinalizeHeaders $targets
 }
 finally
 {
-    # Write output from the jobs (commented out, because we have a log file)
-    Get-Job | Receive-Job
-    Get-Job | %{ $duration = $_.PSEndTime - $_.PSBeginTime; Write-Host "$($_.Name) took $duration" }
-    # Remove jobs from queue
-    Get-Job | Remove-Job
+    if (-Not ($NoJobs))
+    {
+        # Write output from the jobs (commented out, because we have a log file)
+        Get-Job | Receive-Job
+        Get-Job | %{ $duration = $_.PSEndTime - $_.PSBeginTime; Write-Host "$($_.Name) took $duration" }
+        # Remove jobs from queue
+        Get-Job | Remove-Job
+    }
 
     Write-Host -ForegroundColor white "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
 
