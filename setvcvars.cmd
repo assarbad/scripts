@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" (echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2009-2019, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: 2009-2023, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 ::: Available from Git mirror: <https://github.com/assarbad/scripts>
 :::
 ::: PURPOSE:    This script can be used to run the vcvars32.bat/vcvarsall.bat
@@ -49,6 +49,8 @@ set SUPPORTED_NICE=2022 ^
 2003 ^
 2002
 set DEFAULT_TSET=x86
+:: When the script runs on AMD64, we use that as default
+if "%PROCESSOR_ARCHITECTURE%" == "AMD64" set DEFAULT_TSET=amd64
 if not "%~1" == "" (
   if "%~1" == "/?"     goto :Help
   if "%~1" == "-?"     goto :Help
@@ -70,7 +72,7 @@ if not "%~1" == "" (
     if "%~1" == "%%i" shift & call :SetVar VCTGT_TOOLSET %%i
   )
 )
-:: Fall back to x86 if not given
+:: Fall back to default if not explicitly given
 if not defined VCTGT_TOOLSET set VCTGT_TOOLSET=%DEFAULT_TSET%
 :: Make the string appear a bit nicer, i.e. comma-separated
 set SUPPORTED_PP=%SUPPORTED_NICE: =, %
