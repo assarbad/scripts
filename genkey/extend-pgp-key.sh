@@ -4,18 +4,18 @@
 for tool in awk faketime gpg; do type $tool > /dev/null 2>&1 || { echo -e "${cR}ERROR:${cZ} couldn't find '$tool' which is required by this script."; exit 1; }; done
 [[ -n "$DEBUG" ]] && set -x
 declare -r BASEDATE='2024-12-31 23:59:59Z'
-#declare -r DURATION="3y"
+declare -r DURATION="3y"
 declare -r EXPIREDONLY="&& \$3 ~ /expired/"
-declare -r EXPIREDONLY=''
+#declare -r EXPIREDONLY=''
 ( set -x; gpg -Kv --with-subkey-fingerprints --batch 2> /dev/null \
-	| awk '$1 == "sec" { getline; KID=$1; next; } $1 == "uid" '"$EXPIREDONLY"' { printf("%s", KID); DELIM=" "; for (f=2; f<=NF; ++f) { printf("%s%s", DELIM, $f); }; printf("\n") }' ) \
+	| awk '$1 == "sec" { getline; KID=$1; next; } $1 == "uid" && $3 !~ /revoked/ '"$EXPIREDONLY"' { printf("%s", KID); DELIM=" "; for (f=2; f<=NF; ++f) { printf("%s%s", DELIM, $f); }; printf("\n") }' ) \
 	| \
 while read -r KEYID REMAINDER; do
 	printf "Processing ${cW}%s${cZ} (${cG}%s${cZ})\n" "$KEYID" "$REMAINDER"
 	(
-	set -x
-	faketime "$BASEDATE" gpg --quick-set-expire "$KEYID" "$DURATION"
-	faketime "$BASEDATE" gpg --quick-set-expire "$KEYID" "$DURATION" '*'
-	echo -e "trust\n5\ny\n" | gpg --command-fd 0 --edit-key "$KEYID"
-)
+		set -x
+		faketime "$BASEDATE" gpg --quick-set-expire "$KEYID" "$DURATION"
+		faketime "$BASEDATE" gpg --quick-set-expire "$KEYID" "$DURATION" '*'
+		echo -e "trust\n5\ny\n" | gpg --command-fd 0 --edit-key "$KEYID"
+	)
 done
