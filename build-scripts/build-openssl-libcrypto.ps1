@@ -1,12 +1,72 @@
 #Requires -Version 6.0
+
+<#
+.SYNOPSIS
+    Helper script to reproducibly build OpenSSL libcrypto with MSVC. Optionally builds libssl as well.
+
+.DESCRIPTION
+    This script builds OpenSSL from source. The URL and hashes of the source code are hardcoded in the
+    script itself. NASM is used to assemble the optimized implementations for algorithms. MASM can be
+    requested as a fallback.
+
+.PARAMETER Help
+    Shows this help output
+
+.PARAMETER Debug
+    This enables debugging of the script. It will also enable -NoDeleteBuildDirectories and disable jobs.
+
+.PARAMETER ArchToBuild
+    This allows to pick which architectures to build for. Default is the native architecture on which the
+    script runs, available are x86 (aka x86-32) and x64 (aka x86-64) as well as: all, both, native.
+
+.PARAMETER LibSsl
+    Also builds libssl (by default only libcrypto gets built).
+
+.PARAMETER NoDebugInfo
+    Do not generate debug info. In absence of this switch it will get generated and in case of the
+    static libs it will be embedded (/Z7).
+
+.PARAMETER NoDeleteBuildDirectories
+    Prevent deletion of the build directories. This can be useful when troubleshooting. Also see
+    the -Debug switch.
+
+.PARAMETER UseMasm
+    Use MASM instead of NASM as the assembler. OpenSSL recommends NASM.
+
+.PARAMETER UseSccache
+    Use sccache as the compiler cache to speed up rebuilds.
+
+.PARAMETER NoJobs
+    Disable parallel jobs (used to parallelize 32-bit and 64-bit builds).
+
+.PARAMETER DebugMakefilePatch
+    Returns early after patching the makefile, but before commencing the actual build. Useful for
+    troubleshooting.
+
+.PARAMETER DebugConfigurationPatch
+    This assumes that a previous run left include/openssl{32,64} in place and is used to debug the
+    patching of the OpenSSL configuration header.
+
+.EXAMPLE
+    .\build-openssl-libcrypto.ps1 -Dbg
+
+.NOTES
+    The script patches the makefile created by the OpenSSL Perl script (Configure) to facilitate a
+    reproducible build and to fix some quirks. For example static libraries meant to be consumed as
+    build artifacts should arguably embed their own debug info instead of generating an adjacent PDB
+    file. That's one of the fixes.
+#>
 [CmdletBinding()]
 param(
+    [switch]$Help = $false,
     [switch]$LibSsl = $false,
     [switch]$NoDebugInfo = $false,
     [switch]$NoDeleteBuildDirectories = $false,
     [switch]$UseMasm = $false,
     [switch]$UseSccache = $false,
     [switch]$NoJobs = $false,
+    [switch]$DebugMakefilePatch = $false,
+    [switch]$DebugConfigurationPatch = $false,
     [ValidateSet("x86", "x64", "all" , "both", "native")] [string]$ArchToBuild = "native"
 )
 Set-StrictMode -Version Latest
@@ -97,7 +157,7 @@ function Download-OpenSSL-Version
     $fname = Split-Path -Path $url -Leaf
     if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
     {
-        Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
+        Write-Host -ForegroundColor Yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
     }
     else
     {
@@ -107,7 +167,7 @@ function Download-OpenSSL-Version
     $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
     if ($knownhash -eq $hash)
     {
-        Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
+        Write-Host -ForegroundColor Green "`tFile $fname downloaded and hash matches."
         [hashtable]$retval = @{ fpath="$tgtdir\$fname"; fname=$fname; version=$version; hash=$knownhash }
         return $retval
     }
@@ -134,7 +194,7 @@ function Download-NASM-Version
     $fname = Split-Path -Path $url -Leaf
     if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
     {
-        Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
+        Write-Host -ForegroundColor Yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
     }
     else
     {
@@ -144,7 +204,7 @@ function Download-NASM-Version
     $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
     if ($knownhash -eq $hash)
     {
-        Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
+        Write-Host -ForegroundColor Green "`tFile $fname downloaded and hash matches."
         [hashtable]$retval = @{ fpath="$tgtdir\$fname"; fname=$fname; version=$version; hash=$knownhash }
         return $retval
     }
@@ -266,13 +326,45 @@ $funcs =
     #>
     function Patch-Makefile
     {
-        $cl = "cl"
-        # Patch the makefile so that the debug info is embedded in the object files (/Z7)
-        echo "Patching makefile ..."
-        Move-Item -Force .\makefile .\makefile.unpatched
-        (Get-Content .\makefile.unpatched) `
-            -replace '/Zi /Fdossl_static.pdb', "" |
-        Out-File .\makefile
+        # Patch the makefile so that the debug info is opportunistically embedded in the object files (/Z7)
+        Write-Host "Patching makefile ..."
+        $patch_subject = ".\makefile"
+        $patch_temp = ".\makefile.unpatched"
+        Move-Item -Force $patch_subject $patch_temp
+        $dbginfoEmbeddedMsvc = if ($script:NoDebugInfo) { "" } else { "/Z7" }
+        Get-Content $patch_temp
+            | %{ # switch between release and debug for linker flags
+                if ($script:NoDebugInfo)
+                {
+                    $_ -replace '(?m)^(LDFLAGS=.+?)/debug', '$1'
+                }
+                else
+                {
+                    $_ 
+                }
+               } `
+            | %{ # for static libs we don't want PDBs, either no debug info or embedded with /Z7
+                $_ -replace '/Zi /Fdossl_static\.pdb', $dbginfoEmbeddedMsvc
+               } `
+            | %{ # for NASM and MASM we need a different set of command line arguments
+                if ($script:UseMasm)
+                {
+                    $dbginfoMasm = if ($script:NoDebugInfo) { "" } else { " $dbginfoEmbeddedMsvc" }
+                    $_ -replace '/nologo /Zi', "/nologo /Brepro$dbginfoMasm"
+                }
+                else
+                {
+                    $dbginfoNasm = if ($script:NoDebugInfo) { "" } else { "-g " }
+                    $_ -replace '(?m)^ASFLAGS=(?:-g)?$', "ASFLAGS=${dbginfoNasm}--reproducible"
+                }
+               } `
+            | %{ # reproducible builds
+                $_ `
+                    -replace '(?m)^(CFLAGS=\s*)', '$1/Brepro ' `
+                    -replace '(?m)^(LDFLAGS=\s*)', '$1/Brepro ' `
+                    -replace '(?m)^(ARFLAGS=\s*)', '$1/Brepro ' `
+               } `
+            | Out-File $patch_subject
     }
 
     <#
@@ -323,7 +415,7 @@ $funcs =
             if ($script:UseMasm)
             {
                 $configure_ossl_target = "${ossl_target}-masm"
-                Write-Host -ForegroundColor white "Using MASM"
+                Write-Host -ForegroundColor White "Using MASM"
             }
             else
             {
@@ -331,20 +423,20 @@ $funcs =
                 $nasmdir = Import-NASM $nasm $blddir
                 # Make our copy of NASM available
                 $env:PATH =  $nasmdir + ";" + $env:PATH
-                Write-Host -ForegroundColor white "NASM: $nasmdir"
+                Write-Host -ForegroundColor White "NASM: $nasmdir"
             }
 
             $vspath = Get-VS-BasePath
             Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
             Enter-VsDevShell -VsInstallPath "$vspath" -DevCmdArguments "-arch=$arch -no_logo" -SkipAutomaticLocation
             $ossldir = Import-OpenSSL $ossl $blddir
-            Write-Host -ForegroundColor white "OpenSSL dir: $ossldir"
+            Write-Host -ForegroundColor White "OpenSSL dir: $ossldir"
             Push-Location -Path "$ossldir"
 
             $target_fname = Get-FileName-From-TargetName "libcrypto.lib" $tgt_base_suffix
             Write-Host "Target file name for lib: $target_fname"
 
-            $env:LOG_BUILD_COMMANDLINES="$blddir\buildcmdlines.log"
+            $env:LOG_BUILD_COMMANDLINES="$blddir\buildcmdlines.$arch.$pid.log"
             $sentinel_files = @("INSTALL.md", "INSTALL")
             $srcepoch = $null
             foreach ($sfile in $sentinel_files)
@@ -368,7 +460,7 @@ $funcs =
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
             Invoke-Configure $perl $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($configure_ossl_target, $arch, $target_fname)"
-            Write-Host -ForegroundColor white "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
+            Write-Host -ForegroundColor White "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
             if ($script:UseSccache -And (Test-Path -Path "$staging\bin\cl.exe" -PathType Leaf))
             {
                 $env:SCCACHE_ERROR_LOG="$staging\sccache_err.log"
@@ -383,22 +475,9 @@ $funcs =
             $env:LIB="/nologo"
             $env:LINK="/nologo"
             $env:ML="/nologo"
-            # A non-invasive way of getting /Brepro into the build
-            $env:_LIB_="/Brepro"
-            $env:_LINK_="/Brepro"
             # Fix up the makefile to fit our needs better
-            if ($script:NoDebugInfo)
-            {
-                Patch-Makefile
-                $env:_CL_="/d1trimfile:'$blddir' /Brepro"
-                $env:_ML_="/Brepro"
-            }
-            else
-            {
-                Patch-Makefile
-                $env:_CL_="/d1trimfile:'$blddir' /Brepro /Z7"
-                $env:_ML_="/Brepro /Zi"
-            }
+            Patch-Makefile
+            $env:_CL_="/d1trimfile:'$blddir'"
             if ($script:LibSsl)
             {
                 & nmake /nologo build_generated libcrypto.lib libssl.lib *>&1
@@ -407,8 +486,17 @@ $funcs =
             {
                 & nmake /nologo build_generated libcrypto.lib *>&1
             }
-            Copy-Item .\makefile "$parentpath\makefile.$pid"
             ThrowOnNativeFailure "Failed to build OpenSSL ($ossl_target, $arch, $target_fname)"
+            if ($PSBoundParameters.ContainsKey('Debug'))
+            {
+                Copy-Item .\makefile "$parentpath\makefile.$arch.$pid"
+                Copy-Item .\makefile.unpatched "$parentpath\makefile.$arch.$pid.unpatched" -ErrorAction SilentlyContinue
+            }
+            if ($script:DebugMakefilePatch)
+            {
+                Write-Host "Returning early on account of -DebugMakefilePatch!"
+                return
+            }
             $libpath = "$parentpath\lib"
             if (-not (Test-Path -Path "$libpath" -PathType Container))
             {
@@ -422,7 +510,7 @@ $funcs =
             }
             if (Test-Path -Path "$tgtincdir" -PathType Container)
             {
-                Write-Host -ForegroundColor yellow "Removing target include directory $tgtincdir"
+                Write-Host -ForegroundColor Cyan "Removing (existing) target include directory $tgtincdir, before copying new one"
                 Remove-Item -Path "$tgtincdir" -Recurse -Force -ErrorAction SilentlyContinue
             }
             Copy-Item -Recurse .\include\openssl "$tgtincdir"
@@ -431,52 +519,16 @@ $funcs =
         }
         finally
         {
-            Write-Host -ForegroundColor white "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
+            Write-Host -ForegroundColor White "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
             if ($script:NoDeleteBuildDirectories)
             {
-                Write-Host -ForegroundColor green "Keeping build directory $blddir ($script:NoDeleteBuildDirectories)"
+                Write-Host -ForegroundColor Green "Keeping build directory $blddir (NoDeleteBuildDirectories=$script:NoDeleteBuildDirectories)"
             }
             else
             {
-                Write-Host -ForegroundColor yellow "Removing build directory $blddir ($script:NoDeleteBuildDirectories)"
+                Write-Host -ForegroundColor Yellow "Removing build directory $blddir (NoDeleteBuildDirectories=$script:NoDeleteBuildDirectories)"
             }
         }
-    }
-
-    <#
-    .Description
-    Attempts to detect Git for Windows based on heuristics and returns the common root of the cmd and bin subdirectories.
-    #>
-    function Get-GitForWindows-Root
-    {
-        $gitexe = Get-Command -Name git -CommandType Application -ErrorAction SilentlyContinue
-        if ($gitexe)
-        {
-            $gitcmdbin = Split-Path -Path $gitexe.Source
-            if ((Split-Path -Path $gitcmdbin -Leaf) -in @("cmd", "bin"))
-            {
-                return (Split-Path -Path $gitcmdbin)
-            }
-        }
-        return $null
-    }
-
-    <#
-    .Description
-    Returns the full path to bin\sh.exe underneath the Git for Windows installation root.
-    #>
-    function Get-GitForWindows-sh
-    {
-        $gitfwroot = Get-GitForWindows-Root
-        if ($gitfwroot)
-        {
-            $shexe = "$gitfwroot\bin\sh.exe"
-            if (Test-Path -Path "$shexe" -PathType Leaf)
-            {
-                return $shexe
-            }
-        }
-        return $null
     }
 
     <#
@@ -486,100 +538,18 @@ $funcs =
     function Get-Available-Perl
     {
         $perl = Get-Command -Name perl -CommandType Application -ErrorAction SilentlyContinue
-        <#
         if (-not $perl)
         {
-            $shexe = Get-GitForWindows-sh
-            if ($shexe)
-            {
-                & $shexe -c "perl --version" *>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0)
-                {
-                    Write-Host "Found Perl via Git for Windows (${shexe} -> perl)"
-                    return @{ Path = $shexe; UseShim = $true }
-                }
-            }
-        }
-        else
-        {
-            Write-Host "Found Perl via PATH ($($perl.Source))"
-            return @{ Path = $perl.Source; UseShim = $false }
-        }
-        #>
-        if (-not $perl)
-        {
-            echo "NOTE: You need to have Perl installed for this build for work. Kicking off the installation. Feel free to cancel, but be aware that the build will fail."
-            winget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl
+            Write-Host -ForegroundColor Yellow "NOTE: You need to have Perl installed for this build for work. Kicking off the installation. Feel free to cancel, but be aware that the build will fail."
+            & winget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl
             $perl = Get-Command perl -CommandType Application -ErrorAction SilentlyContinue
-            if ($perl -eq $null)
-            {
-                throw "Perl not available and wasn't installed by the user"
-            }
         }
         return $perl
     }
 
     <#
     .Description
-    Prepare the util/perl sudirectory inside the unpacked OpenSSL so that it has modules that don't come with Git for Windows.
-    #>
-    function Prepare-Perl-from-GitForWindows
-    {
-        param(
-            [Parameter(Mandatory=$true)]  [String]$tgtdir
-        )
-        $modules = @(
-            @{
-                "sha256" = "b009ff51f4fb108d19961a523e99b4373ccf958d37ca35bf1583215908dca9a9";
-                "url" = "https://cpan.metacpan.org/authors/id/J/JE/JESSE/Locale-Maketext-Simple-0.21.tar.gz"
-            }
-        )
-        foreach ($module in $modules) {
-            $knownhash = $module.sha256
-            $url = $module.url
-            $fname = Split-Path -Path $url -Leaf
-            if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
-            {
-                Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
-            }
-            else
-            {
-                $host.ui.WriteErrorLine("Downloading $url as $fname (into $tgtdir)")
-                Download-File $url "$tgtdir\$fname"
-            }
-            $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
-            if ($knownhash -eq $hash)
-            {
-                Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
-            }
-            else
-            {
-                throw "The expected ($knownhash) and actual hashes ($hash) don't match for $fname!"
-            }
-            $host.ui.WriteErrorLine("Unpacking  $fname")
-            Push-Location $tgtdir
-            try
-            {
-                tar -xf "$tgtdir\$fname"
-            } finally {
-                Pop-Location
-            }
-            $subdir = $fname -replace '\.tar\.gz$', ''
-            if (!(Test-Path -Path "$tgtdir\$subdir"))
-            {
-                throw "Expected to find a folder named '$tgtdir\$subdir' after unpacking the archive."
-            }
-            Copy-Item -Recurse "$tgtdir\$subdir\lib\*" "$pwd\util\perl\"
-            if (-not $?)
-            {
-                throw "Copying of the subdirectory from lib to util/perl failed."
-            }
-        }
-    }
-
-    <#
-    .Description
-    Invokes either Perl from Git for Windows or a full-fledged Perl
+    Invokes either Perl to run the Configure script from OpenSSL
     #>
     function Invoke-Configure
     {
@@ -608,12 +578,12 @@ function Patch-Configuration-Header
     )
 
     $fname = Split-Path "$srcfile" -Leaf
-    if ($fname in @("opensslconf.h", "configuration.h"))
+    if (-not (@("opensslconf.h", "configuration.h") -contains $fname))
     {
         Write-Host -ForegroundColor Yellow "Not patching unexpected mismatched file $fname!"
         return
     }
-    echo "Patching $fname ..."
+    Write-Host -ForegroundColor Cyan "Patching $fname ..."
     (Get-Content "$srcfile") `
         -replace '^#\s*?ifndef\s+?OPENSSL_SYS_WIN(32|64A)$', '#if defined(_M_AMD64)' `
         -replace '^(#(\s*?)define)\s+?OPENSSL_SYS_WIN(32|64A)\s+?\d+$', `
@@ -657,6 +627,10 @@ function FinalizeHeaders
         foreach($hash in $hashes)
         {
             $fname = Split-Path "$($hash.Path)" -Leaf
+            if ($fname.EndsWith(".h.in", [System.StringComparison]::OrdinalIgnoreCase))
+            {
+                continue
+            }
             if (Test-Path -Path "$incdir64\$fname" -PathType Leaf)
             {
                 $otherhash = Get-FileHash "$incdir64\$fname"
@@ -666,15 +640,25 @@ function FinalizeHeaders
                 }
                 else
                 {
-                    Patch-opensslconf-Header "$($hash.Path)" "$incdir\$fname"
+                    Patch-Configuration-Header "$($hash.Path)" "$incdir\$fname"
                 }
             }
         }
     }
 }
 
+if ($script:Help)
+{
+    Get-Help $MyInvocation.MyCommand.Path -Detailed
+    exit
+}
 try
 {
+    if ($PSBoundParameters.ContainsKey('Debug'))
+    {
+        $NoJobs = $true
+        $NoDeleteBuildDirectories = $true
+    }
     if ($nasm.Count -ne 1)
     {
         Write-Error "There is more than a single version defined for NASM in \$nasm."
@@ -696,13 +680,20 @@ try
         {
             $ArchToBuild = "x64"
         }
-        Write-Host -ForegroundColor white "Target architecture was set to ${oldvalue}: ended up picking '$ArchToBuild'"
+        Write-Host -ForegroundColor White "Target architecture was set to ${oldvalue}: ended up picking '$ArchToBuild'"
     }
 
     $targets = @{ x86=@("VC-WIN32", "32"); x64=@("VC-WIN64A", "64") }
     $logpath = "$PSScriptRoot\build-openssl-libcrypto.log"
     $staging = "$pwd\staging"
     Start-Transcript -Path $logpath -Append
+
+    if ($script:DebugConfigurationPatch)
+    {
+        Write-Warning "The -DebugConfigurationPatch switch assumes that a previous run has dropped headers in include/openssl{32,64} already!"
+        FinalizeHeaders $targets
+        exit 0
+    }
 
     . $funcs
     $perl = Get-Available-Perl
@@ -731,14 +722,14 @@ try
         break # use the first one always
     }
 
-    Write-Host -ForegroundColor white "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
+    Write-Host -ForegroundColor White "Going to build: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
 
     if ($UseSccache)
     {
         try
         {
             $ccache = (Get-Command sccache -CommandType Application -ErrorAction SilentlyContinue).Path
-            Write-Host -ForegroundColor white "Using sccache: $ccache"
+            Write-Host -ForegroundColor White "Using sccache: $ccache"
             $fakebindir = "$staging\bin"
             New-Item -Type Directory $fakebindir -ErrorAction SilentlyContinue | Out-Null
             Copy-Item -Force "$ccache" "$fakebindir\cl.exe"
@@ -803,14 +794,13 @@ finally
 {
     if (-Not ($NoJobs))
     {
-        # Write output from the jobs (commented out, because we have a log file)
         Get-Job | Receive-Job
         Get-Job | %{ $duration = $_.PSEndTime - $_.PSBeginTime; Write-Host "$($_.Name) took $duration" }
         # Remove jobs from queue
         Get-Job | Remove-Job
     }
 
-    Write-Host -ForegroundColor white "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
+    Write-Host -ForegroundColor White "Summary: libssl = $LibSsl, no debug info = $NoDebugInfo, don't delete build directories = $NoDeleteBuildDirectories, use sccache = $UseSccache"
 
     Stop-Transcript
 }
