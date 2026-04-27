@@ -1,12 +1,12 @@
 @echo off
 @if not "%OS%"=="Windows_NT" (echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2009-2023, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: 2009-2026, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 ::: Available from Git mirror: <https://github.com/assarbad/scripts>
 :::
 ::: PURPOSE:    This script can be used to run the vcvars32.bat/vcvarsall.bat
 :::             from any of the existing Visual C++ versions starting with .NET
-:::             (2002) through 2022 or versions (or a single version) given on
+:::             (2002) through 2026 or versions (or a single version) given on
 :::             the command line.
 :::             The script will try to find the newest installed VC version by
 :::             iterating over the space-separated (descending) list of versions
@@ -25,7 +25,8 @@ setlocal & pushd .
 :: Toolsets (potentially) supported
 set SUPPORTED_TSET=amd64 x86 ia64 x86_ia64 x86_amd64 amd64_x86 x86_arm amd64_arm
 :: Internal representation of the version number
-set SUPPORTED_VC=17.0 ^
+set SUPPORTED_VC=18.0 ^
+17.0 ^
 16.0 ^
 15.0 ^
 14.0 ^
@@ -37,7 +38,8 @@ set SUPPORTED_VC=17.0 ^
 7.1 ^
 7.0
 :: Marketing name of the Visual Studio versions
-set SUPPORTED_NICE=2022 ^
+set SUPPORTED_NICE=2026 ^
+2022 ^
 2019 ^
 2017 ^
 2015 ^
@@ -129,9 +131,9 @@ goto :EOF
 setlocal ENABLEEXTENSIONS & set VCVER=%~1
 :: We're not interested in overwriting an already existing value
 if defined VCVARS_PATH ( endlocal & goto :EOF )
-:: Now let's distinguish the "nice" version numbers (2002, ... 2022) from the internal ones
+:: Now let's distinguish the "nice" version numbers (2002, ... 2026) from the internal ones
 set VCVER=%VCVER:vs=%
-:: Not a "real" version number, but the marketing one (2002, ... 2022)?
+:: Not a "real" version number, but the marketing one (2002, ... 2026)?
 if %VCVER% GEQ %MIN_NICE% call :NICE_%VCVER% > NUL 2>&1
 set NUMVER=%VCVER:.0=%
 set NUMVER=%NUMVER:.1=%
@@ -142,6 +144,9 @@ call :TSET_%VCVERLBL% > NUL 2>&1
 if not defined NICEVER ( echo ERROR: This script does not know the given version Visual C++ version&endlocal&set SETVCV_ERROR=1&goto :EOF )
 :: Jump over those "subs"
 goto :NICE_SET
+:PRETTY_18_0
+    set NICEVER=2026
+    goto :EOF
 :PRETTY_17_0
     set NICEVER=2022
     goto :EOF
@@ -174,6 +179,10 @@ goto :NICE_SET
     goto :EOF
 :PRETTY_7_0
     set NICEVER=2002
+    goto :EOF
+:NICE_2026
+    set VCVER=18.0
+    set NEWVS=1
     goto :EOF
 :NICE_2022
     set VCVER=17.0

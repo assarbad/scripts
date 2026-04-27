@@ -1,7 +1,7 @@
 @echo off
 @if not "%OS%"=="Windows_NT" @(echo This script requires Windows NT 4.0 or later to run properly! & goto :EOF)
 ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-::: 2015-2022, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
+::: 2015-2026, Oliver Schneider (assarbad.net) - PUBLIC DOMAIN/CC0
 ::: Available from Git mirror: <https://github.com/assarbad/scripts>
 :::
 ::: PURPOSE:    This script tests the setvcvars.cmd script.
@@ -25,6 +25,7 @@ VS2015 ^
 VS2017 ^
 VS2019 ^
 VS2022 ^
+VS2026 ^
 VS2005_amd64 ^
 VS2008_amd64 ^
 VS2010_amd64 ^
@@ -34,6 +35,7 @@ VS2015_amd64 ^
 VS2017_amd64 ^
 VS2019_amd64 ^
 VS2022_amd64 ^
+VS2026_amd64 ^
 VS2005_ia64 ^
 VS2008_ia64 ^
 VS2010_ia64 ^
@@ -230,6 +232,20 @@ call %~dp0setvcvars.cmd 17.0
 if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @goto :EOF
+:VS2026
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd vs2026
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 2026
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd 18.0
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@goto :EOF
 :: Some versions that don't exist
 :VS_nosuch
 @setlocal&pushd .&echo on
@@ -380,6 +396,20 @@ if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @setlocal&pushd .&echo on
 call %~dp0setvcvars.cmd amd64 17.0
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@goto :EOF
+:VS2026_amd64
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 vs2026
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 2026
+if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
+@popd&endlocal
+@setlocal&pushd .&echo on
+call %~dp0setvcvars.cmd amd64 18.0
 if defined VCVER_FRIENDLY echo VCVER_FRIENDLY=%VCVER_FRIENDLY%
 @popd&endlocal
 @goto :EOF
