@@ -26,24 +26,37 @@ $PSDefaultParameterValues['*:ErrorAction']='Stop'
 ##
 ###############################################################################################################################################################
 
-$openssl = @{
-    "1.1.1w" = "cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8"
+$openssl30x = @{ # LTS, Sep 2026
+    "3.0.20" = @{
+        "sha256" = "c80a01dfc70ece4dc21168932c37739042d404d46ccc81a5986dd75314ecda6f";
+        "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
+    }
 }
-# $openssl30x = @{
-#     "3.0.11" = "b3425d3bb4a2218d0697eb41f7fc0cdede016ed19ca49d168b78e8d947887f55"
-# }
-# $openssl31x = @{
-#     "3.1.3" = "f0316a2ebd89e7f2352976445458689f80302093788c466692fb2a188b2eacf6"
-# }
+$openssl35x = @{ # LTS, April 2030
+    "3.5.6" = @{
+        "sha256" = "deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736";
+        "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
+    }
+}
+$openssl40x = @{ # non-LTS
+    "4.0.0" = @{
+        "sha256" = "c32cf49a959c4f345f9606982dd36e7d28f7c58b19c2e25d75624d2b3d2f79ac";
+        "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
+    }
+}
 $nasm = @{
-    "2.16.01" = "029eed31faf0d2c5f95783294432cbea6c15bf633430f254bb3c1f195c67ca3a"
+    "3.01" = @{
+        "sha256" = "e0ba5157007abc7b1a65118a96657a961ddf55f7e3f632ee035366dfce039ca4";
+        "urltpl" = "https://www.nasm.us/pub/nasm/releasebuilds/{0}/win64/nasm-{0}-win64.zip"
+    }
 }
+$openssl = $openssl35x
 
 <#
 .Description
 Downloads a file using Invoke-WebRequest. This is suboptimal, but should be okay for this sort of script.
 #>
-function Download_File
+function Download-File
 {
     param(
         [Parameter(Mandatory=$true)]  [String]$url,
@@ -71,16 +84,17 @@ function Download_File
 .Description
 Downloads the given version of the OpenSSL tarball, checks the hash and returns a boolean denoting success or failure
 #>
-function Download_OpenSSL_version
+function Download-OpenSSL-Version
 {
     param(
         [Parameter(Mandatory=$true)]  [String]$version,
-        [Parameter(Mandatory=$true)]  [String]$knownhash,
+        [Parameter(Mandatory=$true)]  [hashtable]$details,
         [Parameter(Mandatory=$true)]  [String]$tgtdir
     )
 
-    $url = "https://www.openssl.org/source/openssl-${version}.tar.gz"
-    $fname = $url.Substring($url.LastIndexOf("/") + 1)
+    $knownhash = $details.sha256
+    $url = $details.urltpl -f $version
+    $fname = Split-Path -Path $url -Leaf
     if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
     {
         Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
@@ -88,7 +102,7 @@ function Download_OpenSSL_version
     else
     {
         $host.ui.WriteErrorLine("Downloading OpenSSL $version from $url as $fname (into $tgtdir)")
-        Download_File $url "$tgtdir\$fname"
+        Download-File $url "$tgtdir\$fname"
     }
     $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
     if ($knownhash -eq $hash)
@@ -107,16 +121,17 @@ function Download_OpenSSL_version
 .Description
 Downloads the given version of the NASM x64 ZIP file, checks the hash and returns a boolean denoting success or failure
 #>
-function Download_NASM_version
+function Download-NASM-Version
 {
     param(
         [Parameter(Mandatory=$true)]  [String]$version,
-        [Parameter(Mandatory=$true)]  [String]$knownhash,
+        [Parameter(Mandatory=$true)]  [hashtable]$details,
         [Parameter(Mandatory=$true)]  [String]$tgtdir
     )
 
-    $url = "https://www.nasm.us/pub/nasm/releasebuilds/$version/win64/nasm-${version}-win64.zip"
-    $fname = $url.Substring($url.LastIndexOf("/") + 1)
+    $knownhash = $details.sha256
+    $url = $details.urltpl -f $version
+    $fname = Split-Path -Path $url -Leaf
     if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
     {
         Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
@@ -124,7 +139,7 @@ function Download_NASM_version
     else
     {
         $host.ui.WriteErrorLine("Downloading NASM $version from $url as $fname (into $tgtdir)")
-        Download_File $url "$tgtdir\$fname"
+        Download-File $url "$tgtdir\$fname"
     }
     $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
     if ($knownhash -eq $hash)
@@ -167,7 +182,7 @@ $funcs =
     .Description
     This downloads the OpenSSL version defined in $openssl and checks the file hash against the known value and then unpacks the downloaded archive.
     #>
-    function Import_OpenSSL
+    function Import-OpenSSL
     {
         param(
             [Parameter(Mandatory=$true)]  [hashtable]$details,
@@ -197,7 +212,7 @@ $funcs =
     .Description
     This downloads the NASM version defined in $nasm and checks the file hash against the known value and then unpacks the downloaded archive.
     #>
-    function Import_NASM
+    function Import-NASM
     {
         param(
             [Parameter(Mandatory=$true)]  [hashtable]$details,
@@ -225,7 +240,7 @@ $funcs =
     .Description
     This uses the known (and hardcoded) location of vswhere.exe to determine the latest Visual Studio, given the version range from $vsrange!
     #>
-    function Get_VSBasePath
+    function Get-VS-BasePath
     {
         param($vsrange = "[16.0,18.0)")
 
@@ -235,7 +250,7 @@ $funcs =
         return $vspath
     }
 
-    function Copy_Finished
+    function Copy-Finished
     {
         param(
             [Parameter(Mandatory=$true)]  [String]$source,
@@ -249,7 +264,7 @@ $funcs =
     .Description
     Patches the OpenSSL makefile to get rid of some garbage, such as this perpetuated silliness of creating PDBs for static libs ...
     #>
-    function Patch_Makefile
+    function Patch-Makefile
     {
         $cl = "cl"
         # Patch the makefile so that the debug info is embedded in the object files (/Z7)
@@ -264,7 +279,7 @@ $funcs =
     .Description
     Uses a suffix to create a lib name that contains the suffix. Example (suffix="32") "libcrypto.lib" -> "libcrypto32.lib"
     #>
-    function FileNameFromTargetName
+    function Get-FileName-From-TargetName
     {
         param(
             [Parameter(Mandatory=$true)]  [String]$path,
@@ -279,11 +294,12 @@ $funcs =
     .Description
     This builds libcrypto by invoking the correct commands in the correct order (as of OpenSSL 1.1.x)
     #>
-    function BuildAndPlaceOpenSSLLib
+    function Build-And-Place-OpenSSL-Lib
     {
         param(
             [Parameter(Mandatory=$true)]  [hashtable]$nasm,
             [Parameter(Mandatory=$true)]  [hashtable]$ossl,
+            [Parameter(Mandatory=$true)]  [String]$perl,
             [Parameter(Mandatory=$true)]  [String]$arch,
             [Parameter(Mandatory=$true)]  [String]$ossl_target,
             [Parameter(Mandatory=$true)]  [String]$tgt_base_suffix,
@@ -312,28 +328,45 @@ $funcs =
             else
             {
                 $configure_ossl_target = $ossl_target
-                $nasmdir = Import_NASM $nasm $blddir
+                $nasmdir = Import-NASM $nasm $blddir
                 # Make our copy of NASM available
                 $env:PATH =  $nasmdir + ";" + $env:PATH
                 Write-Host -ForegroundColor white "NASM: $nasmdir"
             }
 
-            $vspath = Get_VSBasePath
+            $vspath = Get-VS-BasePath
             Import-Module "$vspath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll" -Force -cmdlet Enter-VsDevShell
             Enter-VsDevShell -VsInstallPath "$vspath" -DevCmdArguments "-arch=$arch -no_logo" -SkipAutomaticLocation
-            $ossldir = Import_OpenSSL $ossl $blddir
+            $ossldir = Import-OpenSSL $ossl $blddir
             Write-Host -ForegroundColor white "OpenSSL dir: $ossldir"
             Push-Location -Path "$ossldir"
 
-            $target_fname = FileNameFromTargetName "libcrypto.lib" $tgt_base_suffix
+            $target_fname = Get-FileName-From-TargetName "libcrypto.lib" $tgt_base_suffix
             Write-Host "Target file name for lib: $target_fname"
 
             $env:LOG_BUILD_COMMANDLINES="$blddir\buildcmdlines.log"
-            $srcepoch = ([DateTimeOffset](Get-Item "$pwd\INSTALL").LastWriteTime).ToUnixTimeSeconds() # any freshly unpacked file will do
+            $sentinel_files = @("INSTALL.md", "INSTALL")
+            $srcepoch = $null
+            foreach ($sfile in $sentinel_files)
+            {
+                try
+                {
+                    $srcepoch = ([DateTimeOffset](Get-Item "$pwd\$sfile").LastWriteTime).ToUnixTimeSeconds()
+                    break
+                }
+                catch
+                {
+                    continue
+                }
+            }
+            if ($srcepoch -eq $null)
+            {
+                throw "Unable to retrieve a sensible timestamp from the unpacked archive."
+            }
             $env:SOURCE_DATE_EPOCH="$srcepoch"
 
             # Probably a good idea also to add (needs to be validated!): no-autoalginit no-autoerrinit
-            & perl Configure $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
+            Invoke-Configure $perl $configure_ossl_target --api=1.1.0 --release threads no-shared no-filenames | Out-Host
             ThrowOnNativeFailure "Failed to configure OpenSSL for build ($configure_ossl_target, $arch, $target_fname)"
             Write-Host -ForegroundColor white "${arch}: libssl = $script:LibSsl, no debug info = $script:NoDebugInfo, don't delete build directories = $script:NoDeleteBuildDirectories, use sccache = $script:UseSccache"
             if ($script:UseSccache -And (Test-Path -Path "$staging\bin\cl.exe" -PathType Leaf))
@@ -356,13 +389,13 @@ $funcs =
             # Fix up the makefile to fit our needs better
             if ($script:NoDebugInfo)
             {
-                Patch_Makefile
+                Patch-Makefile
                 $env:_CL_="/d1trimfile:'$blddir' /Brepro"
                 $env:_ML_="/Brepro"
             }
             else
             {
-                Patch_Makefile
+                Patch-Makefile
                 $env:_CL_="/d1trimfile:'$blddir' /Brepro /Z7"
                 $env:_ML_="/Brepro /Zi"
             }
@@ -381,11 +414,11 @@ $funcs =
             {
                 New-Item -Type Directory "$libpath" | Out-Null
             }
-            Copy_Finished .\libcrypto.lib "$libpath\$target_fname"
+            Copy-Finished .\libcrypto.lib "$libpath\$target_fname"
             if ($script:LibSsl)
             {
-                $target_fname2 = FileNameFromTargetName "libssl.lib" $tgt_base_suffix
-                Copy_Finished .\libssl.lib "$libpath\$target_fname2"
+                $target_fname2 = Get-FileName-From-TargetName "libssl.lib" $tgt_base_suffix
+                Copy-Finished .\libssl.lib "$libpath\$target_fname2"
             }
             if (Test-Path -Path "$tgtincdir" -PathType Container)
             {
@@ -412,12 +445,68 @@ $funcs =
 
     <#
     .Description
-    Checks if Perl is available and if not found kicks off an _interactive_ installation of StrawberryPerl via winget (i.e. user can still choose to cancel).
+    Attempts to detect Git for Windows based on heuristics and returns the common root of the cmd and bin subdirectories.
     #>
-    function Check_Perl_Available
+    function Get-GitForWindows-Root
     {
-        $perl = Get-Command perl -CommandType Application -ErrorAction SilentlyContinue
-        if ($perl -eq $null)
+        $gitexe = Get-Command -Name git -CommandType Application -ErrorAction SilentlyContinue
+        if ($gitexe)
+        {
+            $gitcmdbin = Split-Path -Path $gitexe.Source
+            if ((Split-Path -Path $gitcmdbin -Leaf) -in @("cmd", "bin"))
+            {
+                return (Split-Path -Path $gitcmdbin)
+            }
+        }
+        return $null
+    }
+
+    <#
+    .Description
+    Returns the full path to bin\sh.exe underneath the Git for Windows installation root.
+    #>
+    function Get-GitForWindows-sh
+    {
+        $gitfwroot = Get-GitForWindows-Root
+        if ($gitfwroot)
+        {
+            $shexe = "$gitfwroot\bin\sh.exe"
+            if (Test-Path -Path "$shexe" -PathType Leaf)
+            {
+                return $shexe
+            }
+        }
+        return $null
+    }
+
+    <#
+    .Description
+    Retrieves  if Perl is available and if not found kicks off an _interactive_ installation of StrawberryPerl via winget (i.e. user can still choose to cancel).
+    #>
+    function Get-Available-Perl
+    {
+        $perl = Get-Command -Name perl -CommandType Application -ErrorAction SilentlyContinue
+        <#
+        if (-not $perl)
+        {
+            $shexe = Get-GitForWindows-sh
+            if ($shexe)
+            {
+                & $shexe -c "perl --version" *>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0)
+                {
+                    Write-Host "Found Perl via Git for Windows (${shexe} -> perl)"
+                    return @{ Path = $shexe; UseShim = $true }
+                }
+            }
+        }
+        else
+        {
+            Write-Host "Found Perl via PATH ($($perl.Source))"
+            return @{ Path = $perl.Source; UseShim = $false }
+        }
+        #>
+        if (-not $perl)
         {
             echo "NOTE: You need to have Perl installed for this build for work. Kicking off the installation. Feel free to cancel, but be aware that the build will fail."
             winget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl
@@ -427,14 +516,91 @@ $funcs =
                 throw "Perl not available and wasn't installed by the user"
             }
         }
+        return $perl
+    }
+
+    <#
+    .Description
+    Prepare the util/perl sudirectory inside the unpacked OpenSSL so that it has modules that don't come with Git for Windows.
+    #>
+    function Prepare-Perl-from-GitForWindows
+    {
+        param(
+            [Parameter(Mandatory=$true)]  [String]$tgtdir
+        )
+        $modules = @(
+            @{
+                "sha256" = "b009ff51f4fb108d19961a523e99b4373ccf958d37ca35bf1583215908dca9a9";
+                "url" = "https://cpan.metacpan.org/authors/id/J/JE/JESSE/Locale-Maketext-Simple-0.21.tar.gz"
+            }
+        )
+        foreach ($module in $modules) {
+            $knownhash = $module.sha256
+            $url = $module.url
+            $fname = Split-Path -Path $url -Leaf
+            if (Test-Path -Path "$tgtdir\$fname" -PathType Leaf)
+            {
+                Write-Host -ForegroundColor yellow "Note: using existing file $tgtdir\$fname. If this is not desired, remove it prior to running this script."
+            }
+            else
+            {
+                $host.ui.WriteErrorLine("Downloading $url as $fname (into $tgtdir)")
+                Download-File $url "$tgtdir\$fname"
+            }
+            $hash = (Get-FileHash -Algorithm SHA256 -Path "$tgtdir\$fname").Hash
+            if ($knownhash -eq $hash)
+            {
+                Write-Host -ForegroundColor green "`tFile $fname downloaded and hash matches."
+            }
+            else
+            {
+                throw "The expected ($knownhash) and actual hashes ($hash) don't match for $fname!"
+            }
+            $host.ui.WriteErrorLine("Unpacking  $fname")
+            Push-Location $tgtdir
+            try
+            {
+                tar -xf "$tgtdir\$fname"
+            } finally {
+                Pop-Location
+            }
+            $subdir = $fname -replace '\.tar\.gz$', ''
+            if (!(Test-Path -Path "$tgtdir\$subdir"))
+            {
+                throw "Expected to find a folder named '$tgtdir\$subdir' after unpacking the archive."
+            }
+            Copy-Item -Recurse "$tgtdir\$subdir\lib\*" "$pwd\util\perl\"
+            if (-not $?)
+            {
+                throw "Copying of the subdirectory from lib to util/perl failed."
+            }
+        }
+    }
+
+    <#
+    .Description
+    Invokes either Perl from Git for Windows or a full-fledged Perl
+    #>
+    function Invoke-Configure
+    {
+        param(
+            [Parameter(Mandatory=$true)]  [String]$perl,
+            [Parameter(ValueFromRemainingArguments)][string[]]$args
+        )
+        Write-Host "Executing equivalent of: perl Configure $($args | %{ "'$_'" })"
+        $cmdout = & "$perl" Configure @args *>&1
+        if ($LASTEXITCODE -ne 0)
+        {
+            $cmdout | Write-Warning
+        }
     }
 } # $funcs
 
 <#
 .Description
-Patches the openssl/opensslconf.h to unify the x86 and x64 headers generated during the OpenSSL builds.
+Patches the openssl/{configuration,opensslconf}.h to unify the x86 and x64 headers generated during the OpenSSL builds.
 #>
-function Patch_opensslconf_Header
+function Patch-Configuration-Header
 {
     param(
         [Parameter(Mandatory=$true)]  [String]$srcfile,
@@ -442,7 +608,7 @@ function Patch_opensslconf_Header
     )
 
     $fname = Split-Path "$srcfile" -Leaf
-    if ($fname -ne "opensslconf.h")
+    if ($fname in @("opensslconf.h", "configuration.h"))
     {
         Write-Host -ForegroundColor Yellow "Not patching unexpected mismatched file $fname!"
         return
@@ -500,7 +666,7 @@ function FinalizeHeaders
                 }
                 else
                 {
-                    Patch_opensslconf_Header "$($hash.Path)" "$incdir\$fname"
+                    Patch-opensslconf-Header "$($hash.Path)" "$incdir\$fname"
                 }
             }
         }
@@ -509,6 +675,16 @@ function FinalizeHeaders
 
 try
 {
+    if ($nasm.Count -ne 1)
+    {
+        Write-Error "There is more than a single version defined for NASM in \$nasm."
+        exit 1
+    }
+    if ($openssl.Count -ne 1)
+    {
+        Write-Error "There is more than a single version defined for OpenSSL in \$openssl."
+        exit 1
+    }
     if ($ArchToBuild -eq "native")
     {
         $oldvalue = $ArchToBuild
@@ -528,8 +704,14 @@ try
     $staging = "$pwd\staging"
     Start-Transcript -Path $logpath -Append
 
-    $funcs:Check_Perl_Available
-    
+    . $funcs
+    $perl = Get-Available-Perl
+    if (-not $perl)
+    {
+        Write-Error "No suitable Perl found. Perhaps install one using:`n`twinget install --accept-package-agreements --accept-source-agreements --exact --interactive --id StrawberryPerl.StrawberryPerl"
+        exit 1
+    }
+
     # Cache copies of the files we need for the build
     if ($UseMasm)
     {
@@ -539,13 +721,13 @@ try
     {
         foreach($version in $nasm.keys)
         {
-            $nasm_details = Download_NASM_version "$version" "$($nasm.$version)" "$staging"
+            $nasm_details = Download-NASM-Version $version $nasm[$version] "$staging"
             break # use the first one always
         }
     }
     foreach($version in $openssl.keys)
     {
-        $ossl_details = Download_OpenSSL_version  "$version" "$($openssl.$version)" "$staging"
+        $ossl_details = Download-OpenSSL-Version  $version $openssl[$version] "$staging"
         break # use the first one always
     }
 
@@ -587,8 +769,7 @@ try
             {
                 $oldenv|%{ Set-Item -Path "Env:$($_.Name)" "$($_.Value)" }
                 Write-Host "Before starting build: ${arch}: $ossl_target, $tgt_base_suffix"
-                . $funcs
-                BuildAndPlaceOpenSSLLib $nasm_details $ossl_details $arch $ossl_target $tgt_base_suffix "openssl" $staging
+                Build-And-Place-OpenSSL-Lib $nasm_details $ossl_details $perl $arch $ossl_target $tgt_base_suffix "openssl" $staging
             }
             finally
             {
@@ -602,7 +783,7 @@ try
             Start-Job `
                 -InitializationScript $funcs `
                 -Name "OpenSSL build: $($tgt.Name) ($ossl_target)" `
-                -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseMasm = $using:UseMasm; $UseSccache = $using:UseSccache; BuildAndPlaceOpenSSLLib $using:nasm_details $using:ossl_details $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
+                -ScriptBlock {$LibSsl = $using:LibSsl; $NoDebugInfo = $using:NoDebugInfo; $NoDeleteBuildDirectories = $using:NoDeleteBuildDirectories; $UseMasm = $using:UseMasm; $UseSccache = $using:UseSccache; Build-And-Place-OpenSSL-Lib $using:nasm_details $using:ossl_details $using:perl $using:arch $using:ossl_target $using:tgt_base_suffix "openssl" $using:staging}
         }
     }
 
