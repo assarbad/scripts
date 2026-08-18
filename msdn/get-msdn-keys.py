@@ -1,23 +1,25 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script --quiet
 # -*- coding: utf-8 -*-
 # vim: set autoindent smartindent softtabstop=4 tabstop=4 shiftwidth=4 expandtab:
 from __future__ import print_function, with_statement, unicode_literals, division, absolute_import
 
 __author__ = "Oliver Schneider"
-__copyright__ = "2021 Oliver Schneider (assarbad.net), under Public Domain, or CC0 where Public Domain dedications are not possible"
-__version__ = "0.3"
+__copyright__ = "2021, 2023 Oliver Schneider (assarbad.net), under Public Domain, or CC0 where Public Domain dedications are not possible"
+__version__ = "0.4"
 import os
 import sys
 import functools
 import tempfile
 from configparser import ConfigParser
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from time import sleep
+from timeit import default_timer as timer
 
 try:
     from selenium import webdriver
-    from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+    from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, NoSuchElementException
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait  # see: https://stackoverflow.com/a/46881813/
     from selenium.webdriver.common.by import By
@@ -34,12 +36,6 @@ prodkey = %(portal)sProductKeys
 login = https://login.microsoftonline.com/
     https://login.live.com/
 export = %(portal)s_apis/Key/ExportMyKeys?upn=
-
-[IDs]
-email = i0116
-password = i0118
-nextbtn = idSIButton9
-exportbtn = id__15
 
 [suppressions]
 claim = (VL)
@@ -82,13 +78,13 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
     ]
     parent_dir = Path(__file__).resolve().parent
     with tempfile.TemporaryDirectory(prefix="download.", dir=str(parent_dir)) as dl_path:
-        print("Download location: {}".format(dl_path))
+        print(f"Download location: {dl_path}")
         options = webdriver.FirefoxOptions()
         if headless:
             print("Not showing (marionette) browser UI")
             options.headless = True
         if profile_path and os.path.isdir(profile_path):
-            print("Using profile path: '{}'".format(profile_path))
+            print(f"Using profile path: '{profile_path}'")
             options.set_preference("profile", profile_path)
         else:
             options.ensure_clean_session = True
@@ -120,11 +116,11 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
         finally:
             dlkeys = Path(os.path.join(dl_path, "KeysExport.xml"))
             if dlkeys.is_file():
-                print("Keys were downloaded as: {}".format(str(dlkeys)))
-                newname = os.path.join(str(parent_dir), "{:04d}-{:02d}-{:02d}_{:s}".format(utcnow.year, utcnow.month, utcnow.day, str(dlkeys.name)))
+                print(f"Keys were downloaded as: {str(dlkeys)}")
+                newname = os.path.join(str(parent_dir), f"{utcnow.year:04d}-{utcnow.month:02d}-{utcnow.day:02d}_{dlkeys.name:s}")
                 if no_rename:
                     newname = os.path.join(str(parent_dir), str(dlkeys.name))
-                print("\t... renaming to: {:s}".format(newname))
+                print(f"\t... renaming to: {newname:s}")
                 try:
                     dlkeys.rename(newname)
                 except FileNotFoundError as exc:
@@ -133,7 +129,17 @@ def firefox_driver(headless, profile_path, no_rename, *args, **kwargs):
             driver.quit()
 
 
-def do_step(driver, stepname, clickable, send=None, assert_urls=(), wait_duration=10):
+def save_screenshot(driver, basename):
+    """\
+    Saves a screenshot of the current driver in the same directory as this script
+    """
+    now = datetime.utcnow().isoformat().replace(":", "-")
+    parent_dir = Path(__file__).resolve().parent
+    filename = parent_dir / Path(f"{now}_{basename}.png")
+    driver.save_screenshot(str(filename))
+
+
+def do_step(driver, stepname, clickable, send=None, assert_urls=(), wait_duration=10, hidden_send=False):
     """\
     Performs a single step using the driver, waiting for a particular element
     to be clickable before performing it.
@@ -149,24 +155,63 @@ def do_step(driver, stepname, clickable, send=None, assert_urls=(), wait_duratio
         waiting. If empty (tuple), no assertion will be done. Takes the parameters .startswith()
         expects.\
     """
+    start_time = timer()
     try:
-        print("[>STEP] {}".format(stepname), file=sys.stderr)
+        print(f"[>STEP] {stepname} {wait_duration}s timeout", file=sys.stderr)
         elem = WebDriverWait(driver, wait_duration).until(EC.element_to_be_clickable(clickable))
-        assert not assert_urls or driver.current_url.startswith(assert_urls), "Something went wrong [{}], ended up at: {}".format(stepname, driver.current_url)
-        print("[STEP>] {}".format(stepname), file=sys.stderr)
+        assert not assert_urls or driver.current_url.startswith(assert_urls), f"ERROR: [{stepname}], ended up at: {driver.current_url} instead of {assert_urls}"
+        # print(f"{elem=}", file=sys.stderr)
+        # print(f"{dir(elem)=}", file=sys.stderr)
         if send is not None:
             if send is True:
+                print(f"[STEP>] {stepname} -> clicking", file=sys.stderr)
                 elem.click()
             else:
+                print(f"[STEP>] {stepname} -> sending key: '{send}'", file=sys.stderr)
                 elem.send_keys(send)
+        end_time = timer()
+        print(f"[STEP!] {stepname} (took {end_time - start_time:02.3f}s)", file=sys.stderr)
     except AssertionError:
-        print("Title: {}".format(driver.title), file=sys.stderr)
-        print("URL: {}".format(driver.current_url), file=sys.stderr)
-        driver.save_screenshot("failure-screenshot.png")
+        print(f"Title: {driver.title}", file=sys.stderr)
+        print(f"URL: {driver.current_url}", file=sys.stderr)
+        save_screenshot(driver, "failure")
         raise
 
 
-def get_exported_keys_xml(driver, url_prodkey, id_exportbtn):
+# https://blog.mozilla.org/accessibility/
+# https://developer.mozilla.org/en-US/docs/Learn/Accessibility/WAI-ARIA_basics
+
+ELEM_EXPORTBTN = (
+    By.XPATH,
+    "//button[@aria-expanded='false' and @aria-haspopup='true' and contains(@class, 'ms-Button') and .//span[text()='Export all keys']]",
+)
+ELEM_FROMACTIVESUBSBTN = (
+    By.XPATH,
+    "//button[@role='menuitem' and .//span[text()='From active subscriptions']]",
+)
+ELEM_LOGIN_USERFIELD = (
+    By.XPATH,
+    "//input[@type='email' and @name='loginfmt' and @aria-required='true']",
+)
+ELEM_LOGIN_NEXTBTN = (
+    By.XPATH,
+    f"{ELEM_LOGIN_USERFIELD[1]}/../../../..//input[@type='submit' and @value='Next']",
+)
+ELEM_LOGIN_PASSWORDFIELD = (
+    By.XPATH,
+    "//input[@type='password' and @name='passwd' and @aria-required='true']",
+)
+ELEM_LOGIN_SIGNINBTN = (
+    By.XPATH,
+    f"{ELEM_LOGIN_PASSWORDFIELD[1]}/../../../..//input[@type='submit' and @value='Sign in']",
+)
+ELEM_LOGIN_YESBTN = (
+    By.XPATH,
+    "//input[@type='submit' and @value='Yes']",
+)
+
+
+def get_exported_keys_xml(driver, assert_urls):
     """\
     This function attempts to export the keys from active subscriptions, by
     initiating a download of the XML file.
@@ -175,55 +220,116 @@ def get_exported_keys_xml(driver, url_prodkey, id_exportbtn):
     * create temporary directory inside download base directory
     Work in progress!!!
     """
-    do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
-    do_step(
-        driver,
-        "clicking 'Export all keys'",
-        (By.XPATH, "//button[@aria-label='Export all keys' and @aria-expanded='false' and @aria-haspopup='true' and contains(@class, ' export-all-keys ')]"),
-        send=True,
-        assert_urls=url_prodkey,
-    )
-    do_step(
-        driver,
-        "clicking 'From active subscriptions'",
-        (By.XPATH, "//button[@aria-label='From active subscriptions' and @aria-disabled='false' and @role='menuitem']"),
-        send=True,
-        assert_urls=url_prodkey,
-    )
-    do_step(driver, "waiting for Product Keys page to be accessible after downloading XML", (By.ID, id_exportbtn), assert_urls=url_prodkey)
+    do_step(driver, "waiting for 'Product Keys' page to be loaded", ELEM_EXPORTBTN, assert_urls=assert_urls, wait_duration=30)
+    do_step(driver, "clicking 'Export all keys' button", ELEM_EXPORTBTN, send=True, assert_urls=assert_urls)
+    with suppress(TimeoutException):  # just to be on the safe side ...
+        do_step(driver, "waiting for 'From active subscriptions' to become available for click", ELEM_FROMACTIVESUBSBTN, assert_urls=assert_urls)
+    do_step(driver, "clicking 'From active subscriptions'", ELEM_FROMACTIVESUBSBTN, send=True, assert_urls=assert_urls, wait_duration=120)
+    do_step(driver, "waiting for 'Product Keys' page to be accessible again after downloading XML", ELEM_EXPORTBTN, assert_urls=assert_urls, wait_duration=120)
 
 
-def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password, id_nextbtn, id_exportbtn, EMAIL, PASSWORD, *args, **kwargs):
+def enter_password(driver, assert_urls, PASSWORD):
+    """\
+    Just entering the password and potentially clicking that 'Stay signed in?' button for 'Yes'
+    """
+    elem = None
+    with suppress(NoSuchElementException, TimeoutException):
+        elem = driver.find_element(*ELEM_LOGIN_PASSWORDFIELD)
+    if not elem:
+        return
+    do_step(driver, "entering password", ELEM_LOGIN_PASSWORDFIELD, send=PASSWORD, assert_urls=assert_urls, hidden_send=True)
+    do_step(driver, "clicking 'Sign in' button after entering password", ELEM_LOGIN_SIGNINBTN, send=True, assert_urls=assert_urls)
+    with suppress(TimeoutException):  # may never happen
+        do_step(driver, "clicking 'Yes' button (for 'Stay signed in?')", ELEM_LOGIN_YESBTN, send=True, assert_urls=assert_urls)
+
+
+def sign_in(driver, assert_urls, EMAIL, PASSWORD):
+    """\
+    This function signs into my.visualstudio.com by sending a "username" and password
+    """
+    elem = None
+    with suppress(NoSuchElementException, TimeoutException):
+        elem = driver.find_element(*ELEM_LOGIN_USERFIELD) or driver.find_element(*ELEM_LOGIN_PASSWORDFIELD)
+    if not elem:
+        return
+    do_step(driver, "entering email", ELEM_LOGIN_USERFIELD, send=EMAIL, assert_urls=assert_urls)
+    do_step(driver, "clicking 'Next' after entering email", ELEM_LOGIN_NEXTBTN, send=True, assert_urls=assert_urls)
+    enter_password(driver, assert_urls, PASSWORD)
+
+
+def scroll_page(driver, delay=0.2):
+    """\
+    Scroll down the height of a visible page
+    """
+    sleep(delay)
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    return driver.execute_script("return document.body.scrollHeight")
+
+
+def scroll_to_claim_key(driver, assert_urls, EMAIL, PASSWORD):
+    # fluent wait? (Selenium)
+    # expected conditions
+    sign_in(driver, (), EMAIL, PASSWORD)
+    with suppress(TimeoutException):  # may never happen
+        do_step(driver, "waiting for 'Product Keys' page to be loaded", ELEM_EXPORTBTN, assert_urls=assert_urls, wait_duration=10)
+    sign_in(driver, (), EMAIL, PASSWORD)
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    while True:
+        print(f"{last_height=}", file=sys.stderr)
+        new_height = scroll_page(driver)
+        elems = driver.find_elements(By.XPATH, "//button[contains(@class, 'ProductKeysList__AccessibleGridLink-') and ../span[contains(text(), 'remaining')]]")
+        if elems:
+            print(f"We found {len(elems)=} elements", file=sys.stderr)
+            for elem in elems.items():
+                print(f"{elem}", file=sys.stderr)
+        if new_height == last_height:
+            print(f"Reached the bottom of the page at {new_height}px", file=sys.stderr)
+            break
+        print(f"Scrolled {new_height - last_height}px down", file=sys.stderr)
+        last_height = new_height
+    # div[@class='ms-List']/div[@class='ms-List-surface']/div[@class='ms-List-page']
+    # -> div[@class='ms-List-page' and @role='presentation'] <- actual loaded keys
+    # -> <div role="presentation" class="ms-List-cell" data-list-index="30" data-automationid="ListCell" />
+    # <span><button type="button" class="ms-Link ProductKeysList__AccessibleGridLink-sc-9hotbz-1 iPQlRw root-218" tabindex="0">Claim Key</button>
+    # ...<span> 5 remaining</span></span>
+
+    # $x("//button[contains(@class, 'ProductKeysList__AccessibleGridLink-') and ../span[contains(text(), 'remaining')]]")
+    # driver.execute_script("window.scrollTo(0, Y)")
+    # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    # # Scroll down to bottom
+    #    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    # driver.find_element(By.XPATH, ...)
+    # driver.execute_script("document.getElementById('your ID Element').scrollIntoView();")
+
+
+def get_keys(cmdline, url_prodkey, url_login, url_export, EMAIL, PASSWORD, *args, **kwargs):
     """\
     This is the central function which uses the webdriver instance to claim remaining
     keys.
     """
     assert all(isinstance(x, tuple) for x in {url_prodkey, url_login, url_export}), "Expected tuples"
-    assert all(isinstance(x, str) and x for x in {id_email, id_password, id_nextbtn, id_exportbtn, EMAIL, PASSWORD}), "Expected non-empty strings"
+    assert all(isinstance(x, str) and x for x in {EMAIL, PASSWORD}), "Expected non-empty strings"
     url = url_prodkey[0]
 
     headless = not cmdline.get("show_browser", False)
     profile_dir = cmdline.get("profile", None)
     no_rename = cmdline.get("no_rename", False)
 
-    print("Visiting: {}".format(url))
+    print(f"Visiting: {url}")
     with firefox_driver(headless, profile_dir, no_rename) as driver:
         driver.get(url)
 
-        nextbtn = (By.ID, id_nextbtn)
-
+        # Common steps to log in, unless requested that we don't log in (e.g. when reusing a profile that is logged in already)
         if not cmdline.get("no_auth", False):
-            do_step(driver, "entering email", (By.ID, id_email), send=EMAIL, assert_urls=url_login)
-            do_step(driver, "clicking Next after entering email", nextbtn, send=True, assert_urls=url_login)
-            do_step(driver, "entering password", (By.ID, id_password), send=PASSWORD, assert_urls=url_login)
-            do_step(driver, "clicking Login/Next button after entering password", nextbtn, send=True, assert_urls=url_login)
-            do_step(driver, "clicking Yes/Next button (stay signed in)", nextbtn, send=True, assert_urls=url_login)
+            sign_in(driver, url_login, EMAIL, PASSWORD)
 
+        # Only downloading without attempting to request unclaimed keys?
         if cmdline.get("download_only", False):
-            get_exported_keys_xml(driver, url_prodkey, id_exportbtn)
+            get_exported_keys_xml(driver, url_prodkey)
             return
 
-        do_step(driver, "waiting for Product Keys page to be loaded", (By.ID, id_exportbtn), assert_urls=url_prodkey)
+        scroll_to_claim_key(driver, url_prodkey, EMAIL, PASSWORD)
+        return
 
         suppress_claim = kwargs.get("suppression_claim", set())
         # Merely report a count of potentially eligible links
@@ -231,7 +337,7 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
         if len(suppress_claim):
             claims = [x for x in claims if not any(needle in x.get_attribute("aria-label") for needle in suppress_claim)]
         num_claims = len(claims)
-        print("\t{} links with 'Claim Key', excluding suppressed".format(num_claims), file=sys.stderr)
+        print(f"\t{num_claims} links with 'Claim Key', excluding suppressed", file=sys.stderr)
         if not num_claims:
             print("\tNothing to do!", file=sys.stderr)
             return
@@ -247,7 +353,7 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
             claim.click()
             print("\t... waiting after click", file=sys.stderr)
             try:
-                WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.ID, id_exportbtn)))
+                WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, ...)))
             except (TimeoutException, StaleElementReferenceException) as e:
                 print("\t... looks like the daily limit was reached", file=sys.stderr)
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "errormessage")))
@@ -255,12 +361,12 @@ def get_keys(cmdline, url_prodkey, url_login, url_export, id_email, id_password,
                 download_keys = driver.current_url == "https://my.visualstudio.com/Errors?e=46"
                 if download_keys:
                     print("\t... yep, it's about the daily limit", file=sys.stderr)
-                print("[{}] {}".format(driver.current_url, driver.title), file=sys.stderr)
+                print(f"[{driver.current_url}] {driver.title}", file=sys.stderr)
                 print(str(e), file=sys.stderr)
                 if download_keys:
                     print("\t... let's try to download the XML with the keys", file=sys.stderr)
                     driver.get(url)
-                    get_exported_keys_xml(driver, url_prodkey, id_exportbtn)
+                    get_exported_keys_xml(driver, url_prodkey)
                 return
         print("[{}] {}".format(driver.current_url, driver.title))
 
@@ -282,7 +388,7 @@ def get_config():
     cfg.read_string(DEFAULT_CONFIG, source="<defaults>")
     cfg.read(ini_path)
     assert "secrets" not in cfg.sections(), "Cannot store credentials in .ini. Use a .credentials file instead."
-    expecting = {"URLs", "IDs"}
+    expecting = {"URLs"}
     assert all(x in cfg.sections() for x in expecting), "Missing sections in the read configuration. Expecting at least sections: {}".format(
         ", ".join(expecting)
     )

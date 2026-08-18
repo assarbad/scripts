@@ -1,3 +1,4 @@
+.ipynb_checkpoints/
 keys/
 MSDN-keys-xml.tar.xz
 MSDN-keys-xml.7z
@@ -11,3 +12,5 @@ KeysExport.xml
 .hg/
 likely-unneeded/
 superfluous/
+*_failure.png
+*_step.png

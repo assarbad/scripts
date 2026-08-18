@@ -1,9 +1,12 @@
 export PIPENV_VENV_IN_PROJECT=1
 hash -r
-python -m pip install -U --user pip pipx
+type python
+python -m pip install -U --user pip pipx || return
 hash -r
-pipx install pipenv
+type pipx
+pipx install pipenv || return
 hash -r
-pipenv sync
+type pipenv
+pipenv sync || return
 hash -r
-pipenv shell
+pipenv shell || return

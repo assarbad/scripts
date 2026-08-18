@@ -1,0 +1,11 @@
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+
+Package: ollis-deps
+Version: 999:1.1
+Maintainer: Oliver Schneider <me@me.tld>
+Depends: mc, unzip, etckeeper, vim-nox, tmux, make
+Architecture: all
+Description: Mock package to pull in stuff I like to have
+ .
