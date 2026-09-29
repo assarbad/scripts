@@ -92,21 +92,33 @@ $openssl30x = @{ # LTS, Sep 2026
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
+$openssl34x = @{
+    "3.4.7" = @{ # non-LTS
+        "sha256" = "7261c348e6e59bc7b635a30f98072e8817a1c60a7033bb570737394a3a061842";
+        "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
+    }
+}
 $openssl35x = @{ # LTS, April 2030
-    "3.5.6" = @{
-        "sha256" = "deae7c80cba99c4b4f940ecadb3c3338b13cb77418409238e57d7f31f2a3b736";
+    "3.5.8" = @{
+        "sha256" = "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2";
+        "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
+    }
+}
+$openssl36x = @{ # non-LTS
+    "3.6.4" = @{
+        "sha256" = "9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
 $openssl40x = @{ # non-LTS
-    "4.0.0" = @{
-        "sha256" = "c32cf49a959c4f345f9606982dd36e7d28f7c58b19c2e25d75624d2b3d2f79ac";
+    "4.0.2" = @{
+        "sha256" = "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
 $nasm = @{
-    "3.01" = @{
-        "sha256" = "e0ba5157007abc7b1a65118a96657a961ddf55f7e3f632ee035366dfce039ca4";
+    "3.02" = @{
+        "sha256" = "161d0bfaff53c2f9e9f3e69fd0672323ebabafd1268976a5cec11be92a19aee7";
         "urltpl" = "https://www.nasm.us/pub/nasm/releasebuilds/{0}/win64/nasm-{0}-win64.zip"
     }
 }
