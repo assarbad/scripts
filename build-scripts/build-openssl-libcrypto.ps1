@@ -93,26 +93,26 @@ $openssl30x = @{ # LTS, Sep 2026
     }
 }
 $openssl34x = @{
-    "3.4.7" = @{ # non-LTS
-        "sha256" = "7261c348e6e59bc7b635a30f98072e8817a1c60a7033bb570737394a3a061842";
+    "3.4.8" = @{ # non-LTS
+        "sha256" = "9de9ce2f29e584044ae07ab93fc601637be01fdc91d109c5a655ec7419e6022b";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
 $openssl35x = @{ # LTS, April 2030
-    "3.5.8" = @{
-        "sha256" = "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2";
+    "3.5.9" = @{
+        "sha256" = "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
 $openssl36x = @{ # non-LTS
-    "3.6.4" = @{
-        "sha256" = "9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef";
+    "3.6.5" = @{
+        "sha256" = "a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
 $openssl40x = @{ # non-LTS
-    "4.0.2" = @{
-        "sha256" = "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8";
+    "4.0.3" = @{
+        "sha256" = "325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9";
         "urltpl" = "https://github.com/openssl/openssl/releases/download/openssl-{0}/openssl-{0}.tar.gz"
     }
 }
